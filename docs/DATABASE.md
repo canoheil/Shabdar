@@ -1,127 +1,244 @@
 # Proposed MariaDB Schema
 
-> **خلاصه فارسی:** طرح پایگاه داده بر MariaDB و InnoDB تکیه دارد؛ آگهی‌ها، کاربران، تصاویر، علاقه‌مندی‌ها و گفت‌وگوها جدا نگه داشته می‌شوند. جست‌وجوی مکانی با ستون مکانی و ایندکس مکانی در نظر گرفته شده، اما نوع دقیق ستون و رفتار نسخهٔ MariaDB باید پیش از اجرا روی نسخهٔ هدف آزمایش شود.
+> **خلاصه فارسی:** پایگاه داده MariaDB با موتور InnoDB و `utf8mb4` است. آگهی‌ها دارای وضعیت تأیید ادمین هستند و فقط آگهی‌های تأییدشده عمومی می‌شوند. امتیاز ۱ تا ۵ ستاره، کامنت، ریپورت و بلاک جدا نگه داشته شده‌اند. تعداد امتیازها و میانگین‌ها روی جدول آگهی نگه داشته می‌شود تا لیست‌ها سریع بمانند. ستون مکانی برای جستجوی نزدیک در مرحله بعد به جدول جدا منتقل شده است، چون SPATIAL INDEX نیاز به NOT NULL دارد.
 
 ## 1. Conventions
 
-- MariaDB, InnoDB, `utf8mb4`; use UTC `DATETIME(3)` in storage and localize for display.
-- Primary keys: unsigned `BIGINT` auto-increment for operational tables; never expose sequential IDs as public identifiers. Public URLs use unique slugs and APIs may expose opaque public IDs.
-- Toman amounts use integer `BIGINT UNSIGNED` (no floating point); `0`/free vs negotiable must be decided explicitly. Currency is currently implicitly IRR/toman display convention; store the unit explicitly if multiple currencies are expected.
-- Foreign keys are used where deletion/retention policy permits. Prefer soft deletion for accounts and listings; define cascades intentionally.
-- Add `created_at`, `updated_at` where mutable. Enforce uniqueness in the database, not only application code.
-- This is a logical proposal, not executable migration SQL. Pin MariaDB version and test collations, spatial support, generated/indexed expressions, and query plans before migration implementation.
+- MariaDB (version pinned at install time, tested before migrations), InnoDB, `utf8mb4_unicode_ci`.
+- Timestamps in UTC as `DATETIME(3)`. Localize for display only.
+- Operational primary keys: unsigned `BIGINT` auto-increment. Public identifiers: `public_id CHAR(26)` (ULID or similar), used in APIs and URLs for users, conversations, reports, and comments. Listings use `slug` in public URLs and `public_id` in private API paths.
+- Money: `BIGINT UNSIGNED` in toman. No floating point.
+- Foreign keys everywhere, with explicit `ON DELETE` rules (see each table).
+- Soft delete (`deleted_at`) for users and listings. Hard delete only for personal data on request, after a retention review.
+- Uniqueness and check constraints are enforced in the database.
+- This is a logical design, not executable migration SQL. Migrations are written after approval. Each migration is tested on an empty database.
 
 ## 2. Tables
 
 ### `users`
 - `id BIGINT UNSIGNED PK`
-- `public_id CHAR(26) UNIQUE NOT NULL` — opaque external identifier.
-- `phone_e164 VARCHAR(16) UNIQUE NOT NULL` — normalized Iranian number, e.g. `+98…`; validate Iranian policy at API boundary.
-- `display_name VARCHAR(80) NULL`, `avatar_path VARCHAR(512) NULL`
+- `public_id CHAR(26) UNIQUE NOT NULL`
+- `phone_e164 VARCHAR(16) UNIQUE NOT NULL` (normalized Iranian number, `+98…`)
+- `display_name VARCHAR(80) NULL`
 - `status ENUM('active','suspended','deleted') NOT NULL DEFAULT 'active'`
-- `is_admin BOOLEAN NOT NULL DEFAULT FALSE` — coarse bootstrap only; long term use roles.
-- `last_seen_at DATETIME(3) NULL`, `created_at`, `updated_at`, `deleted_at DATETIME(3) NULL`
-- Index: `(status, created_at)`.
+- `is_admin BOOLEAN NOT NULL DEFAULT FALSE` (bootstrap only; a role table can come later)
+- `last_seen_at DATETIME(3) NULL`
+- `created_at DATETIME(3) NOT NULL`, `updated_at DATETIME(3) NOT NULL`, `deleted_at DATETIME(3) NULL`
+- Index: `(status, created_at)`
 
-**Reasoning:** phone is the login identity, but phone numbers must never be used as public IDs. Avoid collecting unneeded personal data.
+Reasoning: phone number is the login identity but never appears in public payloads.
 
 ### `otp_challenges`
-- `id BIGINT UNSIGNED PK`, `phone_e164 VARCHAR(16) NOT NULL`
+- `id BIGINT UNSIGNED PK`
+- `phone_e164 VARCHAR(16) NOT NULL`
 - `purpose ENUM('login','register') NOT NULL`
-- `code_hash VARBINARY(255) NOT NULL` — never persist plaintext OTP.
+- `code_hash VARBINARY(255) NOT NULL` (never store the plain code)
+- `attempt_count SMALLINT UNSIGNED NOT NULL DEFAULT 0`
+- `send_count SMALLINT UNSIGNED NOT NULL DEFAULT 1`
 - `expires_at DATETIME(3) NOT NULL`, `consumed_at DATETIME(3) NULL`
-- `attempt_count SMALLINT UNSIGNED NOT NULL DEFAULT 0`, `send_count SMALLINT UNSIGNED NOT NULL DEFAULT 1`
-- `created_at DATETIME(3) NOT NULL`, `request_ip_hash BINARY(32) NULL`
-- Indexes: `(phone_e164, purpose, created_at)`, `(expires_at)` for cleanup.
+- `created_at DATETIME(3) NOT NULL`
+- `request_ip_hash BINARY(32) NULL` (hashed with a secret key; retention to be decided)
+- Indexes: `(phone_e164, purpose, created_at)`, `(expires_at)`
 
-**Reasoning:** short-lived challenge records enable throttling and one-time consumption. IP/phone retention and hashing key policy require security review.
+Reasoning: short-lived records allow throttling and one-time use. Old rows are cleaned by a scheduled job.
 
-### `provinces`, `cities`
-- `provinces(id SMALLINT UNSIGNED PK, name_fa VARCHAR(100), slug VARCHAR(120) UNIQUE)`
-- `cities(id INT UNSIGNED PK, province_id SMALLINT UNSIGNED FK, name_fa VARCHAR(120), slug VARCHAR(140), UNIQUE(province_id, slug))`
-- Index: `cities(province_id, name_fa)`.
+### `provinces`
+- `id SMALLINT UNSIGNED PK`, `name_fa VARCHAR(100) NOT NULL`, `slug VARCHAR(120) UNIQUE NOT NULL`
 
-**Reasoning:** normalized location names support filtering and stable Persian URLs; seed from a licensed/current source and allow updates.
+### `cities`
+- `id INT UNSIGNED PK`
+- `province_id SMALLINT UNSIGNED NOT NULL` FK → `provinces.id`
+- `name_fa VARCHAR(120) NOT NULL`, `slug VARCHAR(140) NOT NULL`
+- `is_launch_city BOOLEAN NOT NULL DEFAULT FALSE` (Rasht = true at launch)
+- Unique: `(province_id, slug)`
+- Index: `(is_launch_city, name_fa)`
+
+Seed: Gilan province and Rasht at launch. Other cities added as needed.
 
 ### `categories`
-- `id SMALLINT UNSIGNED PK`, `parent_id SMALLINT UNSIGNED NULL FK`
-- `name_fa VARCHAR(100)`, `slug VARCHAR(120) UNIQUE`, `sort_order SMALLINT`, `is_active BOOLEAN`
-- Seed current categories: home sweets, home food, handicrafts, clothing/sewing, plants/flowers, beauty, education.
-- Index: `(parent_id, is_active, sort_order)`.
+- `id SMALLINT UNSIGNED PK`
+- `parent_id SMALLINT UNSIGNED NULL` FK → `categories.id`
+- `name_fa VARCHAR(100) NOT NULL`, `slug VARCHAR(120) UNIQUE NOT NULL`
+- `sort_order SMALLINT NOT NULL DEFAULT 0`, `is_active BOOLEAN NOT NULL DEFAULT TRUE`
+- Index: `(parent_id, is_active, sort_order)`
+
+Seed: home sweets, home food, handicrafts, clothing and sewing, plants and flowers, beauty, education.
 
 ### `listings`
-- `id BIGINT UNSIGNED PK`, `public_id CHAR(26) UNIQUE NOT NULL`
-- `seller_id BIGINT UNSIGNED FK users`, `category_id SMALLINT UNSIGNED FK categories`
-- `city_id INT UNSIGNED FK cities`, `title VARCHAR(160) NOT NULL`, `slug VARCHAR(190) NOT NULL`
-- `description TEXT NOT NULL`, `price_toman BIGINT UNSIGNED NULL`, `price_type ENUM('fixed','negotiable','free') NOT NULL`
-- `status ENUM('draft','pending','active','rejected','sold','archived','removed') NOT NULL`
-- `published_at DATETIME(3) NULL`, `sold_at DATETIME(3) NULL`, `expires_at DATETIME(3) NULL`
-- `location POINT SRID 4326 NULL` — optional approximate seller/listing coordinate; do not expose exact coordinates by default.
-- `view_count BIGINT UNSIGNED NOT NULL DEFAULT 0` — only if atomic/increment strategy is accepted; otherwise defer.
-- `created_at`, `updated_at`, `deleted_at DATETIME(3) NULL`
-- Unique: `(seller_id, slug)` (or globally unique slug if URL format omits seller ID; recommendation: globally unique, with collision suffix).
-- Indexes: `(status, published_at, id)` for newest feed; `(category_id, status, published_at)`; `(city_id, status, published_at)`; `(price_toman, status, published_at)`; `(seller_id, status, updated_at)`; `SPATIAL INDEX(location)`.
+- `id BIGINT UNSIGNED PK`
+- `public_id CHAR(26) UNIQUE NOT NULL`
+- `seller_id BIGINT UNSIGNED NOT NULL` FK → `users.id` (ON DELETE RESTRICT)
+- `category_id SMALLINT UNSIGNED NOT NULL` FK → `categories.id`
+- `city_id INT UNSIGNED NOT NULL` FK → `cities.id`
+- `title VARCHAR(160) NOT NULL`
+- `slug VARCHAR(200) UNIQUE NOT NULL` (globally unique, Persian slugs allowed, numeric suffix on collision)
+- `description TEXT NOT NULL`
+- `price_toman BIGINT UNSIGNED NULL`
+- `price_type ENUM('fixed','negotiable','free') NOT NULL`
+- `status ENUM('draft','pending','active','rejected','sold','archived','removed') NOT NULL DEFAULT 'draft'`
+- `rejection_reason VARCHAR(500) NULL`
+- `submitted_at DATETIME(3) NULL`
+- `reviewed_by BIGINT UNSIGNED NULL` FK → `users.id`
+- `reviewed_at DATETIME(3) NULL`
+- `published_at DATETIME(3) NULL` (set on approval)
+- `sold_at DATETIME(3) NULL`
+- `removed_reason VARCHAR(500) NULL`
+- `rating_sum INT UNSIGNED NOT NULL DEFAULT 0` (sum of stars)
+- `rating_count INT UNSIGNED NOT NULL DEFAULT 0`
+- `favorite_count INT UNSIGNED NOT NULL DEFAULT 0`
+- `comment_count INT UNSIGNED NOT NULL DEFAULT 0`
+- `created_at DATETIME(3) NOT NULL`, `updated_at DATETIME(3) NOT NULL`, `deleted_at DATETIME(3) NULL`
+- `CHECK (price_type = 'free' OR price_toman IS NOT NULL OR price_type = 'negotiable')` (exact rule to confirm)
 
-**Reasoning:** lifecycle state enables moderation and public visibility. Composite feed indexes align with MVP filters. MariaDB spatial index constraints (notably nullability, SRID, supported geometry and version behavior) must be validated against the selected server release; a separate `POINT NOT NULL` location table or non-spatial fallback may be required.
+Indexes:
+- `(status, published_at, id)` for the newest feed (keyset pagination)
+- `(status, price_toman, id)` for price sorting
+- `(city_id, status, published_at)`
+- `(category_id, status, published_at)`
+- `(seller_id, status, updated_at)` for the seller dashboard
+- `(status, submitted_at)` for the admin queue
 
-**Nearby query:** use `ST_Distance_Sphere` (or version-supported equivalent) on candidate points with a bounding-box prefilter, then exact radius check. Validate units, SRID axis order, coordinate order, and query plan on target MariaDB. Avoid assuming a spatial index alone accelerates every distance expression. Store coarse coordinates or otherwise protect precise locations.
+Reasoning: `status` is the single source of truth for public visibility. The counters are kept in sync inside the same transaction as the action that changes them, so list pages never run `COUNT(*)`.
 
 ### `listing_images`
-- `id BIGINT UNSIGNED PK`, `listing_id BIGINT UNSIGNED FK listings`
-- `storage_key VARCHAR(512) NOT NULL`, `alt_text VARCHAR(180) NULL`
-- `sort_order TINYINT UNSIGNED NOT NULL`, `width SMALLINT UNSIGNED NULL`, `height SMALLINT UNSIGNED NULL`
+- `id BIGINT UNSIGNED PK`
+- `listing_id BIGINT UNSIGNED NOT NULL` FK → `listings.id` (ON DELETE CASCADE)
+- `storage_key VARCHAR(512) NOT NULL` (no absolute host paths)
+- `alt_text VARCHAR(180) NULL`
+- `sort_order TINYINT UNSIGNED NOT NULL`
+- `width SMALLINT UNSIGNED NULL`, `height SMALLINT UNSIGNED NULL`
 - `created_at DATETIME(3) NOT NULL`
-- Unique `(listing_id, sort_order)`; index `(listing_id, id)`.
+- Unique: `(listing_id, sort_order)`
 
-**Reasoning:** persisted storage keys, not local absolute paths, let an adapter map disk now and S3 later. Validate limits, content type and image decoding; generate safe variants in a later implementation decision.
+Limit per listing (proposed): 8 images, 5 MB each. Final limits are checked in ARCHITECTURE.md.
+
+### `listing_ratings`
+- `listing_id BIGINT UNSIGNED NOT NULL` FK → `listings.id` (ON DELETE CASCADE)
+- `user_id BIGINT UNSIGNED NOT NULL` FK → `users.id` (ON DELETE CASCADE)
+- `stars TINYINT UNSIGNED NOT NULL` with `CHECK (stars BETWEEN 1 AND 5)`
+- `created_at DATETIME(3) NOT NULL`, `updated_at DATETIME(3) NOT NULL`
+- Primary key: `(listing_id, user_id)`
+- Index: `(user_id)`
+
+Rules enforced in the service layer and tested: the rater is not the seller. When a rating is inserted or changed, `listings.rating_sum` and `rating_count` are updated in the same transaction.
+
+### `listing_comments`
+- `id BIGINT UNSIGNED PK`
+- `public_id CHAR(26) UNIQUE NOT NULL`
+- `listing_id BIGINT UNSIGNED NOT NULL` FK → `listings.id` (ON DELETE CASCADE)
+- `author_id BIGINT UNSIGNED NOT NULL` FK → `users.id`
+- `body VARCHAR(1000) NOT NULL`
+- `status ENUM('visible','hidden','removed') NOT NULL DEFAULT 'visible'`
+- `hidden_reason VARCHAR(500) NULL`
+- `created_at DATETIME(3) NOT NULL`, `updated_at DATETIME(3) NOT NULL`, `deleted_at DATETIME(3) NULL`
+- Index: `(listing_id, status, id)`
+- Index: `(author_id, created_at)`
+
+Reasoning: `hidden` is set immediately when a report arrives. Only admins can restore it to `visible`. Profanity filtering (required before public launch) will set `hidden` automatically; it is not in v1.
 
 ### `favorites`
-- `user_id BIGINT UNSIGNED FK users`, `listing_id BIGINT UNSIGNED FK listings`, `created_at DATETIME(3)`
-- Composite PK/unique `(user_id, listing_id)`; index `(listing_id, created_at)`.
+- `user_id BIGINT UNSIGNED NOT NULL` FK → `users.id` (ON DELETE CASCADE)
+- `listing_id BIGINT UNSIGNED NOT NULL` FK → `listings.id` (ON DELETE CASCADE)
+- `created_at DATETIME(3) NOT NULL`
+- Primary key: `(user_id, listing_id)`
+- Index: `(listing_id)`
+
+### `reports`
+- `id BIGINT UNSIGNED PK`
+- `public_id CHAR(26) UNIQUE NOT NULL`
+- `reporter_id BIGINT UNSIGNED NOT NULL` FK → `users.id`
+- `target_type ENUM('listing','comment','user') NOT NULL`
+- `target_id BIGINT UNSIGNED NOT NULL` (ID in the table matching `target_type`; enforced in the service layer, since the FK depends on the type)
+- `reason ENUM('spam','abuse','fraud','prohibited_item','offensive','other') NOT NULL`
+- `details VARCHAR(500) NULL`
+- `status ENUM('open','actioned','dismissed') NOT NULL DEFAULT 'open'`
+- `handled_by BIGINT UNSIGNED NULL` FK → `users.id`
+- `handled_at DATETIME(3) NULL`
+- `created_at DATETIME(3) NOT NULL`
+- Unique: `(reporter_id, target_type, target_id)` (one report per user per target)
+- Indexes: `(status, created_at, id)` for the admin queue, `(target_type, target_id)`
+
+### `blocks`
+- `blocker_id BIGINT UNSIGNED NOT NULL` FK → `users.id` (ON DELETE CASCADE)
+- `blocked_id BIGINT UNSIGNED NOT NULL` FK → `users.id` (ON DELETE CASCADE)
+- `created_at DATETIME(3) NOT NULL`
+- Primary key: `(blocker_id, blocked_id)`
+- Index: `(blocked_id)`
+- `CHECK (blocker_id <> blocked_id)`
 
 ### `conversations`
-- `id BIGINT UNSIGNED PK`, `public_id CHAR(26) UNIQUE NOT NULL`
-- `listing_id BIGINT UNSIGNED FK listings`, `buyer_id BIGINT UNSIGNED FK users`, `seller_id BIGINT UNSIGNED FK users`
-- `last_message_at DATETIME(3) NULL`, `created_at DATETIME(3) NOT NULL`, `closed_at DATETIME(3) NULL`
-- Unique `(listing_id, buyer_id, seller_id)`; indexes `(buyer_id, last_message_at)`, `(seller_id, last_message_at)`.
+- `id BIGINT UNSIGNED PK`
+- `public_id CHAR(26) UNIQUE NOT NULL`
+- `listing_id BIGINT UNSIGNED NOT NULL` FK → `listings.id`
+- `buyer_id BIGINT UNSIGNED NOT NULL` FK → `users.id`
+- `seller_id BIGINT UNSIGNED NOT NULL` FK → `users.id`
+- `last_message_at DATETIME(3) NULL`
+- `created_at DATETIME(3) NOT NULL`
+- Unique: `(listing_id, buyer_id)` (one thread per buyer per listing)
+- Indexes: `(buyer_id, last_message_at)`, `(seller_id, last_message_at)`
 
 ### `messages`
-- `id BIGINT UNSIGNED PK`, `conversation_id BIGINT UNSIGNED FK conversations`, `sender_id BIGINT UNSIGNED FK users`
-- `body TEXT NOT NULL`, `created_at DATETIME(3) NOT NULL`, `read_at DATETIME(3) NULL`, `deleted_at DATETIME(3) NULL`
-- Index `(conversation_id, id)` for chronological pagination; `(conversation_id, read_at)` if unread lookup needs it.
+- `id BIGINT UNSIGNED PK`
+- `conversation_id BIGINT UNSIGNED NOT NULL` FK → `conversations.id` (ON DELETE CASCADE)
+- `sender_id BIGINT UNSIGNED NOT NULL` FK → `users.id`
+- `body TEXT NOT NULL`
+- `created_at DATETIME(3) NOT NULL`
+- `read_at DATETIME(3) NULL` (set when the other participant opens the thread)
+- `deleted_at DATETIME(3) NULL`
+- Index: `(conversation_id, id)` for paging
 
-**Reasoning:** per-listing conversation identity avoids duplicate buyer/seller threads. Messages should be append-oriented; define retention, reporting, and deletion semantics before launch.
-
-### `reviews` (deferred)
-- `id BIGINT UNSIGNED PK`, `public_id CHAR(26) UNIQUE`, `reviewer_id`, `seller_id` FKs users, `listing_id` FK listings
-- `rating TINYINT UNSIGNED NOT NULL` constrained 1–5, `body VARCHAR(1000) NULL`, `status ENUM('pending','published','hidden')`
-- `created_at`, `updated_at`; unique `(reviewer_id, listing_id)`; index `(seller_id, status, created_at)`.
-
-### `support_tickets` (deferred / minimal later)
-- `id BIGINT UNSIGNED PK`, `public_id CHAR(26) UNIQUE`, `user_id BIGINT UNSIGNED NULL FK users`
-- `subject ENUM(...)`, `title VARCHAR(160)`, `message TEXT`, `status ENUM('open','in_progress','resolved','closed')`
-- `created_at`, `updated_at`; indexes `(status, created_at)`, `(user_id, created_at)`.
-
-### `notifications` (MVP basic inbox, delivery deferred)
-- `id BIGINT UNSIGNED PK`, `user_id BIGINT UNSIGNED FK users`, `kind VARCHAR(40)`, `payload JSON`
-- `read_at DATETIME(3) NULL`, `created_at DATETIME(3) NOT NULL`
-- Index `(user_id, read_at, created_at)`.
+### `notifications`
+- `id BIGINT UNSIGNED PK`
+- `user_id BIGINT UNSIGNED NOT NULL` FK → `users.id` (ON DELETE CASCADE)
+- `kind VARCHAR(40) NOT NULL` (for example `listing_approved`, `listing_rejected`, `new_message`, `comment_hidden`)
+- `payload JSON NULL`
+- `read_at DATETIME(3) NULL`
+- `created_at DATETIME(3) NOT NULL`
+- Index: `(user_id, read_at, created_at)`
 
 ### `admin_audit_logs`
-- `id BIGINT UNSIGNED PK`, `admin_id BIGINT UNSIGNED FK users`, `action VARCHAR(60)`, `target_type VARCHAR(40)`, `target_id BIGINT UNSIGNED`
-- `reason VARCHAR(500) NULL`, `metadata JSON NULL`, `created_at DATETIME(3) NOT NULL`
-- Index `(target_type, target_id, created_at)`, `(admin_id, created_at)`.
+- `id BIGINT UNSIGNED PK`
+- `admin_id BIGINT UNSIGNED NOT NULL` FK → `users.id`
+- `action VARCHAR(60) NOT NULL` (for example `listing.approve`, `listing.reject`, `comment.hide`, `report.dismiss`, `user.suspend`)
+- `target_type VARCHAR(40) NOT NULL`
+- `target_id BIGINT UNSIGNED NOT NULL`
+- `reason VARCHAR(500) NULL`
+- `metadata JSON NULL` (keep minimal, no personal data)
+- `created_at DATETIME(3) NOT NULL`
+- Indexes: `(target_type, target_id, created_at)`, `(admin_id, created_at)`
 
-**Reasoning:** record privileged moderation changes; keep sensitive metadata minimized and access-controlled.
+Every admin mutation writes one row in the same transaction.
 
-## 3. Search, ranking and scale notes
+### Deferred tables
+- `listing_locations` (added with the nearby-sellers feature, see section 4).
+- `support_tickets` (added when support is scoped).
+- Keyword list table for the profanity filter (added before public launch).
 
-- MVP text search can start with MariaDB `FULLTEXT` over title/description only after testing Persian tokenization, normalization (Arabic/Persian Yeh and Kaf, half-space), stopwords, and relevance. If poor, choose a dedicated search service only with evidence; do not silently claim language-aware search.
-- Normalize query text consistently but preserve display text. City/category/price filters use ordinary indexes. Do not promise arbitrary combinations are all covered by one index.
-- “Popular” is not implemented until its metric is defined; raw lifetime views invite abuse. Weekly chart and view counters may use a later aggregate table/event strategy if needed.
-- Use keyset pagination on `(published_at, id)` for feed stability and bounded queries; cap page size.
-- Do not store uploaded image bytes in the database.
+## 3. Nearby search (deferred, design notes only)
 
-## 4. Open schema decisions
+When the nearby feature returns:
+- Table `listing_locations(listing_id PK FK, location POINT NOT NULL SRID 4326, SPATIAL INDEX(location))`. The column must be NOT NULL for the spatial index. Listings without a location are not in this table.
+- Store a rounded point (about 500 m precision) rather than the exact address, to protect seller privacy.
+- Query: bounding-box prefilter, then exact distance (`ST_Distance_Sphere`), then radius check. The exact function, SRID handling, and whether the index is used must be tested on the target MariaDB version before the feature is built.
 
-Confirm MariaDB version and spatial behavior; slug uniqueness/URL format; listing expiration and deletion/retention rules; free/negotiable price semantics; OTP retention and throttling; coordinates precision and consent; message/review retention; search tokenization; whether an external public ID format is required. These are recorded with risks in `docs/ARCHITECTURE.md`.
+## 4. Search and sorting notes
+
+- MVP search: simple `LIKE` on title for short queries. `FULLTEXT` on title and description is tested with real Persian queries before it is enabled. Persian normalization (Arabic ي and ك to Persian, removing zero-width characters) is applied to the query and stored text.
+- Feed paging uses keyset pagination on `(published_at, id)` with page size capped at 50.
+- Popular sort uses the Bayesian formula from PRODUCT.md, computed in the query. It is not indexed in v1; that is acceptable at Rasht scale and is re-evaluated when the listing count grows.
+
+## 5. Open schema decisions
+
+- MariaDB version and SRID/SPATIAL behavior (test before nearby feature).
+- Slug format: Persian slug in URL vs transliterated slug.
+- Price rule for `negotiable` (is a price required?).
+- Listing expiry (not in v1).
+- Retention for OTP records, IP hashes, messages, and reports.
+- Whether comments on sold or removed listings stay visible.
+
+## 6. Relations overview
+
+- A user has many listings, favorites, ratings, comments, reports, and blocks.
+- A listing belongs to one seller, one category, one city, and has many images, ratings, comments, and conversations.
+- A conversation links one listing, one buyer, and one seller, and has many messages.
+- Reports point to a listing, comment, or user through `target_type` and `target_id`.
