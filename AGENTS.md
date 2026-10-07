@@ -5,10 +5,15 @@ Persian RTL classifieds marketplace. Launch focus: Rasht. Goal: national coverag
 Stack: Rust + Axum (API), Nuxt (SSR frontend), MariaDB (native, no Docker).
 
 ## Skills
-Before starting any task, find and read every SKILL.md under .agents/skills/
-(run: find .agents/skills -name SKILL.md). Follow the instructions in each one
-that applies to the task. At the start of the session, list the skills you loaded.
-If a skill cannot be read, say so before continuing.
+Skills are in .agents/skills/. Each skill has a SKILL.md.
+At the start of a session:
+1. Read .agents/skills/using-superpowers/SKILL.md (this is the entry point for the Superpowers set).
+2. Read .agents/skills/ponytail/SKILL.md and .agents/skills/ui-ux-pro-max/SKILL.md.
+For any other task, read only the SKILL.md of the skill that matches the task
+(for example: writing-plans before planning, test-driven-development before writing code,
+systematic-debugging when fixing a bug, ui-styling or design for UI work).
+Do not read every skill. In the first reply of each session, list the skills you loaded.
+If a file cannot be read, say so before continuing.
 
 ## Docs (source of truth)
 - docs/PRODUCT.md, docs/DATABASE.md, docs/API.md, docs/ARCHITECTURE.md
