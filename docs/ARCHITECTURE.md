@@ -1,152 +1,172 @@
-# Proposed Architecture and Phase 0 Decisions
+# Architecture and Phase 0 Decisions
 
-> **خلاصه فارسی:** معماری پیشنهادی یک API یکپارچه با Rust و Axum، پایگاه دادهٔ MariaDB و رابط Nuxt با SSR است. Nuxt در رندر سمت سرور از API استفاده می‌کند و مرورگر نیز فقط از مسیرهای هم‌مبدأ عبور می‌کند. این مرحله صرفاً مستندات است؛ هیچ کد برنامه‌ای نوشته نمی‌شود.
+> **خلاصه فارسی:** معماری یک API با Rust و Axum، پایگاه داده MariaDB و رابط Nuxt با SSR است. توسعه کاملاً روی ترموکس انجام می‌شود و نسخه لوکال روی همان گوشی از طریق مرورگر دیده می‌شود. فعلاً سرور عمومی وجود ندارد. آگهی‌ها با تأیید ادمین منتشر می‌شوند. فیلتر کلمات رکیک فارسی باید پیش از انتشار عمومی اضافه شود.
 
 ## 1. Goals and constraints
 
-- Build a lightweight Iranian classifieds marketplace using Rust + Axum, Nuxt 3 + Vue SSR, MariaDB.
-- Keep Rust idiomatic, straightforward and commented where behavior is non-obvious; avoid unnecessary generics, lifetimes and macros.
-- Use `sqlx` runtime queries without compile-time query macros; minimize dependencies and keep Termux/native development feasible.
-- Store image files on local server disk behind a small storage boundary that can later be replaced by S3-compatible storage.
-- Persian/RTL, mobile-first, public listing SEO (slugs, meta, sitemap, JSON-LD).
-- No application code is authorized in Phase 0. This document is a proposal pending user approval.
+- Lightweight Iranian classifieds marketplace. Stack: Rust + Axum (API), Nuxt (SSR frontend), MariaDB.
+- Development on Termux on a phone. No Docker. Native MariaDB installed with `pkg install mariadb`.
+- Simple, commented Rust. No advanced lifetimes, generics, or macros. The user knows JavaScript and Python.
+- `sqlx` runtime queries only. No compile-time query macros.
+- Minimal dependencies. Each new dependency is checked for Termux compile cost.
+- Persian RTL, mobile-first, public listing SEO.
+- Images on local disk behind a storage boundary (S3-compatible later).
+- No application code until the user approves Phase 0 docs.
 
-## 2. Runtime shape
+## 2. Development environment (Termux)
+
+- Everything runs on the phone. Nothing is deployed to a public server yet.
+- MariaDB runs as a native service inside Termux.
+- Axum API runs on `localhost:8080`. Nuxt dev server runs on `localhost:3000`. Both are opened from the phone browser.
+- Rust compile is slow on the phone. Use `cargo check` for most iterations and `cargo build` only when needed. The first full build can take a long time.
+- Keep Termux awake during work (`termux-wake-lock`), or the servers stop.
+- Code is edited in Termux or a GitHub Codespace. Commits are pushed to a feature branch.
+- Test from another device on the same Wi-Fi is possible later by using the phone's IP address. Not needed now.
+- Local dev OTP: the code is printed to the Axum log and never sent to a real SMS provider in development. This flag must be explicit in configuration (`OTP_DEV_MODE=true`) and must be impossible to enable in production builds.
+
+## 3. Runtime shape
 
 ```text
-Browser
-  ├─ GET public pages ──> Nuxt SSR (HTML + metadata)
-  └─ same-origin /api/* ─> Nuxt server proxy ─> Axum REST API
-                                                   ├─ MariaDB (sqlx runtime queries)
-                                                   ├─ Local disk storage adapter
-                                                   └─ SMS provider adapter
+Browser (phone)
+  ├─ page requests ──> Nuxt SSR (HTML, meta, JSON-LD)
+  └─ /api/* (same origin) ──> Nuxt server proxy ──> Axum API
+                                                      ├─ MariaDB (sqlx)
+                                                      ├─ local disk storage adapter
+                                                      └─ SMS adapter (dev: console, prod: provider)
 ```
 
-- Nuxt server-side page loaders call the internal API base URL from private runtime config. The browser uses same-origin relative `/api/v1/...` paths; it must not call `localhost` or expose internal service URLs/secrets.
-- Axum owns business rules, authorization, validation and persistence. Nuxt is not a second business-logic layer.
-- SSR fetches public feed/category/listing data so crawlers receive rendered content and per-listing canonical metadata. User-specific pages must be private/noindex and must not leak across SSR requests or caches.
-- Initial deployment can run Nuxt and Axum as two processes on one host behind a reverse proxy. No Docker requirement. MariaDB is a separately managed native service.
-- Static generated sitemap may be refreshed from eligible active listings; choose runtime vs scheduled generation based on listing volume. Never include drafts, removed listings or private user data.
+- Nuxt server code calls the API using a private internal base URL from runtime config. The browser never calls internal addresses.
+- The proxy must forward the session cookie and the client IP header (`X-Forwarded-For`) to Axum, so that OTP rate limits work per client.
+- Axum owns all business rules: authorization, state transitions, moderation rules, rating and comment rules, report handling.
+- Nuxt does no business logic. Its middleware is for UX redirects only, never for security.
 
-## 3. Proposed repository layout
+## 4. Repository layout
 
 ```text
 .
-├── apps/
-│   ├── api/
-│   │   ├── Cargo.toml
-│   │   ├── migrations/                 # SQL migrations, versioned
-│   │   └── src/
-│   │       ├── main.rs                 # config, tracing, pool, router, shutdown
-│   │       ├── config.rs
-│   │       ├── error.rs                # stable API error mapping
-│   │       ├── state.rs                # shared app state, keep minimal
-│   │       ├── routes/                 # route registration by domain
-│   │       ├── handlers/               # HTTP extraction/response only
-│   │       ├── services/               # use cases and policy
-│   │       ├── db/                     # runtime sqlx queries and row mapping
-│   │       ├── auth/                   # OTP, session, CSRF policy
-│   │       └── storage/                # trait boundary only if needed; disk adapter
-│   └── web/
-│       ├── package.json
-│       ├── nuxt.config.ts
-│       ├── pages/                      # home, listings/[slug], account areas
-│       ├── components/
-│       ├── composables/
-│       ├── layouts/                    # marketplace and admin shells
-│       ├── server/api/                  # same-origin proxy handlers
-│       ├── middleware/                 # client UX guards, never sole auth check
-│       └── assets/                     # RTL tokens, local fonts, styles
+├── AGENTS.md                           # agent instructions (root)
+├── .agents/skills/                     # installed skills (read by the agent)
 ├── docs/
 │   ├── PRODUCT.md
 │   ├── DATABASE.md
 │   ├── API.md
-│   └── ARCHITECTURE.md
-└── .agents/skills/                     # repo-local agent skills, already installed
+│   ├── ARCHITECTURE.md
+│   └── STATUS.md
+├── apps/
+│   ├── api/
+│   │   ├── Cargo.toml
+│   │   ├── migrations/                 # ordered SQL files
+│   │   └── src/
+│   │       ├── main.rs                 # config, logging, pool, router, shutdown
+│   │       ├── config.rs               # env-based settings
+│   │       ├── error.rs                # stable error responses
+│   │       ├── routes/                 # route table by domain
+│   │       ├── handlers/               # HTTP only: extract, call service, respond
+│   │       ├── services/               # business rules and transactions
+│   │       ├── db/                     # sqlx queries and row structs
+│   │       ├── auth/                   # OTP, session, CSRF
+│   │       ├── moderation/             # status rules, report actions, filter hook (empty in v1)
+│   │       └── storage/                # disk adapter behind a small trait
+│   └── web/
+│       ├── package.json
+│       ├── nuxt.config.ts
+│       ├── app/pages/                  # home, category, city, listing/[slug], account, admin
+│       ├── app/components/
+│       ├── app/composables/
+│       ├── app/layouts/                # marketplace layout, admin layout
+│       ├── server/api/                 # same-origin proxy to Axum
+│       ├── app/middleware/             # UX redirects only
+│       └── app/assets/                 # RTL styles, Persian font files
 ```
 
-Keep folders shallow until multiple modules justify further subdivision. Do not introduce a general repository abstraction or plugin system preemptively.
+Keep folders shallow. Add new layers only when a second module needs them. No general repository pattern, no plugin system.
 
-## 4. Rust/Axum API boundaries
+## 5. Rust/Axum boundaries
 
-- Handler: parse path/query/body/cookies, call service, map result to HTTP status and response. No SQL or policy buried in handlers.
-- Service: enforce ownership, listing state transitions, OTP limits, conversation membership and moderation policy.
-- DB module: explicit parameterized runtime `sqlx::query` / `query_as` calls with manually mapped row structs; no `query!` macros and no dynamic SQL from user input.
-- Use a small connection pool; configure timeout, max connections and graceful shutdown for phone-hosted development.
-- Map SQL constraint errors into stable conflict/validation API errors without returning internal SQL details.
-- Migrations are ordinary SQL files; test upgrade from empty database and migration rollback/forward strategy.
-- Keep dependencies deliberately small: Axum/Tokio, sqlx MariaDB/MySQL driver, serde, configuration/tracing, password/hash/crypto library chosen after OTP/session threat review, image validation tooling if needed. Final list must be checked against Termux compiler support and compile cost before adding dependencies.
+- **Handler:** parse input, call one service function, map result to HTTP. No SQL, no policy.
+- **Service:** owns rules: ownership, state transitions, rating self-check, block checks, report uniqueness, admin-only actions, audit log writes. Multi-step changes run in one transaction.
+- **DB module:** explicit `sqlx::query` and `query_as` with parameter binding. No string-built SQL from user input.
+- **Errors:** database constraint errors are mapped to stable error codes. Internal SQL details are never returned.
+- **Config:** read from environment variables. Secrets never in code or docs.
+- **Migrations:** ordered SQL files. Test: empty database → latest version.
+- **Logging:** request ID on every request. Phone numbers and OTP codes are redacted. Request bodies are not logged.
 
-## 5. Nuxt SSR, RTL and SEO
+Dependencies to start with (final list checked on Termux): `axum`, `tokio`, `sqlx` (MySQL/MariaDB driver, runtime queries), `serde`, `serde_json`, `tracing`, `tracing-subscriber`, a config reader, a password-free hashing crate for OTP codes (chosen after the security review in section 7).
 
-- Use Nuxt 3 as requested; note UI UX Pro Max's current Nuxt stack dataset labels Nuxt 3 as end-of-life and recommends checking Nuxt 4 compatibility. Do not silently change the chosen stack: validate maintenance/security support and decide whether to honor Nuxt 3 or approve a migration path before scaffolding.
-- Define `<html lang="fa" dir="rtl">`, RTL-safe logical CSS properties, localized Persian numerals/date/price display policy, and a font with verified Persian glyph coverage. Keep stored numeric values language-neutral.
-- Public listing page renders title, description, canonical URL, Open Graph metadata, breadcrumb and Product/Offer JSON-LD only for truthful available fields. Avoid fake aggregate ratings/prices.
-- Sitemap contains canonical active listing/category URLs; robots rules exclude account/admin/private pages. Add pagination/canonical strategy for filtered results to avoid index bloat.
-- Use SSR-safe state: do not place authenticated data in globally shared server state or publicly cached responses. Set cache directives deliberately; personalized pages are private.
-- Performance defaults: responsive image variants, lazy-load below fold, dimensions to reduce layout shift, limited JS, accessible loading placeholders, no auto-rotating carousel without controls. Paid ad placement must be labeled and keyboard-accessible.
-- UI UX Pro Max guidance used: search-led marketplace, listing-first flat/low-effect visual direction, strong price/location hierarchy, contrast/focus/reduced motion, touch-sized controls and checks at 375/768/1024/1440 px. Persian typography and RTL semantics override generic Latin-centric defaults.
+## 6. Moderation and content rules (v1)
 
-## 6. Image storage and uploads
+- **Listing moderation:** every listing is reviewed by an admin before it becomes public. Automated checks never approve or reject. In v1 there is no automated filter.
+- **Comments:** published immediately. A user report hides the comment at once. Admin can restore or remove it.
+- **Reports:** one per user per target. Admin actions: hide comment, restore comment, remove listing, suspend user, or dismiss. Each action is audited.
+- **Profanity filter (required before public launch):** a Persian word list with normalization (Arabic letters to Persian, zero-width characters removed, repeated characters collapsed). Matches set a comment to `hidden` for review. The module (`moderation/`) is created in v1 as an empty hook so the filter can be plugged in without refactoring.
+- **Image moderation:** admin review only in v1. Automated image checks are a later decision (they need an external service or heavy local models).
 
-- Persist storage keys in `listing_images`; never store host paths in API or database.
-- Define a small storage boundary with operations needed now (save, read/URL, delete); implement local disk under a configured data directory outside the web source tree.
-- Validate file signatures and decoded image, maximum byte size/dimensions/count, randomize server filenames, prevent traversal, and authorize every association.
-- Serve images through a controlled static path or handler with safe content types and cache headers. Backups must include the configured media directory.
-- S3-compatible adapter, background processing and multiple variants are intentionally deferred until traffic/ops requirements demand them.
+## 7. Security and privacy
 
-## 7. Security, privacy and resilience
+- **OTP:** hashed codes, short expiry, single use, attempt limit, resend cooldown, per-phone and per-IP limits. Responses do not reveal whether an account exists. The SMS provider is behind an adapter.
+- **Session:** opaque cookie (`HttpOnly`, `Secure` in production, `SameSite=Lax`). Session records in MariaDB with expiry and revocation (suspension ends all sessions). Final design is a required decision before implementation.
+- **CSRF:** a token is required on every state-changing request from the browser.
+- **Authorization:** checked in the API for every request. Admin routes check `is_admin` and write audit logs.
+- **Uploads:** check type by file signature, decode the image, limit size and count, random server file names, no path from the client.
+- **Privacy:** phone numbers are never public. Exact coordinates are not stored in v1. Seller profile shows only display name and join date.
+- **Rate limits:** OTP, comments, messages, reports, and ratings each have a per-user limit.
+- **Backups:** database dump and the media directory are backed up together.
 
-- OTP: hash stored codes, short expiry, one-time consumption, attempt/resend limits, abuse throttles, no account-enumerating responses; use an SMS provider adapter and redact phone/code from logs.
-- Session cookie with CSRF defense for browser mutations; exact session persistence/revocation model is a required decision. Never trust client-side authorization or Nuxt middleware as server security.
-- Parameterized SQL, bounded pagination/request bodies, validation at API boundaries, upload hardening, admin audit trail, rate limiting, request IDs and structured logs without sensitive payloads.
-- Location: ask permission at point of use, do not publish precise user coordinates, cap radius and return approximate results; define deletion/retention.
-- Back up MariaDB and local image storage consistently; verify restore procedure. Use HTTPS in production.
-- Threat model spam, fake listings, OTP pumping, abusive messages, image malware/oversized files, scraping and admin account compromise before public launch.
+## 8. SEO, RTL, and rendering
 
-## 8. Testing and quality plan
+- `<html lang="fa" dir="rtl">`. RTL-safe CSS logical properties.
+- Listing pages are server-rendered with title, description, canonical URL, Open Graph tags, breadcrumbs, and JSON-LD `Product` with `Offer`. Only include fields that are true (no fake ratings). `AggregateRating` is included only when `rating_count` is above a minimum (proposed: 3).
+- Removed or deleted listings return HTTP 410.
+- Sitemap includes active listings and category pages. Robots rules block account, admin, and private pages.
+- Filtered and sorted URLs (`?sort=…`) use a canonical URL without the sort parameter to avoid duplicate indexing.
+- User-specific data (favorites, own rating, own comments) is never rendered into cached public HTML. Those parts load on the client after SSR.
+- Persian numbers in display: a single policy, applied in the frontend only. Stored values stay numeric.
+- Font: self-hosted Persian font, checked for glyph coverage and file size.
+
+## 9. Testing plan
 
 ### Rust/API
-- Unit tests for pure rules: OTP expiry/attempt limit, listing state changes, authorization decisions, price/filter validation, slug normalization.
-- API integration tests against a disposable native MariaDB/test database (no Docker dependency assumed): migrations, auth boundaries, CRUD, search/filter pagination, owner isolation, conversation membership, moderation.
-- Storage tests with a temporary directory; assert traversal and invalid image rejection.
-- Contract tests for documented status codes/error shape; test migrations from empty DB.
-- Manual smoke scripts/curl for Termux. Keep compile/test command and dependency footprint documented.
+- Unit tests: OTP expiry and attempts, listing state transitions, rating rules (no self-rating, one per user), popular score formula, report uniqueness, slug generation.
+- Integration tests against a test database in native MariaDB: migrations, auth boundaries, listing lifecycle (draft → pending → active/rejected), admin audit writes, comment hide on report, block effects.
+- Storage tests with a temporary directory: traversal rejected, invalid image rejected.
+- Contract tests for the documented error shape and status codes.
 
 ### Nuxt/UI
-- Component tests for OTP edit-number flow, filters, favorite state, RTL navigation, accessible modal and empty/error states.
-- SSR tests for listing title/canonical/meta/JSON-LD, sitemap eligibility, auth cache isolation.
-- End-to-end critical flows: browse→listing→OTP→favorite/contact; seller publish→dashboard; admin moderation. Use a browser test tool only if light enough for development environment; keep API tests as baseline.
-- Responsive and accessibility review: keyboard/focus, contrast, reduced motion, screen-reader labels, 375/768/1024/1440 widths, dark/light mode.
-- Validate SEO output in rendered HTML, not only client hydration; verify sitemap and robots behavior.
+- Component tests: OTP form with edit-number, sort and filter controls, rating control, report dialog, empty and error states.
+- SSR checks: listing title, canonical, meta tags, JSON-LD present in rendered HTML, `410` for removed listings, sitemap contents.
+- Manual checks on the phone browser: RTL layout, dark mode, touch targets, 375 px width.
+- Accessibility check: focus order, labels, contrast.
 
 ### Workflow
-- Superpowers workflow applies to later implementation: brainstorm/approve scope, plan before architectural work, then TDD (write test, observe correct failure, implement minimum, verify green). Phase 0 itself contains docs only and no code/tests.
-- Ponytail guidance applied to architecture: prefer native tools, minimal dependencies and abstractions only at the stated storage boundary; defer speculative billing/search/messaging infrastructure. The review lens is to identify complexity to remove, not to omit requested security or accessibility.
+- Superpowers workflow for implementation: brainstorm and approve scope, plan (writing-plans), then test-driven development (write test, see it fail, implement, see it pass), then verification before claiming done.
+- Ponytail principle: remove complexity before adding it. Defer features that are not in v1.
 
-## 9. Open questions and risks
+## 10. Open questions and risks
 
-### Must answer before implementation/public launch
-1. **SMS/identity:** Which Iranian SMS gateway, sender line, delivery budget and fallback? What OTP expiry, resend cooldown, per-phone/IP limits, and account-registration policy? What happens when provider is unavailable?
-2. **Session security:** Cookie session vs another approach, storage/TTL/revocation, CSRF and cross-origin deployment model.
-3. **Moderation/trust:** Which prohibited categories/content, pre- or post-moderation, report flow, appeal process, seller identity signals, and who staffs admin operations?
-4. **Listing lifecycle:** Required fields per category, expiration, edit/review transitions, sold/archive semantics, image count/size, slug format and change/redirect policy.
-5. **Money and ads:** Is “toman” the canonical entered/displayed unit? Free/negotiable behavior? Ad inventory, pricing, reservation guarantee, billing/refunds/tax and payment provider. Paid ads are excluded from MVP until answered.
-6. **Location/privacy:** Which cities launch first? Is exact location collected at all, how coarse is public map display, radius caps, consent/retention and nearby-seller eligibility?
-7. **Chat/support/reviews:** Message retention/report/block behavior; support staffing/SLA; what qualifies a user to review and how to prevent retaliatory/fake ratings.
-8. **Search/metrics:** Persian normalization and full-text quality; definition of “popular,” view deduplication, analytics retention and dashboard accuracy.
-9. **Scale/operations:** Expected listings/images/concurrency, hosting/backup budget, deployment/HTTPS/domain, media backup, uptime and restore objectives.
-10. **Localization:** Persian digits vs Latin digits in display/input, calendar (Jalali vs Gregorian), number formatting and approved terminology/brand palette.
+### Must answer before implementation
+1. **SMS provider:** which Iranian gateway, sender line, budget, and fallback. Until decided, development uses console OTP only.
+2. **Session design:** cookie storage, TTL, revocation, CSRF delivery.
+3. **Nuxt version:** Nuxt 4 is recommended. Confirm current support status before scaffolding. The UI UX Pro Max dataset flags Nuxt 3 as end-of-life.
+4. **Slug format:** Persian slugs in URLs or transliteration.
+5. **Listing editing:** can an `active` listing be edited, or must it be re-reviewed? (v1 says no edit while active.)
+6. **Price rule:** whether `negotiable` requires a price.
+7. **Retention:** OTP records, IP hashes, messages, reports, and deleted listings.
+
+### Must do before public launch
+- **Persian profanity filter for comments.** Comments are unfiltered in v1. Must be added before the site is public. Also recorded in STATUS.md.
+- Image moderation decision.
+- Privacy policy and terms of use.
+- Backup and restore test for the database and media files.
 
 ### Technical risks
-- MariaDB spatial support, SRID and `SPATIAL INDEX` constraints vary by version and query shape; verify with actual target version before committing nearby search.
-- Persian FULLTEXT/tokenization may not meet relevance expectations; test real queries before promising search quality.
-- Nuxt 3 maintenance status is flagged by the installed UI UX Pro Max dataset as end-of-life; validate current support and get an explicit stack decision before implementation.
-- Rust and image/database dependencies may compile slowly or fail on Termux; keep initial dependencies few and validate on the actual phone environment.
-- Local disk images need capacity monitoring, backups, permissions and a migration plan; a storage interface does not itself provide durability.
-- SSR caching can leak private account data if request context or cache keys are mishandled.
-- Marketplace safety/moderation and OTP cost can dominate product risk more than code architecture.
+- MariaDB spatial support and SRID rules vary by version. Test before the nearby feature.
+- Persian full-text search quality is unknown. Test real queries before promising search.
+- Rust compile time on Termux is slow. Keep dependencies few and measure.
+- Local disk storage needs capacity monitoring and backups.
+- SSR caching can leak personal data if the cache key or request context is wrong. User-specific data stays out of public HTML.
+- Admin account compromise: admin sessions need stronger protection (short TTL, audit review).
+- Moderation load: with manual approval, admin availability sets how fast listings go live. Track approval time from day one.
 
-## 10. Phase 0 boundary
+## 11. Phase 0 boundary
 
-This phase creates product, schema, API and architecture proposals only. No Rust/Nuxt application code, migrations, package manifests, dependency installation, or scaffolding should be written until the user reviews and approves these documents. After approval, agree on the implementation plan and its execution method before beginning code.
+This phase produces documents only. No Rust or Nuxt application code, migrations, package manifests, or scaffolding until the user approves these files. After approval, the implementation plan is agreed first, then coding starts with the smallest vertical slice (health check, then OTP login).
