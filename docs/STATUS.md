@@ -1,29 +1,34 @@
 # Status
 
 ## Current phase
-Phase 0: docs only. Waiting for user approval of docs/PRODUCT.md, DATABASE.md, API.md, ARCHITECTURE.md.
+Phase 0: docs only. Waiting for user approval of PRODUCT.md, DATABASE.md, API.md, ARCHITECTURE.md.
 
 ## Decisions made
 - Listings are published only after admin approval (pending → active).
-- Comments are published immediately in v1. Users can report harmful comments.
-- Advanced Persian profanity filter for comments is required before public launch. Not in v1 unless added later.
-- Star rating 1 to 5 for listings; "popular" uses a weighted average.
-- Login by Iranian mobile + SMS OTP.
+- Comments publish immediately in v1. A user report hides the comment until an admin decides.
+- Ratings: 1 to 5 stars per listing, one per user, not on own listing.
+- "Popular" sort: Bayesian weighted average of ratings.
+- Reports: listings, comments, and users. Blocks are supported.
+- Login: Iranian mobile + SMS OTP. In development, OTP is printed in the log.
 - Launch focus: Rasht. National coverage later.
-- Development on Termux; app runs locally on the same phone, no production server yet.
+- Development runs on Termux on the phone. No production server yet.
+- Nearby-seller map is deferred to a later phase.
 
 ## Must do before public launch
-- Advanced Persian profanity filter for comments (comments currently publish without filtering).
+- Persian profanity filter for comments. Comments are unfiltered in v1.
+- Choose SMS provider and budget.
+- Decide session design and CSRF delivery.
+- Confirm Nuxt version (Nuxt 4 recommended).
+- Privacy policy and terms of use.
 
 ## Open questions
-- SMS provider and budget.
-- Session/CSRF design.
-- Nearby-seller map: MVP or later.
-- Confirm MariaDB SPATIAL INDEX with NOT NULL location (move location to separate table).
-- Nuxt version: Nuxt 4 recommended, not yet confirmed.
+- Persian slug format in URLs.
+- Whether `negotiable` listings require a price.
+- Retention for OTP records, IP hashes, messages, reports.
+- Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
 (none yet)
 
 ## Next step
-Load skills, report which ones were loaded, then update docs per the pending changes list.
+Review the four docs. Approve or request changes. After approval, agree on the Phase 1 plan, then write the Phase 1 prompt.
