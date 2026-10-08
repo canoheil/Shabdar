@@ -3,6 +3,8 @@
 //! Binds BIND_ADDR (default 127.0.0.1:8080, ARCHITECTURE.md §2) and answers
 //! every request with `ok`. Task 5 replaces the fallback with routes::router().
 
+mod config;
+
 use std::net::SocketAddr;
 
 use axum::Router;
