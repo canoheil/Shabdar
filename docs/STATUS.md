@@ -1,7 +1,7 @@
 # Status
 
 ## Current phase
-Phase 0: docs only. Waiting for user approval of PRODUCT.md, DATABASE.md, API.md, ARCHITECTURE.md.
+Phase 0 (docs) approved and committed. Phase 1 plan written by the agent, waiting for user review. No application code yet.
 
 ## Decisions made
 - Listings are published only after admin approval (pending → active).
@@ -9,16 +9,23 @@ Phase 0: docs only. Waiting for user approval of PRODUCT.md, DATABASE.md, API.md
 - Ratings: 1 to 5 stars per listing, one per user, not on own listing.
 - "Popular" sort: Bayesian weighted average of ratings.
 - Reports: listings, comments, and users. Blocks are supported.
-- Login: Iranian mobile + SMS OTP. In development, OTP is printed in the log.
+- Login: Iranian mobile + SMS OTP. In development, OTP is printed in the log (OTP_DEV_MODE, debug builds only).
+- Nuxt 4 confirmed.
+- SMS provider: not chosen yet. Not needed until before public launch.
 - Launch focus: Rasht. National coverage later.
 - Development runs on Termux on the phone. No production server yet.
 - Nearby-seller map is deferred to a later phase.
 
+## Phase 1 proposals awaiting approval
+- Session table `sessions` (30-day TTL, token stored as SHA-256 hash).
+- `public_id` column on `otp_challenges`.
+- `/api/v1/health` response shape.
+- OTP hash: HMAC-SHA256 with a secret pepper (the pepper must never change once codes are in use).
+
 ## Must do before public launch
 - Persian profanity filter for comments. Comments are unfiltered in v1.
 - Choose SMS provider and budget.
-- Decide session design and CSRF delivery.
-- Confirm Nuxt version (Nuxt 4 recommended).
+- Decide CSRF delivery.
 - Privacy policy and terms of use.
 
 ## Open questions
@@ -28,7 +35,7 @@ Phase 0: docs only. Waiting for user approval of PRODUCT.md, DATABASE.md, API.md
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-(none yet)
+fd853c0 (docs final on main)
 
 ## Next step
-Review the four docs. Approve or request changes. After approval, agree on the Phase 1 plan, then write the Phase 1 prompt.
+User reviews the Phase 1 plan and answers the proposals above. Then the first coding task (Task 1, scaffold apps/api) starts.
