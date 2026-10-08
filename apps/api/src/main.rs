@@ -2,17 +2,11 @@
 //!
 //! Application code lives in the library (src/lib.rs) so integration tests can
 //! reuse it; main only wires the process: logs, config, pool, migrations,
-//! bind, serve. Task 5 replaces the fallback with routes::router().
+//! state, router, serve.
 
 use std::net::SocketAddr;
 
-use axum::{middleware, Router};
-use shabdar_api::{config::Config, db, request_id};
-
-/// Placeholder handler: the literal string `ok`.
-async fn ok() -> &'static str {
-    "ok"
-}
+use shabdar_api::{config::Config, db, routes, state::AppState};
 
 #[tokio::main]
 async fn main() {
@@ -39,10 +33,8 @@ async fn main() {
 
     let addr: SocketAddr = cfg.bind_addr.parse().expect("BIND_ADDR must be host:port");
 
-    // The request-id layer wraps every request, fallback included.
-    let app = Router::new()
-        .fallback(ok)
-        .layer(middleware::from_fn(request_id::request_id_middleware));
+    let state = AppState { pool, config: cfg };
+    let app = routes::router(state);
 
     let listener = tokio::net::TcpListener::bind(addr)
         .await

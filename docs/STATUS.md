@@ -1,7 +1,7 @@
 # Status
 
 ## Current phase
-Phase 1 approved, in progress. Tasks 1–4 verified on Termux (cargo test 15/15 green, run twice). sqlx mysql feature works with MariaDB 12.3.2 (auth plugin mysql_native_password). 
+Phase 1 approved, in progress. Tasks 1–4 verified on Termux (cargo test 15/15, twice; sqlx works with MariaDB 12.3.2). Task 5 (GET /api/v1/health) committed green in this commit, awaiting verification.
 
 
 ## Decisions made
@@ -36,8 +36,8 @@ Phase 1 approved, in progress. Tasks 1–4 verified on Termux (cargo test 15/15 
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-7488351 (task 4 verified: first migration and pool)
+9a2e66a (task 5 tests, red); GREEN = the commit carrying this file
 
 
 ## Next step
-Task 5 (GET /api/v1/health)
+User runs `cargo test` (17 tests expected: 15 + 2 health) and pastes output; then Task 6 (phone.rs).
