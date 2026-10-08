@@ -1,7 +1,7 @@
 # Status
 
 ## Current phase
-Phase 1 approved, in progress. Task 1 verified on Termux (cargo check clean, 1m 59s). Task 2 (config.rs) verified on Termux: cargo test 5/5 green; missing-env startup error path confirmed.
+Phase 1 approved, in progress. Task 1 verified on Termux (cargo check clean, 1m 59s). Task 2 (config.rs) verified on Termux: cargo test 5/5 green; missing-env startup error path confirmed. Task 3 (error.rs + request_id.rs) committed, unverified — awaiting user's cargo test output.
 
 
 ## Decisions made
@@ -36,8 +36,8 @@ Phase 1 approved, in progress. Task 1 verified on Termux (cargo check clean, 1m 
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-caec18a (task 2 env config, verified)
+6c124e2 (task 3 error and request id, green but unverified)
 
 
 ## Next step
-Task 3 (error.rs + request_id.rs)
+User runs `cargo test` to verify Task 3, then Task 4 (db.rs, state.rs, migration 0001).
