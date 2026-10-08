@@ -1,0 +1,29 @@
+[package]
+name = "shabdar-api"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Dependencies are exactly the approved table in docs/PHASE1_PLAN.md ("Dependencies (approved —
+# frozen)"). Any addition requires user approval first.
+# Versions are minimum floors set to the latest upstream release on 2026-10-08
+# (verified against each project's git tags). cargo resolves the newest compatible
+# release and pins it in Cargo.lock on the first build on the phone.
+
+[dependencies]
+tokio = { version = "1.53.2", features = ["macros", "rt-multi-thread", "signal"] }
+axum = "0.8.9"
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "tls-none", "mysql", "chrono", "migrate"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }
+ulid = "1.2.1"
+getrandom = "0.4.3"
+sha2 = "0.10.9"
+hmac = "0.12.1"
+
+[dev-dependencies]
+tower = { version = "0.5.3", features = ["util"] }
+http-body-util = "0.1.5"
