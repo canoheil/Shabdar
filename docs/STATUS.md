@@ -1,7 +1,7 @@
 # Status
 
 ## Current phase
-Phase 1 approved, in progress. Tasks 1–4 verified on Termux (cargo test 15/15, twice; sqlx works with MariaDB 12.3.2). Task 5 (GET /api/v1/health) committed green in this commit, awaiting verification.
+Phase 1 part A complete: Tasks 1–5 verified on Termux (cargo test 17/17 green; sqlx works with MariaDB 12.3.2). Awaiting PR 1 to main by the user.
 
 
 ## Decisions made
@@ -36,8 +36,11 @@ Phase 1 approved, in progress. Tasks 1–4 verified on Termux (cargo test 15/15,
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-9a2e66a (task 5 tests, red); GREEN = the commit carrying this file
+26a0d9e (task 5 verified: health endpoint)
 
+
+## Open items for later tasks
+- Placeholder fallback returns 200 `ok` for any unknown path instead of a 404 JSON error envelope (apps/api/src/routes.rs). Known deviation from API.md §1 error conventions — decide before Phase 2 whether to change it to a `not_found` error. Recorded as a known deviation, not a fix for now.
 
 ## Next step
-User runs `cargo test` (17 tests expected: 15 + 2 health) and pastes output; then Task 6 (phone.rs).
+PR 1 to main by user, then Task 6 (phone.rs) after new session
