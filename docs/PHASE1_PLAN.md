@@ -2,7 +2,7 @@
 
 > **خلاصه فارسی:** این سند برنامهٔ اجرایی فاز ۱ است: اسکلت Rust/Axum در `apps/api` که معماری را سرتاسری روی ترموکس اثبات می‌کند. محتوا: اتصال MariaDB با کوئری‌های زمان‌اجرای sqlx (بدون ماکرو)، مایگریشن ۰۰۰۱ برای `users` و `otp_challenges` (با `public_id` تأییدشده)، مایگریشن ۰۰۰۲ برای `sessions`، اندپوینت `/api/v1/health`، و ورود OTP فقط در حالت توسعه با چاپ کد در لاگ. نشست‌ها ردیف دیتابیس با TTL سی‌روزه و کوکی HttpOnly هستند و توکن فقط به‌صورت هش SHA-256 ذخیره می‌شود. کد هش‌شدهٔ OTP با HMAC-SHA256 و پپر `OTP_PEPPER` ساخته می‌شود. هیچ کد سرویس‌دهندهٔ پیامکی وجود ندارد؛ ارسال واقعی SMS به فاز بعد و انتخاب تأمین‌کننده موکول است. برنامه ۱۰ تسک کوچک TDD دارد؛ هر تسک اول آزمون را می‌نویسد، شکست آن را مشاهده می‌کند، کمترین کد لازم را اضافه می‌کند و جداگانه کامیت می‌شود.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execution method is itself an open question (see the end of this document).
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. The execution method is recorded in "Approved decisions (plan review)" at the end of this document.
 
 **Goal:** A runnable Rust/Axum skeleton in `apps/api` that proves the stack end-to-end on Termux: MariaDB via sqlx runtime queries, `GET /api/v1/health`, the first migrations (`users`, `otp_challenges`, `sessions`), and dev-mode OTP login issuing a 30-day session cookie.
 
@@ -10,7 +10,7 @@
 
 **Tech Stack:** Rust stable (pinned on the phone at Task 1), axum 0.8+, sqlx 0.8+ (`mysql`, runtime queries), native MariaDB in Termux (`pkg install mariadb`). Nuxt 4 is confirmed for the frontend but is explicitly out of Phase 1 scope.
 
-**Spec:** `docs/PRODUCT.md` §3 Accounts, §5-D Sign in, §6 Business rules · `docs/DATABASE.md` §1 Conventions, §2 `users` + `otp_challenges` · `docs/API.md` §1 Conventions, §2 Auth and profile · `docs/ARCHITECTURE.md` §2 Termux, §5 Rust/Axum boundaries, §7 Security, §8 Persian digits, §11 "smallest vertical slice (health check, then OTP login)". This plan implements the approved amendments recorded below even where they extend the docs; Task 10 records them back into `docs/DATABASE.md`/`docs/API.md` if approved (open question 9).
+**Spec:** `docs/PRODUCT.md` §3 Accounts, §5-D Sign in, §6 Business rules · `docs/DATABASE.md` §1 Conventions, §2 `users` + `otp_challenges` · `docs/API.md` §1 Conventions, §2 Auth and profile · `docs/ARCHITECTURE.md` §2 Termux, §5 Rust/Axum boundaries, §7 Security, §8 Persian digits, §11 "smallest vertical slice (health check, then OTP login)". This plan implements the approved amendments recorded below even where they extend the docs; Task 10 records them back into `docs/DATABASE.md`/`docs/API.md` (approved, see "Approved decisions (plan review)" item 9).
 
 ---
 
@@ -148,11 +148,11 @@ Why `sessions` exists: ARCHITECTURE.md §7 requires "Session records in MariaDB 
 | `OTP_PEPPER` | yes | — | Secret; **never changes once codes are stored**; never committed |
 | `BIND_ADDR` | no | `127.0.0.1:8080` | ARCHITECTURE.md §2 |
 | `OTP_DEV_MODE` | no | `false` | `true` prints codes; effective only in debug builds |
-| `OTP_TTL_SECS` | no | `120` | Code expiry (open question 1) |
-| `OTP_RESEND_SECS` | no | `60` | Resend cooldown (open question 1) |
-| `OTP_MAX_ATTEMPTS` | no | `5` | Wrong-code limit (open question 1) |
+| `OTP_TTL_SECS` | no | `120` | Code expiry (approved: 120 s) |
+| `OTP_RESEND_SECS` | no | `60` | Resend cooldown (approved: 60 s) |
+| `OTP_MAX_ATTEMPTS` | no | `5` | Wrong-code limit (approved: 5) |
 | `SESSION_TTL_SECS` | no | `2592000` | 30 days (approved) |
-| `COOKIE_NAME` | no | `shabdar_session` | (open question 2) |
+| `COOKIE_NAME` | no | `shabdar_session` | (approved) |
 | `COOKIE_SECURE` | no | `false` | Must be `true` behind HTTPS; README warns |
 
 ```rust
@@ -172,7 +172,7 @@ pub struct Config {
 
 ## Error contract (exact)
 
-Envelope per API.md §1: `{"error":{"code":"…","message":"…","fields":{…}?},"request_id":"…"}`. `fields` appears only for field-level validation errors. Proposed `code` strings (open question 4):
+Envelope per API.md §1: `{"error":{"code":"…","message":"…","fields":{…}?},"request_id":"…"}`. `fields` appears only for field-level validation errors. Error `code` strings (approved, exactly these):
 
 | Variant | HTTP | code | Used for |
 |---|---|---|---|
@@ -183,7 +183,7 @@ Envelope per API.md §1: `{"error":{"code":"…","message":"…","fields":{…}?
 | `InvalidCode` | 401 | `invalid_code` | Wrong code, replayed challenge, unknown challenge_id (generic — no probing) |
 | `ChallengeExpired` | 401 | `challenge_expired` | Past `expires_at` |
 | `ChallengeLocked` | 401 | `challenge_locked` | `attempt_count >= OTP_MAX_ATTEMPTS` |
-| `NoAccount` | 401 | `no_account` | purpose=login, correct code, no user (open question 5) |
+| `NoAccount` | 401 | `no_account` | purpose=login, correct code, no user (approved: registration is a separate purpose; login never creates an account) |
 | `Internal` | 500 | `internal_error` | Anything else; never leaks SQL details |
 
 ---
@@ -299,7 +299,7 @@ Envelope per API.md §1: `{"error":{"code":"…","message":"…","fields":{…}?
 - [ ] **Step 1: Write failing tests** — accepted: `"0912 345-6789"`, `"+989123456789"`, `"00989123456789"`, `"989123456789"`, `"۰۹۱۲۳۴۵۶۷۸۹"` (Persian digits) → all `+989123456789`. Rejected: `"02112345678"` (landline), too-short/too-long, letters, empty.
 - [ ] **Step 2: Verify RED** — `cargo test phone` → FAIL: function undefined.
 - [ ] **Step 3: Implement** — map Persian/Arabic digits to ASCII, strip separators/spaces/dashes, resolve `0098`/`98`/`0`/`+98` prefixes, require `^\+989\d{9}$`.
-- [ ] **Step 4: Verify GREEN** — `cargo test phone`.
+- [ ] **Step 4: Verify GREEN** — `cargo test phone` and `cargo clippy` with no new warnings (first clippy run costs one extra compile pass).
 - [ ] **Step 5: Commit** — `git commit -am "feat(api): iranian mobile normalization"`.
 
 **Flag:** accepting Persian digits at the API boundary is a deliberate robustness addition; the digit *policy* for display/input is ARCHITECTURE.md §8 ("a single policy, applied in the frontend only. Stored values stay numeric") — Phase 1 stores ASCII E.164 only and does not set the frontend policy.
@@ -321,7 +321,7 @@ Envelope per API.md §1: `{"error":{"code":"…","message":"…","fields":{…}?
 - [ ] **Step 1: Write failing tests** — `generate_code()` returns 6 digits in a loop (statistical sanity); `hash_code` is 32 bytes, deterministic, differs when pepper differs; `verify_code` true/false; one **RFC 4231 HMAC-SHA-256 test vector** to pin crypto correctness.
 - [ ] **Step 2: Verify RED** — `cargo test otp` → FAIL: functions undefined.
 - [ ] **Step 3: Implement** — rejection sampling from `getrandom` bytes (no modulo bias); `hmac` + `sha2` for the hash.
-- [ ] **Step 4: Verify GREEN** — `cargo test otp`.
+- [ ] **Step 4: Verify GREEN** — `cargo test otp` and `cargo clippy` with no new warnings.
 - [ ] **Step 5: Commit** — `git commit -am "feat(api): otp code generation and hmac hashing"`.
 
 **Done:** crypto pinned by vector; code gen/hashing green.
@@ -347,7 +347,7 @@ Envelope per API.md §1: `{"error":{"code":"…","message":"…","fields":{…}?
 - [ ] **Step 1: Write failing integration tests** (`tests/auth_otp.rs`, uses `common.rs`; tests call `generate_code()` themselves and pass the plaintext in — real code paths, no mocks): (1) valid request → 200, exact keys, `challenge_id` 26 chars, DB row's `code_hash != plaintext code`; (2) invalid phone → 400 `invalid_phone`; (3) purpose `"reset"` → 400; (4) immediate repeat same phone+purpose → 429; same phone, other purpose → 200.
 - [ ] **Step 2: Verify RED** — `cargo test --test auth_otp` → FAIL: 404 (route missing).
 - [ ] **Step 3: Implement** `otp_service.rs` + handler.
-- [ ] **Step 4: Verify GREEN** — `TEST_DATABASE_URL=… cargo test --test auth_otp`; smoke: `curl` + observe the `DEV OTP` log line.
+- [ ] **Step 4: Verify GREEN** — `TEST_DATABASE_URL=… cargo test --test auth_otp`, then `cargo clippy` with no new warnings; smoke: `curl` + observe the `DEV OTP` log line.
 - [ ] **Step 5: Commit** — `git commit -am "feat(api): otp request endpoint"`.
 
 **Flags (documented simplifications):** cooldown check + INSERT is not atomic — two concurrent requests inside the window can both pass; accepted with a `// ponytail:` comment naming the upgrade (unique-constraint trick or `SELECT … FOR UPDATE`); per-IP limiting deferred (needs `X-Forwarded-For` from the Nuxt proxy, Phase 2).
@@ -379,10 +379,10 @@ Envelope per API.md §1: `{"error":{"code":"…","message":"…","fields":{…}?
 - [ ] **Step 5: Write failing integration tests** (each with its expected failure): happy register → 200, `is_new_user == true`, cookie flags exact, `sessions` row with `expires_at ≈ +30 days` and `token_hash == SHA-256(cookie token)`; replay same code → 401 `invalid_code`; wrong code → 401 and `attempt_count` incremented in DB; 5 wrong then correct → 401 `challenge_locked`; expired challenge → 401 `challenge_expired`; unknown `challenge_id` → 401 generic; register on existing phone → `is_new_user == false`; purpose=login on unknown phone with correct code → 401 `no_account`; full flow with a Persian-digit phone → same E.164 user.
 - [ ] **Step 6: Verify RED** — `cargo test --test auth_otp` → FAIL: 404 on verify route.
 - [ ] **Step 7: Implement** migration 0002 (exact DDL above) + `verify_challenge` + handler.
-- [ ] **Step 8: Verify GREEN** — full `cargo test` (the whole suite, per TDD skill).
+- [ ] **Step 8: Verify GREEN** — full `cargo test` (the whole suite, per TDD skill) and `cargo clippy` with no new warnings.
 - [ ] **Step 9: Commit** — `git commit -am "feat(api): otp verify, sessions table, session cookie"`.
 
-**Flags:** `user` object shape is a proposal pending open question 3; CSRF token delivery is deferred (open question 6); expired-row cleanup jobs are a later phase.
+**Flags:** `user` object shape approved (`{public_id, display_name, is_admin}`); CSRF delivery deferred to Phase 2 (approved); expired-row cleanup jobs are a later phase.
 
 **Cost:** ~3–4 min.
 
@@ -391,10 +391,10 @@ Envelope per API.md §1: `{"error":{"code":"…","message":"…","fields":{…}?
 ### Task 10: Smoke test, README, doc sync, notes
 
 **Files:**
-- Create: `apps/api/README.md` · Modify: `docs/DATABASE.md`, `docs/API.md` (only the two approved amendments — see open question 9) · **Not modified: `docs/STATUS.md`** (explicit user instruction; the user updates it)
+- Create: `apps/api/README.md` · Modify: `docs/DATABASE.md`, `docs/API.md` (only the two approved amendments — approved, see "Approved decisions (plan review)" item 9) · **Not modified: `docs/STATUS.md`** (explicit user instruction; the user updates it)
 
-- [ ] **Step 1: README** — env-var table (from this plan), MariaDB setup via `pkg install mariadb` + database/user creation SQL for `shabdar_dev` and `shabdar_test` (names pending open question 7; credentials via env only, never committed), `cargo check/test/run` workflow, `termux-wake-lock` note, and the approved warning: **`OTP_PEPPER` must never change once OTP codes are in use — changing it invalidates every stored code.**
-- [ ] **Step 2: Manual smoke on the phone** — fresh test DB → `cargo run` → curl health (200) → curl otp/request (see `DEV OTP` line) → wrong code (401, attempt count rises) → correct code (200, `curl -i` shows exact cookie flags) → restart the server → old cookie still accepted (session row survives; end-to-end proof).
+- [ ] **Step 1: README** — env-var table (from this plan), MariaDB setup via `pkg install mariadb` + database/user creation SQL for `shabdar_dev` and `shabdar_test` (names approved; credentials via env only, never committed), `cargo check/test/run` workflow, `termux-wake-lock` note, and the approved warning: **`OTP_PEPPER` must never change once OTP codes are in use — changing it invalidates every stored code.**
+- [ ] **Step 2: Manual smoke on the phone** — fresh test DB → `cargo run` → curl health (200) → curl otp/request (see `DEV OTP` line) → wrong code (401, attempt count rises) → correct code (200, `curl -i` shows exact cookie flags) → restart the server → old cookie still accepted (session row survives; end-to-end proof). Final gate: `cargo clippy` with no new warnings.
 - [ ] **Step 3: Record** cold-build times (Task 1) and any Termux quirks in the README.
 - [ ] **Step 4: Commit** — `git commit -am "docs(api): readme and schema docs sync"`.
 - [ ] **Step 5: Push** the branch. No PR (user opens it).
@@ -419,15 +419,15 @@ One cold build in Task 1 (~10–25+ min; **recorded, not guessed**); every later
 
 ---
 
-## Open questions (all of them; answer in any order)
+## Approved decisions (plan review, answered by the user on 2026-10-08)
 
-1. **OTP values:** expiry 120 s, resend cooldown 60 s, max attempts 5 — all env-overridable. Session TTL (30 days) is approved; these three are not yet. OK?
-2. **Cookie name** `shabdar_session` — OK?
-3. **`user` object** in the verify response: `{"public_id","display_name","is_admin"}` (display_name `null` until set; `/me` in Phase 2 reuses this shape). OK?
-4. **Error `code` strings:** `validation_error`, `invalid_phone`, `invalid_purpose`, `rate_limited`, `invalid_code`, `challenge_expired`, `challenge_locked`, `no_account`, `internal_error` — API.md fixes the envelope but not the code strings. OK?
-5. **`purpose=login` with a correct code on a phone that has no account** → 401 `no_account` (existence is disclosed only to someone who already possessed a valid code). Keep, or should login also create the account (merge login/register)?
-6. **CSRF:** defer entirely to Phase 2 (when the Nuxt proxy and browser forms exist; Phase 1 clients are curl/tests, and the cookie already carries SameSite=Lax). OK?
-7. **Your MariaDB:** output of `SELECT VERSION();` on the phone, and confirmation of database names `shabdar_dev` / `shabdar_test` with a dedicated user (credentials via env vars only) — or tell me the names you prefer.
-8. **Execution method:** (a) I implement the tasks in this session and you run `cargo check`/`cargo test` on Termux, pasting me failures; or (b) you execute the plan on the phone and I review each step. I recommend (a).
-9. **Doc sync:** may I update `docs/DATABASE.md` and `docs/API.md` in Task 10 to record the two approved amendments (`sessions` table, `otp_challenges.public_id`) — `STATUS.md` excluded per your instruction — or will you fold those into main yourself?
-10. **Lint:** include `cargo clippy` in the per-task verification, or keep plain `cargo check` + `cargo test` (clippy adds one extra first-compile on the phone)?
+1. **OTP values:** expiry 120 s, resend cooldown 60 s, max attempts 5 — all env-overridable. (Session TTL of 30 days was already approved.)
+2. **Cookie name:** `shabdar_session`.
+3. **`user` object** in the verify response: `{"public_id","display_name","is_admin"}` (`display_name` is `null` until set; `/me` in Phase 2 reuses this shape).
+4. **Error `code` strings:** exactly `validation_error`, `invalid_phone`, `invalid_purpose`, `rate_limited`, `invalid_code`, `challenge_expired`, `challenge_locked`, `no_account`, `internal_error`.
+5. **`purpose=login` with a correct code on a phone that has no account** → 401 `no_account`. Registration is a separate purpose; login never creates an account.
+6. **CSRF:** deferred entirely to Phase 2 (when the Nuxt proxy and browser forms exist; Phase 1 clients are curl/tests, and the cookie already carries SameSite=Lax).
+7. **Databases:** `shabdar_dev` and `shabdar_test`. Credentials via environment variables only, never in files. MariaDB version: pending — the user will paste `SELECT VERSION();` output before migration testing (needed mainly to confirm ENUM/CHECK behavior on the target release).
+8. **Execution method:** (a) — the agent implements the tasks in session; the user runs `cargo check` / `cargo test` on Termux and pastes the output back.
+9. **Doc sync:** Task 10 updates `docs/DATABASE.md` and `docs/API.md` for the `sessions` table and `otp_challenges.public_id`. `docs/STATUS.md` is never touched by the agent.
+10. **Lint:** no `cargo clippy` in Tasks 1–5; `cargo clippy` (no new warnings) is part of verification from Task 6 onward.
