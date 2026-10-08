@@ -1,7 +1,7 @@
 # Status
 
 ## Current phase
-Phase 1 approved, in progress.
+Phase 1 approved, in progress. Task 1 (scaffold apps/api) verified on Termux: `cargo check` clean in 1m 59s.
 
 ## Decisions made
 - Listings are published only after admin approval (pending → active).
