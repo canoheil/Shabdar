@@ -1,7 +1,8 @@
 # Status
 
 ## Current phase
-Phase 1 approved, in progress. Task 1 (scaffold apps/api) verified on Termux: `cargo check` clean in 1m 59s. Task 2 (config.rs) committed, unverified — awaiting user's `cargo test` output.
+Phase 1 approved, in progress. Task 1 verified on Termux (cargo check clean, 1m 59s). Task 2 (config.rs) verified on Termux: cargo test 5/5 green; missing-env startup error path confirmed.
+
 
 ## Decisions made
 - Listings are published only after admin approval (pending → active).
@@ -35,7 +36,8 @@ Phase 1 approved, in progress. Task 1 (scaffold apps/api) verified on Termux: `c
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-9879a98 (task 2 env config, green but unverified)
+caec18a (task 2 env config, verified)
+
 
 ## Next step
-User runs `cargo test` to verify Task 2, then Task 3 (error.rs + request_id.rs).
+Task 3 (error.rs + request_id.rs)
