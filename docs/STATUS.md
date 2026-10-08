@@ -1,7 +1,7 @@
 # Status
 
 ## Current phase
-Phase 1 approved, in progress. Task 1 verified on Termux (cargo check clean, 1m 59s). Task 2 (config.rs) verified on Termux: cargo test 5/5 green; missing-env startup error path confirmed. Task 3 (error.rs + request_id.rs) committed, unverified — awaiting user's cargo test output.
+Phase 1 approved, in progress. Tasks 1–3 verified on Termux (cargo check clean; cargo test 11/11 green). Cargo.lock committed by user (3e513b6).
 
 
 ## Decisions made
@@ -36,8 +36,8 @@ Phase 1 approved, in progress. Task 1 verified on Termux (cargo check clean, 1m 
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-6c124e2 (task 3 error and request id, green but unverified)
+3e513b6 (task 3 verified; Cargo.lock tracked)
 
 
 ## Next step
-User runs `cargo test` to verify Task 3, then Task 4 (db.rs, state.rs, migration 0001).
+Task 4 (db.rs, state.rs, migration 0001) — blocked until user provides the MariaDB version (SELECT VERSION()).
