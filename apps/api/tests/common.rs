@@ -62,3 +62,11 @@ pub fn test_config() -> Config {
         cookie_secure: false,
     }
 }
+
+/// Builds the app router for oneshot tests. No database contact here:
+/// create_pool is lazy, so a router against an unreachable URL is legal too.
+/// Tests that need schema run migrations on their own pool first.
+pub async fn spawn_app(config: Config) -> axum::Router {
+    let pool = shabdar_api::db::create_pool(&config);
+    shabdar_api::routes::router(shabdar_api::state::AppState { pool, config })
+}
