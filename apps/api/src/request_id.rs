@@ -3,6 +3,25 @@
 //! The middleware mints a ULID per request, stores it in request extensions
 //! for handlers/services, and echoes it as the `x-request-id` response header.
 
+use axum::extract::Request;
+use axum::http::{HeaderName, HeaderValue};
+use axum::middleware::Next;
+use axum::response::Response;
+
+const HEADER_NAME: HeaderName = HeaderName::from_static("x-request-id");
+
+/// axum middleware; attach with `middleware::from_fn` (see main.rs).
+pub async fn request_id_middleware(mut req: Request, next: Next) -> Response {
+    let id = ulid::Ulid::new().to_string();
+    req.extensions_mut().insert(id.clone());
+    let mut resp = next.run(req).await;
+    resp.headers_mut().insert(
+        HEADER_NAME,
+        HeaderValue::from_str(&id).expect("a ULID is always a valid header value"),
+    );
+    resp
+}
+
 #[cfg(test)]
 mod tests {
     use axum::body::Body;

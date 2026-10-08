@@ -4,6 +4,94 @@
 //! `{"error":{"code":"…","message":"…","fields":{…}?},"request_id":"…"}`
 //! `fields` appears only for field-level validation errors.
 
+use std::collections::BTreeMap;
+
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use axum::Json;
+
+/// All API errors. The `code` strings are the exact, frozen contract with
+/// clients (docs/PHASE1_PLAN.md "Error contract" — do not rename).
+pub enum ApiError {
+    /// 400 with per-field detail, e.g. `{"phone": "required"}`.
+    Validation { fields: BTreeMap<String, String> },
+    InvalidPhone,
+    InvalidPurpose,
+    RateLimited,
+    InvalidCode,
+    ChallengeExpired,
+    ChallengeLocked,
+    NoAccount,
+    Internal,
+}
+
+impl ApiError {
+    fn status(&self) -> StatusCode {
+        match self {
+            ApiError::Validation { .. } | ApiError::InvalidPhone | ApiError::InvalidPurpose => {
+                StatusCode::BAD_REQUEST
+            }
+            ApiError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+            ApiError::InvalidCode
+            | ApiError::ChallengeExpired
+            | ApiError::ChallengeLocked
+            | ApiError::NoAccount => StatusCode::UNAUTHORIZED,
+            ApiError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
+    fn code(&self) -> &'static str {
+        match self {
+            ApiError::Validation { .. } => "validation_error",
+            ApiError::InvalidPhone => "invalid_phone",
+            ApiError::InvalidPurpose => "invalid_purpose",
+            ApiError::RateLimited => "rate_limited",
+            ApiError::InvalidCode => "invalid_code",
+            ApiError::ChallengeExpired => "challenge_expired",
+            ApiError::ChallengeLocked => "challenge_locked",
+            ApiError::NoAccount => "no_account",
+            ApiError::Internal => "internal_error",
+        }
+    }
+
+    /// Human-readable, free of secrets and SQL detail. Clients key off
+    /// `code`, never off this text.
+    fn message(&self) -> &'static str {
+        match self {
+            ApiError::Validation { .. } => "One or more fields are invalid",
+            ApiError::InvalidPhone => "Phone number is not a valid Iranian mobile number",
+            ApiError::InvalidPurpose => "Purpose must be \"login\" or \"register\"",
+            ApiError::RateLimited => "Too many requests; please wait and try again",
+            ApiError::InvalidCode => "Invalid code",
+            ApiError::ChallengeExpired => "Code expired; request a new one",
+            ApiError::ChallengeLocked => "Too many wrong attempts; request a new code",
+            ApiError::NoAccount => "No account exists for this phone number",
+            ApiError::Internal => "Internal server error",
+        }
+    }
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        let mut error = serde_json::json!({
+            "code": self.code(),
+            "message": self.message(),
+        });
+        if let ApiError::Validation { fields } = &self {
+            error["fields"] = serde_json::json!(fields);
+        }
+        // ponytail: a fresh ULID keeps the envelope self-contained; the
+        // request-id middleware owns the x-request-id header + extensions.
+        // If a later phase needs header/body correlation, thread the
+        // extension id into the handlers that build these errors.
+        let body = serde_json::json!({
+            "error": error,
+            "request_id": ulid::Ulid::new().to_string(),
+        });
+        (self.status(), Json(body)).into_response()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;

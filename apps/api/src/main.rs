@@ -9,7 +9,7 @@ mod request_id;
 
 use std::net::SocketAddr;
 
-use axum::Router;
+use axum::{middleware, Router};
 
 /// Placeholder handler: the literal string `ok`.
 async fn ok() -> &'static str {
@@ -33,8 +33,11 @@ async fn main() {
     });
     let addr: SocketAddr = cfg.bind_addr.parse().expect("BIND_ADDR must be host:port");
 
-    // Task 1: one fallback route answers `ok` for every path, including GET /.
-    let app = Router::new().fallback(ok);
+    // Task 1 fallback still answers `ok`; Task 5 swaps in routes::router().
+    // The request-id layer wraps every request, fallback included.
+    let app = Router::new()
+        .fallback(ok)
+        .layer(middleware::from_fn(request_id::request_id_middleware));
 
     let listener = tokio::net::TcpListener::bind(addr)
         .await
