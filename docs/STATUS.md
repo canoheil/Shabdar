@@ -1,7 +1,7 @@
 # Status
 
 ## Current phase
-Phase 1 approved, in progress. Tasks 1–3 verified on Termux (cargo check clean; cargo test 11/11 green). Cargo.lock committed by user (3e513b6).
+Phase 1 approved, in progress. Tasks 1–3 verified on Termux (cargo test 11/11). Task 4 (db.rs, state.rs, migration 0001) committed green in this commit, awaiting user verification; sqlx ↔ MariaDB 12.3.2 untested until the user runs `cargo test`.
 
 
 ## Decisions made
@@ -36,8 +36,8 @@ Phase 1 approved, in progress. Tasks 1–3 verified on Termux (cargo check clean
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-3e513b6 (task 3 verified; Cargo.lock tracked)
+aee8b79 (task 4 tests, red); GREEN = the commit carrying this file
 
 
 ## Next step
-Task 4 (db.rs, state.rs, migration 0001) — blocked until user provides the MariaDB version (SELECT VERSION()).
+User runs `TEST_DATABASE_URL=mysql://shabdar:<password>@127.0.0.1:3306/shabdar_test cargo test` and pastes output; then Task 5 (GET /api/v1/health).

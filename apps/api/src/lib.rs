@@ -1,0 +1,8 @@
+//! Library surface of the Shabdar API: the application itself. main.rs only
+//! wires the process; integration tests in tests/ import from here.
+
+pub mod config;
+pub mod db;
+pub mod error;
+pub mod request_id;
+pub mod state;

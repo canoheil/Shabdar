@@ -7,6 +7,7 @@
 // onward; until then this silences per-field dead-code warnings instead of
 // writing fake reads. Remove this attribute once all fields are consumed.
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct Config {
     pub bind_addr: String,
     pub database_url: String,
