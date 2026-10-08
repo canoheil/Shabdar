@@ -4,6 +4,8 @@
 //! every request with `ok`. Task 5 replaces the fallback with routes::router().
 
 mod config;
+mod error;
+mod request_id;
 
 use std::net::SocketAddr;
 
