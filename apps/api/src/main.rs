@@ -24,8 +24,12 @@ async fn main() {
         )
         .init();
 
-    let bind_addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".into());
-    let addr: SocketAddr = bind_addr.parse().expect("BIND_ADDR must be host:port");
+    // Fail fast on missing or invalid env (Config contract in docs/PHASE1_PLAN.md).
+    let cfg = config::Config::from_env().unwrap_or_else(|e| {
+        eprintln!("configuration error: {e}");
+        std::process::exit(2);
+    });
+    let addr: SocketAddr = cfg.bind_addr.parse().expect("BIND_ADDR must be host:port");
 
     // Task 1: one fallback route answers `ok` for every path, including GET /.
     let app = Router::new().fallback(ok);

@@ -3,6 +3,74 @@
 //! Required: DATABASE_URL, OTP_PEPPER. Everything else has a default.
 //! Secrets (database URL, pepper) live only here and must never be logged.
 
+// Most fields are only read from Task 4 (pool) and Tasks 8–9 (OTP/session)
+// onward; until then this silences per-field dead-code warnings instead of
+// writing fake reads. Remove this attribute once all fields are consumed.
+#[allow(dead_code)]
+pub struct Config {
+    pub bind_addr: String,
+    pub database_url: String,
+    pub otp_pepper: String,
+    pub otp_dev_mode: bool,
+    pub otp_ttl_secs: u32,
+    pub otp_resend_secs: u32,
+    pub otp_max_attempts: u16,
+    pub session_ttl_secs: u32,
+    pub cookie_name: String,
+    pub cookie_secure: bool,
+}
+
+impl Config {
+    /// Reads all settings from the process environment. The first problem
+    /// returns Err naming the offending variable.
+    pub fn from_env() -> Result<Config, String> {
+        Ok(Config {
+            bind_addr: optional_string("BIND_ADDR", "127.0.0.1:8080"),
+            database_url: required("DATABASE_URL")?,
+            otp_pepper: required("OTP_PEPPER")?,
+            otp_dev_mode: parse_bool("OTP_DEV_MODE", false)?,
+            otp_ttl_secs: parse_u32("OTP_TTL_SECS", 120)?,
+            otp_resend_secs: parse_u32("OTP_RESEND_SECS", 60)?,
+            // u16 per the contract; reject values above u16::MAX, never wrap.
+            otp_max_attempts: u16::try_from(parse_u32("OTP_MAX_ATTEMPTS", 5)?)
+                .map_err(|_| "OTP_MAX_ATTEMPTS must fit in 0..=65535".to_string())?,
+            session_ttl_secs: parse_u32("SESSION_TTL_SECS", 2_592_000)?,
+            cookie_name: optional_string("COOKIE_NAME", "shabdar_session"),
+            cookie_secure: parse_bool("COOKIE_SECURE", false)?,
+        })
+    }
+}
+
+/// A missing required variable is an error naming the variable (contract).
+fn required(name: &str) -> Result<String, String> {
+    std::env::var(name).map_err(|_| format!("missing required environment variable {name}"))
+}
+
+fn optional_string(name: &str, default: &str) -> String {
+    std::env::var(name).unwrap_or_else(|_| default.to_string())
+}
+
+/// Strict on purpose: a typo must not silently disable dev-mode or Secure cookies.
+fn parse_bool(name: &str, default: bool) -> Result<bool, String> {
+    match std::env::var(name) {
+        Err(_) => Ok(default),
+        Ok(v) => match v.as_str() {
+            "true" | "1" => Ok(true),
+            "false" | "0" => Ok(false),
+            _ => Err(format!("{name} must be true/false/1/0, got {v:?}")),
+        },
+    }
+}
+
+fn parse_u32(name: &str, default: u32) -> Result<u32, String> {
+    match std::env::var(name) {
+        Err(_) => Ok(default),
+        Ok(v) => v
+            .parse()
+            .map_err(|_| format!("{name} must be a non-negative integer, got {v:?}")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Mutex, MutexGuard};
