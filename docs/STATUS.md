@@ -1,7 +1,8 @@
 # Status
 
 ## Current phase
-Phase 0 (docs) approved and committed. Phase 1 plan written by the agent, waiting for user review. No application code yet.
+Phase 1 part A complete: Tasks 1–5 verified on Termux (cargo test 17/17 green; sqlx works with MariaDB 12.3.2). Awaiting PR 1 to main by the user.
+
 
 ## Decisions made
 - Listings are published only after admin approval (pending → active).
@@ -35,7 +36,11 @@ Phase 0 (docs) approved and committed. Phase 1 plan written by the agent, waitin
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-fd853c0 (docs final on main)
+26a0d9e (task 5 verified: health endpoint)
+
+
+## Open items for later tasks
+- Placeholder fallback returns 200 `ok` for any unknown path instead of a 404 JSON error envelope (apps/api/src/routes.rs). Known deviation from API.md §1 error conventions — decide before Phase 2 whether to change it to a `not_found` error. Recorded as a known deviation, not a fix for now.
 
 ## Next step
-User reviews the Phase 1 plan and answers the proposals above. Then the first coding task (Task 1, scaffold apps/api) starts.
+PR 1 to main by user, then Task 6 (phone.rs) after new session
