@@ -1,7 +1,7 @@
 # Status
 
 ## Current phase
-Phase 0 (docs) approved and committed. Phase 1 plan written by the agent, waiting for user review. No application code yet.
+Phase 1 approved, in progress.
 
 ## Decisions made
 - Listings are published only after admin approval (pending → active).
@@ -35,7 +35,7 @@ Phase 0 (docs) approved and committed. Phase 1 plan written by the agent, waitin
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-fd853c0 (docs final on main)
+918233c (phase 1 plan merged on main)
 
 ## Next step
-User reviews the Phase 1 plan and answers the proposals above. Then the first coding task (Task 1, scaffold apps/api) starts.
+Task 1: scaffold apps/api
