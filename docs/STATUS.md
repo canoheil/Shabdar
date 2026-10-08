@@ -1,7 +1,7 @@
 # Status
 
 ## Current phase
-Phase 1 approved, in progress. Task 1 (scaffold apps/api) verified on Termux: `cargo check` clean in 1m 59s.
+Phase 1 approved, in progress. Task 1 (scaffold apps/api) verified on Termux: `cargo check` clean in 1m 59s. Task 2 (config.rs) committed, unverified — awaiting user's `cargo test` output.
 
 ## Decisions made
 - Listings are published only after admin approval (pending → active).
@@ -35,7 +35,7 @@ Phase 1 approved, in progress. Task 1 (scaffold apps/api) verified on Termux: `c
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-918233c (phase 1 plan merged on main)
+9879a98 (task 2 env config, green but unverified)
 
 ## Next step
-Task 1: scaffold apps/api
+User runs `cargo test` to verify Task 2, then Task 3 (error.rs + request_id.rs).
