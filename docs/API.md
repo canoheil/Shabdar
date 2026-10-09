@@ -12,17 +12,37 @@
 - Errors: `{ "error": { "code": "…", "message": "…", "fields": { … } }, "request_id": "…" }`.
 - Responses that depend on the caller (favorite, own rating, own report) are never cached publicly.
 
+### Health check
+
+| Method | Path | Auth | Summary |
+|---|---|---|---|
+| GET | `/health` | Public | Liveness + database probe. 200 `{"status":"ok","database":"ok"}` when MariaDB answers; 503 `{"status":"error","database":"error"}` otherwise. |
+
 ## 2. Auth and profile
 
 | Method | Path | Auth | Summary |
 |---|---|---|---|
-| POST | `/auth/otp/request` | Public, rate-limited | Body: `{ phone, purpose: "login" \| "register" }`. Returns `{ challenge_id, expires_in_seconds, resend_after_seconds }`. Same response shape whether or not the account exists. |
-| POST | `/auth/otp/verify` | Public, rate-limited | Body: `{ challenge_id, code }`. Sets the session cookie. Returns `{ user, is_new_user }`. Single use, expiry, attempt limit. |
+| POST | `/auth/otp/request` | Public, rate-limited | Body: `{ phone, purpose: "login" \| "register" }`. Returns exactly `{"challenge_id","expires_in_seconds","resend_after_seconds"}`. Same response shape whether or not the account exists. |
+| POST | `/auth/otp/verify` | Public, rate-limited | Body: `{ challenge_id, code }`. Sets the `shabdar_session` cookie (`Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`, plus `Secure` when `COOKIE_SECURE=true`). Returns exactly `{"user":{"public_id","display_name","is_admin"},"is_new_user"}` (`display_name` is `null` until set). Single use, expiry, attempt limit. |
 | POST | `/auth/logout` | User | Ends the session and clears the cookie. |
 | GET | `/me` | User | Current user summary and role flags (`is_admin`). |
 | PATCH | `/me` | User | Body: `{ display_name }`. |
 
 Server rules: the client never decides whether an account is created. `purpose` is checked against the stored challenge. Phone changes are not in v1.
+
+Error codes used by the auth endpoints:
+
+| HTTP | code | When |
+|---|---|---|
+| 400 | `validation_error` | Missing body fields (`fields` object present) |
+| 400 | `invalid_phone` | Phone is not a normalizable Iranian mobile |
+| 400 | `invalid_purpose` | `purpose` is not `login` or `register` |
+| 429 | `rate_limited` | Resend cooldown hit |
+| 401 | `invalid_code` | Wrong code, replayed or unknown `challenge_id` (generic — no probing) |
+| 401 | `challenge_expired` | Past the challenge's `expires_at` |
+| 401 | `challenge_locked` | Wrong-code limit (`OTP_MAX_ATTEMPTS`) reached |
+| 401 | `no_account` | `purpose=login` with a correct code but no account |
+| 500 | `internal_error` | Anything else; never leaks SQL details |
 
 ## 3. Public discovery
 

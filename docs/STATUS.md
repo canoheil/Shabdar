@@ -1,7 +1,7 @@
 # Status
 
 ## Current phase
-Phase 1 part A merged (PR #3, main 67801bd). Part B (Tasks 6-10) in progress on feat/phase1-part-b.
+Phase 1 part A merged (PR #3, main 67801bd). Part B (Tasks 6-10) complete on feat/phase1-part-b: Tasks 6-9 verified on Termux (0fb72ca); Task 10 (docs) committed, UNVERIFIED.
 
 
 ## Decisions made
@@ -36,11 +36,19 @@ Phase 1 part A merged (PR #3, main 67801bd). Part B (Tasks 6-10) in progress on 
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-Tasks 8 and 9 verified (cargo test 52/52 green on Termux); clippy fix pending verification (this commit)
+Tasks 6 to 9 verified (cargo test 52/52 green + cargo clippy --all-targets -- -D warnings clean on Termux at 0fb72ca); Task 10 committed (UNVERIFIED — docs only, this commit)
 
 
 ## Open items for later tasks
 - Placeholder fallback returns 200 `ok` for any unknown path instead of a 404 JSON error envelope (apps/api/src/routes.rs). Known deviation from API.md §1 error conventions — decide before Phase 2 whether to change it to a `not_found` error. Recorded as a known deviation, not a fix for now.
 
 ## Next step
-Verify Tasks 8–9 on Termux (TEST_DATABASE_URL set: cargo test, cargo clippy --all-targets -- -D warnings); then Task 10
+Review the Task 10 docs (apps/api/README.md + DATABASE.md/API.md sync); then Phase 2.
+
+## Next: Phase 2
+- Nuxt frontend with the same-origin API proxy (forwards the session cookie and `X-Forwarded-For`).
+- Listings domain: draft → pending → admin approval → active.
+- `/me`, `/auth/logout`, and CSRF token delivery.
+- SMS provider decision (replaces the dev console OTP print).
+- Per-IP OTP rate limiting; fix the placeholder 200 fallback (404 error envelope) and the malformed-JSON error shape.
+- Persian profanity filter for comments — required before public launch.

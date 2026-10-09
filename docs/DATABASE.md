@@ -30,6 +30,7 @@ Reasoning: phone number is the login identity but never appears in public payloa
 
 ### `otp_challenges`
 - `id BIGINT UNSIGNED PK`
+- `public_id CHAR(26) UNIQUE NOT NULL` (approved amendment; exposed as `challenge_id` so sequential IDs never leave the API)
 - `phone_e164 VARCHAR(16) NOT NULL`
 - `purpose ENUM('login','register') NOT NULL`
 - `code_hash VARBINARY(255) NOT NULL` (never store the plain code)
@@ -41,6 +42,16 @@ Reasoning: phone number is the login identity but never appears in public payloa
 - Indexes: `(phone_e164, purpose, created_at)`, `(expires_at)`
 
 Reasoning: short-lived records allow throttling and one-time use. Old rows are cleaned by a scheduled job.
+
+### `sessions`
+- `id BIGINT UNSIGNED PK`
+- `user_id BIGINT UNSIGNED NOT NULL` FK → `users.id` (ON DELETE CASCADE)
+- `token_hash BINARY(32) UNIQUE NOT NULL` (SHA-256 of the cookie token; the raw token is never stored)
+- `expires_at DATETIME(3) NOT NULL` (created_at + 30 days)
+- `created_at DATETIME(3) NOT NULL`
+- Index: `(user_id, expires_at)`
+
+Reasoning: ARCHITECTURE.md §7 requires session records with expiry and revocation. Revocation = delete the row (used by `/auth/logout` in Phase 2 and by "suspension ends all sessions" later); the `(user_id, expires_at)` index serves that bulk delete. Added in migration 0002.
 
 ### `provinces`
 - `id SMALLINT UNSIGNED PK`, `name_fa VARCHAR(100) NOT NULL`, `slug VARCHAR(120) UNIQUE NOT NULL`
