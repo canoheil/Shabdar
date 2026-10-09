@@ -43,4 +43,4 @@ Phase 1 part A merged (PR #3, main 67801bd). Part B (Tasks 6-10) in progress on 
 - Placeholder fallback returns 200 `ok` for any unknown path instead of a 404 JSON error envelope (apps/api/src/routes.rs). Known deviation from API.md §1 error conventions — decide before Phase 2 whether to change it to a `not_found` error. Recorded as a known deviation, not a fix for now.
 
 ## Next step
-Task 6 (`phone.rs`)
+Task 7 (`otp.rs`)
