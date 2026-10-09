@@ -1,7 +1,7 @@
 # Status
 
 ## Current phase
-Phase 1 part A complete: Tasks 1–5 verified on Termux (cargo test 17/17 green; sqlx works with MariaDB 12.3.2). Awaiting PR 1 to main by the user.
+Phase 1 part A merged (PR #3, main 67801bd). Part B (Tasks 6-10) in progress on feat/phase1-part-b.
 
 
 ## Decisions made
@@ -43,4 +43,4 @@ Phase 1 part A complete: Tasks 1–5 verified on Termux (cargo test 17/17 green;
 - Placeholder fallback returns 200 `ok` for any unknown path instead of a 404 JSON error envelope (apps/api/src/routes.rs). Known deviation from API.md §1 error conventions — decide before Phase 2 whether to change it to a `not_found` error. Recorded as a known deviation, not a fix for now.
 
 ## Next step
-PR 1 to main by user, then Task 6 (phone.rs) after new session
+Task 6 (`phone.rs`)
