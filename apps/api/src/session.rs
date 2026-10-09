@@ -2,6 +2,67 @@
 //! (docs/PHASE1_PLAN.md, Task 9; migration 0002). The raw token is returned
 //! to the client once and never persisted.
 
+use chrono::{Duration, Utc};
+use sha2::{Digest, Sha256};
+use sqlx::MySqlPool;
+
+use crate::config::Config;
+use crate::error::ApiError;
+
+/// Generate a session token: 32 random bytes, hex-encoded (64 chars).
+pub fn generate_token() -> String {
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).expect("OS randomness source unavailable");
+    to_hex(&bytes)
+}
+
+/// SHA-256 of the token — the only form ever stored (migration 0002).
+pub fn hash_token(token: &str) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    hasher.finalize().into()
+}
+
+/// The exact Set-Cookie value: configured name, approved flags, `Secure`
+/// only when the config says so (true behind HTTPS, false on localhost).
+pub fn build_set_cookie(cfg: &Config, token: &str) -> String {
+    let mut cookie = format!(
+        "{}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}",
+        cfg.cookie_name, cfg.session_ttl_secs
+    );
+    if cfg.cookie_secure {
+        cookie.push_str("; Secure");
+    }
+    cookie
+}
+
+/// Insert a session row (hash only) and return the raw token.
+pub async fn create_session(
+    pool: &MySqlPool,
+    cfg: &Config,
+    user_id: u64,
+) -> Result<String, ApiError> {
+    let token = generate_token();
+    let token_hash = hash_token(&token);
+    let expires_at = Utc::now() + Duration::seconds(cfg.session_ttl_secs as i64);
+    sqlx::query(
+        "INSERT INTO sessions (user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?)",
+    )
+    .bind(user_id)
+    .bind(&token_hash[..])
+    .bind(expires_at)
+    .bind(Utc::now())
+    .execute(pool)
+    .await
+    .map_err(|_| ApiError::Internal)?;
+    Ok(token)
+}
+
+/// Lowercase hex of a byte slice (no hex crate — five lines, per the plan's ladder).
+fn to_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

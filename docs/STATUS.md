@@ -36,11 +36,11 @@ Phase 1 part A merged (PR #3, main 67801bd). Part B (Tasks 6-10) in progress on 
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-67cd1f0 (task 6: phone.rs — verified on Termux: cargo test phone 10/10 green, cargo clippy --all-targets -- -D warnings clean)
+Tasks 8 and 9 committed, UNVERIFIED (this commit; cargo test + cargo clippy --all-targets -- -D warnings pending on Termux)
 
 
 ## Open items for later tasks
 - Placeholder fallback returns 200 `ok` for any unknown path instead of a 404 JSON error envelope (apps/api/src/routes.rs). Known deviation from API.md §1 error conventions — decide before Phase 2 whether to change it to a `not_found` error. Recorded as a known deviation, not a fix for now.
 
 ## Next step
-Task 7 (`otp.rs`)
+Verify Tasks 8–9 on Termux (TEST_DATABASE_URL set: cargo test, cargo clippy --all-targets -- -D warnings); then Task 10

@@ -1,11 +1,13 @@
 //! The single router builder every task extends (docs/PHASE1_PLAN.md).
 //! Handlers stay thin: they parse HTTP and call one service function.
-//! Routes so far: GET /api/v1/health, POST /api/v1/auth/otp/request.
+//! Routes so far: GET /api/v1/health, POST /api/v1/auth/otp/request,
+//! POST /api/v1/auth/otp/verify.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
 
 use axum::extract::State;
+use axum::http::header::{HeaderName, SET_COOKIE};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{
@@ -24,6 +26,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/api/v1/health", get(health))
         .route("/api/v1/auth/otp/request", post(otp_request))
+        .route("/api/v1/auth/otp/verify", post(otp_verify))
         // Task 1 placeholder until real routes exist; a later task turns the
         // fallback into a proper 404.
         .fallback(placeholder_ok)
@@ -108,4 +111,55 @@ async fn otp_request(
         "expires_in_seconds": state.config.otp_ttl_secs,
         "resend_after_seconds": state.config.otp_resend_secs,
     })))
+}
+
+/// Request body for POST /api/v1/auth/otp/verify (API.md §2).
+#[derive(Deserialize)]
+struct OtpVerifyBody {
+    challenge_id: Option<String>,
+    code: Option<String>,
+}
+
+/// POST /api/v1/auth/otp/verify — sets the session cookie and returns
+/// {"user":{"public_id","display_name","is_admin"},"is_new_user"}.
+async fn otp_verify(
+    State(state): State<AppState>,
+    Json(body): Json<OtpVerifyBody>,
+) -> Result<
+    (
+        StatusCode,
+        [(HeaderName, String); 1],
+        Json<serde_json::Value>,
+    ),
+    ApiError,
+> {
+    let challenge_id = body.challenge_id.unwrap_or_default();
+    let code = body.code.unwrap_or_default();
+    let mut fields = BTreeMap::new();
+    if challenge_id.is_empty() {
+        fields.insert("challenge_id".to_string(), "required".to_string());
+    }
+    if code.is_empty() {
+        fields.insert("code".to_string(), "required".to_string());
+    }
+    if !fields.is_empty() {
+        return Err(ApiError::Validation { fields });
+    }
+
+    let outcome =
+        crate::otp_service::verify_challenge(&state.pool, &state.config, &challenge_id, &code)
+            .await?;
+    let cookie = crate::session::build_set_cookie(&state.config, &outcome.session_token);
+    Ok((
+        StatusCode::OK,
+        [(SET_COOKIE, cookie)],
+        Json(serde_json::json!({
+            "user": {
+                "public_id": outcome.user.public_id,
+                "display_name": outcome.user.display_name,
+                "is_admin": outcome.user.is_admin,
+            },
+            "is_new_user": outcome.is_new_user,
+        })),
+    ))
 }

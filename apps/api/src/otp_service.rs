@@ -76,3 +76,168 @@ pub async fn create_challenge(
 
     Ok(ChallengeCreated { public_id })
 }
+
+/// The public user shape in verify responses (approved, plan review §3).
+pub struct UserSummary {
+    pub public_id: String,
+    pub display_name: Option<String>,
+    pub is_admin: bool,
+}
+
+/// What a successful verification returns: the user, whether it was just
+/// created, and the raw session token (returned once, never stored).
+pub struct VerifyOutcome {
+    pub user: UserSummary,
+    pub is_new_user: bool,
+    pub session_token: String,
+}
+
+/// Internal user row: the numeric id (for the sessions FK) plus the summary.
+struct UserRecord {
+    id: u64,
+    summary: UserSummary,
+}
+
+/// The challenge row verify needs, in SELECT order.
+type ChallengeRow = (
+    String,                        // phone_e164
+    String,                        // purpose
+    Vec<u8>,                       // code_hash
+    u16,                           // attempt_count (SMALLINT UNSIGNED)
+    chrono::DateTime<Utc>,         // expires_at
+    Option<chrono::DateTime<Utc>>, // consumed_at
+);
+
+/// Verify an OTP challenge (Task 9 rules): single use, expiry, attempt
+/// limit, constant-time code check, then purpose rules + session issue.
+pub async fn verify_challenge(
+    pool: &MySqlPool,
+    cfg: &Config,
+    challenge_id: &str,
+    code: &str,
+) -> Result<VerifyOutcome, ApiError> {
+    // 1. Load by public_id. Unknown or already consumed → generic invalid_code
+    //    (the response never says which — no probing).
+    let row = sqlx::query_as::<_, ChallengeRow>(
+        "SELECT phone_e164, purpose, code_hash, attempt_count, expires_at, consumed_at
+         FROM otp_challenges
+         WHERE public_id = ?",
+    )
+    .bind(challenge_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::Internal)?;
+
+    let Some((phone_e164, purpose, code_hash, attempt_count, expires_at, consumed_at)) = row
+    else {
+        return Err(ApiError::InvalidCode);
+    };
+    if consumed_at.is_some() {
+        return Err(ApiError::InvalidCode);
+    }
+    // 2. Expired at or past expiry (boundary pinned by the plan's review focus).
+    if expires_at <= Utc::now() {
+        return Err(ApiError::ChallengeExpired);
+    }
+    // 3. Too many wrong attempts.
+    if attempt_count >= cfg.otp_max_attempts {
+        return Err(ApiError::ChallengeLocked);
+    }
+    // 4. Constant-time HMAC check; a wrong code burns one attempt.
+    if !otp::verify_code(code, &cfg.otp_pepper, &code_hash) {
+        sqlx::query("UPDATE otp_challenges SET attempt_count = attempt_count + 1 WHERE public_id = ?")
+            .bind(challenge_id)
+            .execute(pool)
+            .await
+            .map_err(|_| ApiError::Internal)?;
+        return Err(ApiError::InvalidCode);
+    }
+
+    // 5. Success: the challenge is single-use.
+    sqlx::query("UPDATE otp_challenges SET consumed_at = ? WHERE public_id = ?")
+        .bind(Utc::now())
+        .bind(challenge_id)
+        .execute(pool)
+        .await
+        .map_err(|_| ApiError::Internal)?;
+
+    // 6. Purpose rules: register creates the account, login requires one
+    //    (approved: login never creates an account).
+    let (user, is_new_user) = match purpose.as_str() {
+        "register" => get_or_create_user(pool, &phone_e164).await?,
+        _ => {
+            // purpose is ENUM('login','register'); anything else is a data bug.
+            let user = find_user(pool, &phone_e164).await?.ok_or(ApiError::NoAccount)?;
+            (user, false)
+        }
+    };
+
+    // 7. Issue the session; only the token's hash is stored.
+    let session_token = crate::session::create_session(pool, cfg, user.id).await?;
+
+    Ok(VerifyOutcome {
+        user: user.summary,
+        is_new_user,
+        session_token,
+    })
+}
+
+/// Load the active user for a phone number.
+async fn find_user(pool: &MySqlPool, phone_e164: &str) -> Result<Option<UserRecord>, ApiError> {
+    let row = sqlx::query_as::<_, (u64, String, Option<String>, bool)>(
+        "SELECT id, public_id, display_name, is_admin
+         FROM users
+         WHERE phone_e164 = ? AND status = 'active'",
+    )
+    .bind(phone_e164)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::Internal)?;
+    Ok(row.map(|(id, public_id, display_name, is_admin)| UserRecord {
+        id,
+        summary: UserSummary {
+            public_id,
+            display_name,
+            is_admin,
+        },
+    }))
+}
+
+/// register purpose: the user if one exists, otherwise create it (ULID
+/// public_id, no display name, active).
+async fn get_or_create_user(
+    pool: &MySqlPool,
+    phone_e164: &str,
+) -> Result<(UserRecord, bool), ApiError> {
+    if let Some(user) = find_user(pool, phone_e164).await? {
+        return Ok((user, false));
+    }
+    let public_id = ulid::Ulid::new().to_string();
+    let now = Utc::now();
+    // ponytail: SELECT-then-INSERT is not atomic — a concurrent duplicate
+    // register surfaces as a UNIQUE(phone_e164) violation → Internal here.
+    // Accepted: Phase 1 is single-user development (same spirit as the Task 8
+    // cooldown race).
+    let result = sqlx::query(
+        "INSERT INTO users (public_id, phone_e164, status, created_at, updated_at)
+         VALUES (?, ?, 'active', ?, ?)",
+    )
+    .bind(&public_id)
+    .bind(phone_e164)
+    .bind(now)
+    .bind(now)
+    .execute(pool)
+    .await
+    .map_err(|_| ApiError::Internal)?;
+    Ok((
+        UserRecord {
+            id: result.last_insert_id(),
+            summary: UserSummary {
+                public_id,
+                display_name: None,
+                is_admin: false,
+            },
+        },
+        true,
+    ))
+}
