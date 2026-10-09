@@ -290,16 +290,20 @@ async fn verify_register_happy_path_creates_user_and_session() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     // Set-Cookie: the exact approved flags; the token is 64 hex chars.
+    // Owned copies: json_body(resp) below moves the response, so the
+    // header borrow must not outlive it.
     let cookie = resp
         .headers()
         .get(axum::http::header::SET_COOKIE)
         .expect("Set-Cookie header")
         .to_str()
-        .expect("ascii cookie");
+        .expect("ascii cookie")
+        .to_string();
     let token = cookie
         .strip_prefix("shabdar_session=")
         .and_then(|rest| rest.split(';').next())
-        .expect("token in cookie");
+        .expect("token in cookie")
+        .to_string();
     assert_eq!(token.len(), 64, "session token is 64 hex chars");
     assert_eq!(
         cookie,
