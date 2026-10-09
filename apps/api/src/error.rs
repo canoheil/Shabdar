@@ -12,6 +12,8 @@ use axum::Json;
 
 /// All API errors. The `code` strings are the exact, frozen contract with
 /// clients (docs/PHASE1_PLAN.md "Error contract" — do not rename).
+/// Debug is derived so tests can `.expect()` on `Result<_, ApiError>`.
+#[derive(Debug)]
 pub enum ApiError {
     /// 400 with per-field detail, e.g. `{"phone": "required"}`.
     Validation { fields: BTreeMap<String, String> },

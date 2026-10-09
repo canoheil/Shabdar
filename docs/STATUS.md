@@ -1,7 +1,7 @@
 # Status
 
 ## Current phase
-Phase 1 part A complete: Tasks 1–5 verified on Termux (cargo test 17/17 green; sqlx works with MariaDB 12.3.2). Awaiting PR 1 to main by the user.
+Phase 1 part A merged (PR #3, main 67801bd). Part B (Tasks 6-10) complete on feat/phase1-part-b: Tasks 6-9 verified on Termux (0fb72ca); Task 10 (docs) committed, UNVERIFIED.
 
 
 ## Decisions made
@@ -36,11 +36,19 @@ Phase 1 part A complete: Tasks 1–5 verified on Termux (cargo test 17/17 green;
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-26a0d9e (task 5 verified: health endpoint)
+Tasks 6 to 9 verified (cargo test 52/52 green + cargo clippy --all-targets -- -D warnings clean on Termux at 0fb72ca); Task 10 committed (UNVERIFIED — docs only, this commit)
 
 
 ## Open items for later tasks
 - Placeholder fallback returns 200 `ok` for any unknown path instead of a 404 JSON error envelope (apps/api/src/routes.rs). Known deviation from API.md §1 error conventions — decide before Phase 2 whether to change it to a `not_found` error. Recorded as a known deviation, not a fix for now.
 
 ## Next step
-PR 1 to main by user, then Task 6 (phone.rs) after new session
+Review the Task 10 docs (apps/api/README.md + DATABASE.md/API.md sync); then Phase 2.
+
+## Next: Phase 2
+- Nuxt frontend with the same-origin API proxy (forwards the session cookie and `X-Forwarded-For`).
+- Listings domain: draft → pending → admin approval → active.
+- `/me`, `/auth/logout`, and CSRF token delivery.
+- SMS provider decision (replaces the dev console OTP print).
+- Per-IP OTP rate limiting; fix the placeholder 200 fallback (404 error envelope) and the malformed-JSON error shape.
+- Persian profanity filter for comments — required before public launch.

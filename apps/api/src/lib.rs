@@ -4,6 +4,10 @@
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod otp;
+pub mod otp_service;
+pub mod phone;
 pub mod request_id;
 pub mod routes;
+pub mod session;
 pub mod state;
