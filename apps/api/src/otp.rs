@@ -5,6 +5,43 @@
 //! must never change once codes are in use (docs/STATUS.md). Codes are 6 ASCII
 //! digits; only their HMAC is stored, never the plaintext code.
 
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
+
+type HmacSha256 = Hmac<Sha256>;
+
+/// Generate a 6-digit code (ASCII digits) from the OS crypto-random source.
+pub fn generate_code() -> String {
+    // Rejection sampling: 256 is not a multiple of 10, so bytes 250..=255 are
+    // discarded — every digit stays uniform (no modulo bias).
+    let mut code = String::with_capacity(6);
+    while code.len() < 6 {
+        let mut byte = [0u8; 1];
+        getrandom::fill(&mut byte).expect("OS randomness source unavailable");
+        if byte[0] < 250 {
+            code.push((b'0' + byte[0] % 10) as char);
+        }
+    }
+    code
+}
+
+/// HMAC-SHA256 of the code keyed with the pepper: `HMAC(key = pepper, message = code)`.
+pub fn hash_code(code: &str, pepper: &str) -> [u8; 32] {
+    let mut mac =
+        HmacSha256::new_from_slice(pepper.as_bytes()).expect("HMAC accepts keys of any length");
+    mac.update(code.as_bytes());
+    mac.finalize().into_bytes().into()
+}
+
+/// Constant-time check of `code` against a stored hash. Uses `verify_slice`,
+/// never `==`, so timing does not leak how much of the hash matched.
+pub fn verify_code(code: &str, pepper: &str, hash: &[u8]) -> bool {
+    let mut mac =
+        HmacSha256::new_from_slice(pepper.as_bytes()).expect("HMAC accepts keys of any length");
+    mac.update(code.as_bytes());
+    mac.verify_slice(hash).is_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

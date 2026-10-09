@@ -36,7 +36,7 @@ Phase 1 part A merged (PR #3, main 67801bd). Part B (Tasks 6-10) in progress on 
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-26a0d9e (task 5 verified: health endpoint)
+67cd1f0 (task 6: phone.rs — verified on Termux: cargo test phone 10/10 green, cargo clippy --all-targets -- -D warnings clean)
 
 
 ## Open items for later tasks
