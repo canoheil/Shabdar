@@ -268,8 +268,8 @@ fn sha256(bytes: &[u8]) -> [u8; 32] {
 
 /// A wrong 6-digit code, guaranteed different from `code`.
 fn wrong_code(code: &str) -> String {
-    if code.starts_with('0') {
-        format!("1{}", &code[1..])
+    if let Some(rest) = code.strip_prefix('0') {
+        format!("1{rest}")
     } else {
         format!("0{}", &code[1..])
     }

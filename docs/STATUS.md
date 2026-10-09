@@ -36,7 +36,7 @@ Phase 1 part A merged (PR #3, main 67801bd). Part B (Tasks 6-10) in progress on 
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-Tasks 8 and 9 committed + auth_otp compile fix, UNVERIFIED (this commit; cargo test + cargo clippy --all-targets -- -D warnings pending on Termux)
+Tasks 8 and 9 verified (cargo test 52/52 green on Termux); clippy fix pending verification (this commit)
 
 
 ## Open items for later tasks
