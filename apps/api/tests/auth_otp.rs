@@ -1,7 +1,8 @@
-//! Task 8 (docs/PHASE1_PLAN.md): POST /api/v1/auth/otp/request.
-//! DB tests need TEST_DATABASE_URL=mysql://…/shabdar_test; without it they
-//! print a note and skip. Tests never read DATABASE_URL, and the pool helper
-//! refuses anything that is not a *_test database.
+//! Tasks 8–9 (docs/PHASE1_PLAN.md): POST /api/v1/auth/otp/request and
+//! POST /api/v1/auth/otp/verify. DB tests need
+//! TEST_DATABASE_URL=mysql://…/shabdar_test; without it they print a note
+//! and skip. Tests never read DATABASE_URL, and the pool helper refuses
+//! anything that is not a *_test database.
 
 mod common;
 
@@ -63,6 +64,8 @@ fn is_crockford_ulid(s: &str) -> bool {
                 b'0'..=b'9' | b'A'..=b'H' | b'J'..=b'K' | b'M'..=b'N' | b'P'..=b'T' | b'V'..=b'Z')
         })
 }
+
+// --- Task 8: POST /api/v1/auth/otp/request --------------------------------
 
 #[tokio::test]
 async fn request_valid_returns_the_exact_response_shape() {
@@ -229,4 +232,346 @@ async fn service_stores_the_hmac_of_the_code_never_the_plaintext() {
     );
     let expected = shabdar_api::otp::hash_code(&code, &cfg.otp_pepper);
     assert_eq!(stored.as_slice(), expected.as_slice());
+}
+
+// --- Task 9: POST /api/v1/auth/otp/verify ---------------------------------
+
+/// Build a challenge with a KNOWN code via the service: the request endpoint
+/// generates its own code internally, so verify tests create challenges
+/// directly (plan: "tests call generate_code() themselves and pass the
+/// plaintext in — real code paths, no mocks").
+async fn challenge_with_code(
+    pool: &sqlx::MySqlPool,
+    cfg: &shabdar_api::config::Config,
+    phone: &str,
+    purpose: &str,
+) -> (String, String) {
+    let code = shabdar_api::otp::generate_code();
+    let created = shabdar_api::otp_service::create_challenge(pool, cfg, phone, purpose, &code)
+        .await
+        .expect("create challenge");
+    (created.public_id, code)
+}
+
+fn verify_body(challenge_id: &str, code: &str) -> serde_json::Value {
+    serde_json::json!({ "challenge_id": challenge_id, "code": code })
+}
+
+/// SHA-256 of bytes, computed independently of the session module so the
+/// token-hash assertion does not depend on the code it checks.
+fn sha256(bytes: &[u8]) -> [u8; 32] {
+    use sha2::Digest;
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(bytes);
+    hasher.finalize().into()
+}
+
+/// A wrong 6-digit code, guaranteed different from `code`.
+fn wrong_code(code: &str) -> String {
+    if code.starts_with('0') {
+        format!("1{}", &code[1..])
+    } else {
+        format!("0{}", &code[1..])
+    }
+}
+
+#[tokio::test]
+async fn verify_register_happy_path_creates_user_and_session() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (challenge_id, code) = challenge_with_code(&pool, &cfg, "+989123456789", "register").await;
+
+    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&challenge_id, &code)).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Set-Cookie: the exact approved flags; the token is 64 hex chars.
+    let cookie = resp
+        .headers()
+        .get(axum::http::header::SET_COOKIE)
+        .expect("Set-Cookie header")
+        .to_str()
+        .expect("ascii cookie");
+    let token = cookie
+        .strip_prefix("shabdar_session=")
+        .and_then(|rest| rest.split(';').next())
+        .expect("token in cookie");
+    assert_eq!(token.len(), 64, "session token is 64 hex chars");
+    assert_eq!(
+        cookie,
+        format!("shabdar_session={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000")
+    );
+
+    let body = json_body(resp).await;
+    assert_eq!(body["is_new_user"], true);
+    let user = &body["user"];
+    assert!(is_crockford_ulid(user["public_id"].as_str().expect("public_id")));
+    assert!(user["display_name"].is_null());
+    assert_eq!(user["is_admin"], false);
+
+    // users row: normalized phone, active, no display name.
+    let row = sqlx::query(
+        "SELECT id, phone_e164, display_name, status FROM users WHERE phone_e164 = ?",
+    )
+    .bind("+989123456789")
+    .fetch_one(&pool)
+    .await
+    .expect("user row");
+    let user_id: u64 = row.try_get("id").expect("id");
+    assert_eq!(
+        row.try_get::<String, _>("phone_e164").expect("phone"),
+        "+989123456789"
+    );
+    assert!(row
+        .try_get::<Option<String>, _>("display_name")
+        .expect("display_name")
+        .is_none());
+    assert_eq!(row.try_get::<String, _>("status").expect("status"), "active");
+
+    // sessions row: only the token's hash, ~30-day expiry, linked to the user.
+    let row = sqlx::query("SELECT token_hash, expires_at, user_id FROM sessions")
+        .fetch_one(&pool)
+        .await
+        .expect("session row");
+    let stored_hash: Vec<u8> = row.try_get("token_hash").expect("token_hash");
+    assert_eq!(stored_hash.as_slice(), sha256(token.as_bytes()).as_slice());
+    assert_ne!(stored_hash.as_slice(), token.as_bytes());
+    assert_eq!(row.try_get::<u64, _>("user_id").expect("user_id"), user_id);
+    let expires_at: chrono::DateTime<chrono::Utc> =
+        row.try_get("expires_at").expect("expires_at");
+    let expected = chrono::Utc::now() + chrono::Duration::seconds(cfg.session_ttl_secs as i64);
+    assert!(
+        (expires_at - expected).num_seconds().abs() < 60,
+        "expires_at must be ≈ now + 30 days, got {expires_at:?}"
+    );
+}
+
+#[tokio::test]
+async fn verify_replayed_code_is_401_invalid_code() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (challenge_id, code) = challenge_with_code(&pool, &cfg, "+989123456789", "register").await;
+
+    let first = post_json(
+        app.clone(),
+        "/api/v1/auth/otp/verify",
+        verify_body(&challenge_id, &code),
+    )
+    .await;
+    assert_eq!(first.status(), StatusCode::OK);
+
+    let replay = post_json(app, "/api/v1/auth/otp/verify", verify_body(&challenge_id, &code)).await;
+    assert_eq!(replay.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(error_code(&json_body(replay).await), "invalid_code");
+}
+
+#[tokio::test]
+async fn verify_wrong_code_is_401_and_increments_attempt_count() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (challenge_id, code) = challenge_with_code(&pool, &cfg, "+989123456789", "register").await;
+    let wrong = wrong_code(&code);
+
+    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&challenge_id, &wrong)).await;
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(error_code(&json_body(resp).await), "invalid_code");
+
+    let row = sqlx::query("SELECT attempt_count FROM otp_challenges WHERE public_id = ?")
+        .bind(&challenge_id)
+        .fetch_one(&pool)
+        .await
+        .expect("challenge row");
+    let attempts: u16 = row.try_get("attempt_count").expect("attempt_count");
+    assert_eq!(attempts, 1);
+}
+
+#[tokio::test]
+async fn verify_locks_after_max_wrong_attempts() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config(); // otp_max_attempts = 5
+    let app = common::spawn_app(cfg.clone()).await;
+    let (challenge_id, code) = challenge_with_code(&pool, &cfg, "+989123456789", "register").await;
+    let wrong = wrong_code(&code);
+
+    for expected_attempts in 1..=5u16 {
+        let resp = post_json(
+            app.clone(),
+            "/api/v1/auth/otp/verify",
+            verify_body(&challenge_id, &wrong),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(error_code(&json_body(resp).await), "invalid_code");
+        let row = sqlx::query("SELECT attempt_count FROM otp_challenges WHERE public_id = ?")
+            .bind(&challenge_id)
+            .fetch_one(&pool)
+            .await
+            .expect("challenge row");
+        let attempts: u16 = row.try_get("attempt_count").expect("attempt_count");
+        assert_eq!(attempts, expected_attempts);
+    }
+
+    // Even the correct code is now locked out.
+    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&challenge_id, &code)).await;
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(error_code(&json_body(resp).await), "challenge_locked");
+}
+
+#[tokio::test]
+async fn verify_expired_challenge_is_401_challenge_expired() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (challenge_id, code) = challenge_with_code(&pool, &cfg, "+989123456789", "register").await;
+
+    // Force expiry (boundary: expired at or past expires_at).
+    sqlx::query("UPDATE otp_challenges SET expires_at = ? WHERE public_id = ?")
+        .bind(chrono::Utc::now() - chrono::Duration::seconds(1))
+        .bind(&challenge_id)
+        .execute(&pool)
+        .await
+        .expect("force expiry");
+
+    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&challenge_id, &code)).await;
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(error_code(&json_body(resp).await), "challenge_expired");
+}
+
+#[tokio::test]
+async fn verify_unknown_challenge_id_is_401_invalid_code() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let app = common::spawn_app(common::test_config()).await;
+
+    let unknown = ulid::Ulid::new().to_string();
+    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&unknown, "123456")).await;
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(error_code(&json_body(resp).await), "invalid_code");
+}
+
+#[tokio::test]
+async fn verify_register_on_existing_phone_is_not_a_new_user() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let mut cfg = common::test_config();
+    // Two challenges for the same phone+purpose: disable the resend cooldown.
+    cfg.otp_resend_secs = 0;
+    let app = common::spawn_app(cfg.clone()).await;
+
+    let (first_id, first_code) =
+        challenge_with_code(&pool, &cfg, "+989123456789", "register").await;
+    let resp = post_json(
+        app.clone(),
+        "/api/v1/auth/otp/verify",
+        verify_body(&first_id, &first_code),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let first_body = json_body(resp).await;
+    assert_eq!(first_body["is_new_user"], true);
+    let public_id = first_body["user"]["public_id"]
+        .as_str()
+        .expect("public_id")
+        .to_string();
+
+    let (second_id, second_code) =
+        challenge_with_code(&pool, &cfg, "+989123456789", "register").await;
+    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&second_id, &second_code)).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = json_body(resp).await;
+    assert_eq!(body["is_new_user"], false);
+    assert_eq!(
+        body["user"]["public_id"].as_str().expect("public_id"),
+        public_id
+    );
+
+    // Still exactly one user for the phone.
+    let row = sqlx::query("SELECT COUNT(*) AS c FROM users WHERE phone_e164 = ?")
+        .bind("+989123456789")
+        .fetch_one(&pool)
+        .await
+        .expect("count");
+    let count: i64 = row.try_get("c").expect("count");
+    assert_eq!(count, 1);
+}
+
+#[tokio::test]
+async fn verify_login_without_account_is_401_no_account() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (challenge_id, code) = challenge_with_code(&pool, &cfg, "+989123456789", "login").await;
+
+    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&challenge_id, &code)).await;
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(error_code(&json_body(resp).await), "no_account");
+
+    // Login never creates an account or a session.
+    let row = sqlx::query("SELECT COUNT(*) AS c FROM users")
+        .fetch_one(&pool)
+        .await
+        .expect("count");
+    assert_eq!(row.try_get::<i64, _>("c").expect("count"), 0);
+    let row = sqlx::query("SELECT COUNT(*) AS c FROM sessions")
+        .fetch_one(&pool)
+        .await
+        .expect("count");
+    assert_eq!(row.try_get::<i64, _>("c").expect("count"), 0);
+}
+
+#[tokio::test]
+async fn verify_persian_digit_phone_creates_the_e164_user() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (challenge_id, code) =
+        challenge_with_code(&pool, &cfg, "۰۹۱۲۳۴۵۶۷۸۹", "register").await;
+
+    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&challenge_id, &code)).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let row = sqlx::query("SELECT phone_e164 FROM users")
+        .fetch_one(&pool)
+        .await
+        .expect("user row");
+    assert_eq!(
+        row.try_get::<String, _>("phone_e164").expect("phone"),
+        "+989123456789"
+    );
 }
