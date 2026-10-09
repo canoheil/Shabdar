@@ -17,6 +17,44 @@ pub enum PhoneError {
     Invalid,
 }
 
+/// Normalize an Iranian mobile number to E.164: `+989XXXXXXXXX`.
+pub fn normalize_iranian_mobile(raw: &str) -> Result<String, PhoneError> {
+    // 1. Reduce the input to ASCII digits, keeping a single leading '+'.
+    //    Spaces and dashes are separators; any other character is invalid.
+    let mut digits = String::with_capacity(raw.len());
+    for (i, ch) in raw.chars().enumerate() {
+        match ch {
+            '0'..='9' => digits.push(ch),
+            '۰'..='۹' => digits.push(to_ascii_digit(ch, '۰')),
+            '٠'..='٩' => digits.push(to_ascii_digit(ch, '٠')),
+            '+' if i == 0 => digits.push(ch),
+            c if c.is_whitespace() || c == '-' => {} // separator: skip
+            _ => return Err(PhoneError::Invalid),
+        }
+    }
+
+    // 2. Drop the prefixes: +98, 0098, 98, or a leading 0 (longest first).
+    let without_plus = digits.strip_prefix('+').unwrap_or(&digits);
+    let local = without_plus
+        .strip_prefix("0098")
+        .or_else(|| without_plus.strip_prefix("98"))
+        .or_else(|| without_plus.strip_prefix('0'))
+        .unwrap_or(without_plus);
+
+    // 3. What remains must be the 10-digit national number: 9 + 9 digits.
+    //    (`digits` holds only ASCII digits here, so no charset check is needed.)
+    if local.len() != 10 || !local.starts_with('9') {
+        return Err(PhoneError::Invalid);
+    }
+
+    Ok(format!("+98{local}"))
+}
+
+/// Map a Persian/Arabic digit to its ASCII digit; `zero` is that script's 0.
+fn to_ascii_digit(ch: char, zero: char) -> char {
+    char::from_digit(ch as u32 - zero as u32, 10).expect("ch is within the script's 0-9 range")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
