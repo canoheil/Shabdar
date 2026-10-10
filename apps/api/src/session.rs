@@ -63,6 +63,30 @@ pub async fn create_session(
     Ok(token)
 }
 
+/// The exact Set-Cookie value that clears the session cookie: same flags as
+/// build_set_cookie with Max-Age=0 (flag parity — Review Focus 4).
+pub fn build_clear_cookie(cfg: &Config) -> String {
+    let mut cookie = format!(
+        "{}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0",
+        cfg.cookie_name
+    );
+    if cfg.cookie_secure {
+        cookie.push_str("; Secure");
+    }
+    cookie
+}
+
+/// Revoke exactly the presented session (approved decision 5 — bulk
+/// revocation by user_id is the later admin phase).
+pub async fn delete_session(pool: &MySqlPool, session_id: u64) -> Result<(), ApiError> {
+    sqlx::query("DELETE FROM sessions WHERE id = ?")
+        .bind(session_id)
+        .execute(pool)
+        .await
+        .map_err(|_| ApiError::Internal)?;
+    Ok(())
+}
+
 /// The authenticated user behind a valid `shabdar_session` cookie (Phase 2,
 /// docs/PHASE2_PLAN.md Task 1). Rejection is deliberately generic: a missing
 /// cookie, an unknown or expired session, and a non-active user all get the

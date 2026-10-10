@@ -28,6 +28,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/health", get(health))
         .route("/api/v1/auth/otp/request", post(otp_request))
         .route("/api/v1/auth/otp/verify", post(otp_verify))
+        .route("/api/v1/auth/logout", post(logout))
         .route("/api/v1/me", get(me).patch(update_me))
         // Task 1 placeholder until real routes exist; a later task turns the
         // fallback into a proper 404.
@@ -89,6 +90,20 @@ async fn update_me(
             "is_admin": user.is_admin,
         }
     })))
+}
+
+/// POST /api/v1/auth/logout — revokes exactly the presented session and
+/// clears the cookie (plan Task 3). Returns exactly {"ok":true}.
+async fn logout(
+    State(state): State<AppState>,
+    user: CurrentUser,
+) -> Result<([(HeaderName, String); 1], Json<serde_json::Value>), ApiError> {
+    crate::session::delete_session(&state.pool, user.session_id).await?;
+    let clear_cookie = crate::session::build_clear_cookie(&state.config);
+    Ok((
+        [(SET_COOKIE, clear_cookie)],
+        Json(serde_json::json!({ "ok": true })),
+    ))
 }
 
 /// GET /api/v1/health — approved shape (plan review §5):
