@@ -19,6 +19,7 @@ use serde::Deserialize;
 
 use crate::error::ApiError;
 use crate::request_id::request_id_middleware;
+use crate::session::CurrentUser;
 use crate::state::AppState;
 
 /// Builds the full router. New endpoints are added here, not in main.rs.
@@ -27,6 +28,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/health", get(health))
         .route("/api/v1/auth/otp/request", post(otp_request))
         .route("/api/v1/auth/otp/verify", post(otp_verify))
+        .route("/api/v1/me", get(me))
         // Task 1 placeholder until real routes exist; a later task turns the
         // fallback into a proper 404.
         .fallback(placeholder_ok)
@@ -38,6 +40,18 @@ pub fn router(state: AppState) -> Router {
 /// Placeholder handler: the literal string `ok`.
 async fn placeholder_ok() -> &'static str {
     "ok"
+}
+
+/// GET /api/v1/me — the pinned Phase 1 user shape (PHASE2 plan review 5):
+/// {"user":{"public_id","display_name","is_admin"}}.
+async fn me(user: CurrentUser) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "user": {
+            "public_id": user.public_id,
+            "display_name": user.display_name,
+            "is_admin": user.is_admin,
+        }
+    }))
 }
 
 /// GET /api/v1/health — approved shape (plan review §5):

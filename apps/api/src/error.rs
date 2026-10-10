@@ -24,6 +24,11 @@ pub enum ApiError {
     ChallengeExpired,
     ChallengeLocked,
     NoAccount,
+    /// 404 for unknown paths (Phase 2 fallback, `not_found`).
+    NotFound,
+    /// 401 for a missing/invalid/expired session or non-active user
+    /// (Phase 2 extractor, `unauthorized` — deliberately generic).
+    Unauthorized,
     Internal,
 }
 
@@ -37,7 +42,9 @@ impl ApiError {
             ApiError::InvalidCode
             | ApiError::ChallengeExpired
             | ApiError::ChallengeLocked
-            | ApiError::NoAccount => StatusCode::UNAUTHORIZED,
+            | ApiError::NoAccount
+            | ApiError::Unauthorized => StatusCode::UNAUTHORIZED,
+            ApiError::NotFound => StatusCode::NOT_FOUND,
             ApiError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -52,6 +59,8 @@ impl ApiError {
             ApiError::ChallengeExpired => "challenge_expired",
             ApiError::ChallengeLocked => "challenge_locked",
             ApiError::NoAccount => "no_account",
+            ApiError::NotFound => "not_found",
+            ApiError::Unauthorized => "unauthorized",
             ApiError::Internal => "internal_error",
         }
     }
@@ -68,6 +77,8 @@ impl ApiError {
             ApiError::ChallengeExpired => "Code expired; request a new one",
             ApiError::ChallengeLocked => "Too many wrong attempts; request a new code",
             ApiError::NoAccount => "No account exists for this phone number",
+            ApiError::NotFound => "Not found",
+            ApiError::Unauthorized => "Not authenticated",
             ApiError::Internal => "Internal server error",
         }
     }
