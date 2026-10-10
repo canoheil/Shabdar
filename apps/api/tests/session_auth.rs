@@ -1,7 +1,8 @@
-//! Work Package 1 (docs/PHASE2_PLAN.md): the `CurrentUser` session extractor,
-//! GET /api/v1/me, PATCH /api/v1/me, and POST /api/v1/auth/logout. DB tests
-//! need TEST_DATABASE_URL=mysql://…/shabdar_test; without it they print a
-//! note and skip. Tests never read DATABASE_URL, and the pool helper refuses
+//! Work Package 1 + 3 (docs/PHASE2_PLAN.md): the `CurrentUser` session
+//! extractor, GET /api/v1/me, PATCH /api/v1/me, POST /api/v1/auth/logout, and
+//! the double-submit CSRF checks. DB tests need
+//! TEST_DATABASE_URL=mysql://…/shabdar_test; without it they print a note
+//! and skip. Tests never read DATABASE_URL, and the pool helper refuses
 //! anything that is not a *_test database.
 
 mod common;
@@ -56,11 +57,12 @@ async fn get_with_cookie(
     app.oneshot(req).await.unwrap()
 }
 
-/// PATCH a JSON body with an optional raw `Cookie:` header value.
+/// PATCH a JSON body with optional `Cookie:` and `X-CSRF-Token:` header values.
 async fn patch_json(
     app: axum::Router,
     path: &str,
     cookie: Option<&str>,
+    csrf: Option<&str>,
     body: serde_json::Value,
 ) -> axum::response::Response {
     let mut builder = Request::builder()
@@ -70,19 +72,26 @@ async fn patch_json(
     if let Some(value) = cookie {
         builder = builder.header("cookie", value);
     }
+    if let Some(token) = csrf {
+        builder = builder.header("x-csrf-token", token);
+    }
     let req = builder.body(Body::from(body.to_string())).unwrap();
     app.oneshot(req).await.unwrap()
 }
 
-/// POST with an empty body and an optional raw `Cookie:` header value.
+/// POST with an empty body and optional `Cookie:` / `X-CSRF-Token:` values.
 async fn post_with_cookie(
     app: axum::Router,
     path: &str,
     cookie: Option<&str>,
+    csrf: Option<&str>,
 ) -> axum::response::Response {
     let mut builder = Request::builder().method("POST").uri(path);
     if let Some(value) = cookie {
         builder = builder.header("cookie", value);
+    }
+    if let Some(token) = csrf {
+        builder = builder.header("x-csrf-token", token);
     }
     let req = builder.body(Body::empty()).unwrap();
     app.oneshot(req).await.unwrap()
@@ -99,6 +108,15 @@ async fn json_body(resp: axum::response::Response) -> serde_json::Value {
 
 fn error_code(body: &serde_json::Value) -> &str {
     body["error"]["code"].as_str().expect("error.code")
+}
+
+/// The Crockford base32 alphabet of a ULID (^[0-9A-HJKMNP-TV-Z]{26}$).
+fn is_crockford_ulid(s: &str) -> bool {
+    s.len() == 26
+        && s.bytes().all(|b| {
+            matches!(b,
+                b'0'..=b'9' | b'A'..=b'H' | b'J'..=b'K' | b'M'..=b'N' | b'P'..=b'T' | b'V'..=b'Z')
+        })
 }
 
 /// Build a challenge with a KNOWN code via the service: the request endpoint
@@ -122,14 +140,16 @@ fn verify_body(challenge_id: &str, code: &str) -> serde_json::Value {
 }
 
 /// Register a user through the real OTP flow — a service-created challenge,
-/// then the HTTP verify endpoint — and return the session cookie header value
-/// (`shabdar_session=<token>`) plus the verify response's `user` object.
+/// then the HTTP verify endpoint — and return:
+/// (1) the full Cookie header value (`shabdar_session=…; shabdar_csrf=…`),
+/// (2) the raw `shabdar_csrf` token (echoed in X-CSRF-Token on mutations),
+/// (3) the verify response's `user` object.
 async fn register_user(
     app: &axum::Router,
     pool: &sqlx::MySqlPool,
     cfg: &shabdar_api::config::Config,
     phone: &str,
-) -> (String, serde_json::Value) {
+) -> (String, String, serde_json::Value) {
     let (challenge_id, code) = challenge_with_code(pool, cfg, phone, "register").await;
     let resp = post_json(
         app.clone(),
@@ -139,21 +159,28 @@ async fn register_user(
     .await;
     assert_eq!(resp.status(), StatusCode::OK);
     // Owned copies first: json_body(resp) below moves the response, so the
-    // header borrow must not outlive it.
-    let set_cookie = resp
-        .headers()
-        .get(axum::http::header::SET_COOKIE)
-        .expect("Set-Cookie header")
-        .to_str()
-        .expect("ascii cookie")
-        .to_string();
-    let token = set_cookie
-        .strip_prefix("shabdar_session=")
-        .and_then(|rest| rest.split(';').next())
-        .expect("token in cookie")
-        .to_string();
+    // header borrows must not outlive it.
+    let mut session_pair = String::new();
+    let mut csrf_pair = String::new();
+    let mut csrf_token = String::new();
+    for value in resp.headers().get_all(axum::http::header::SET_COOKIE) {
+        let text = value.to_str().expect("ascii cookie");
+        if let Some(rest) = text.strip_prefix("shabdar_session=") {
+            let token = rest.split(';').next().expect("token in cookie");
+            session_pair = format!("shabdar_session={token}");
+        } else if let Some(rest) = text.strip_prefix("shabdar_csrf=") {
+            let token = rest.split(';').next().expect("token in cookie");
+            csrf_token = token.to_string();
+            csrf_pair = format!("shabdar_csrf={token}");
+        }
+    }
+    assert!(!session_pair.is_empty(), "session Set-Cookie");
     let body = json_body(resp).await;
-    (format!("shabdar_session={token}"), body["user"].clone())
+    (
+        format!("{session_pair}; {csrf_pair}"),
+        csrf_token,
+        body["user"].clone(),
+    )
 }
 
 // --- Task 1: CurrentUser extractor + GET /api/v1/me ------------------------
@@ -167,7 +194,7 @@ async fn me_with_valid_cookie_returns_the_exact_user_shape() {
     reset_db(&pool).await;
     let cfg = common::test_config();
     let app = common::spawn_app(cfg.clone()).await;
-    let (cookie, user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (cookie, _csrf, user) = register_user(&app, &pool, &cfg, "+989123456789").await;
     let public_id = user["public_id"].as_str().expect("public_id").to_string();
 
     let resp = get_with_cookie(app, "/api/v1/me", Some(&cookie)).await;
@@ -224,7 +251,7 @@ async fn me_with_expired_session_is_401_unauthorized() {
     reset_db(&pool).await;
     let cfg = common::test_config();
     let app = common::spawn_app(cfg.clone()).await;
-    let (cookie, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (cookie, _csrf, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
 
     // Force expiry (boundary: expired at or before expires_at).
     sqlx::query("UPDATE sessions SET expires_at = ?")
@@ -247,7 +274,7 @@ async fn me_for_suspended_user_is_401_unauthorized() {
     reset_db(&pool).await;
     let cfg = common::test_config();
     let app = common::spawn_app(cfg.clone()).await;
-    let (cookie, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (cookie, _csrf, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
 
     sqlx::query("UPDATE users SET status = 'suspended'")
         .execute(&pool)
@@ -270,7 +297,7 @@ async fn patch_me_sets_a_persian_display_name() {
     reset_db(&pool).await;
     let cfg = common::test_config();
     let app = common::spawn_app(cfg.clone()).await;
-    let (cookie, user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (cookie, csrf, user) = register_user(&app, &pool, &cfg, "+989123456789").await;
     let public_id = user["public_id"].as_str().expect("public_id").to_string();
     // A valid Persian name (10 chars).
     let name = "آزمایش نام";
@@ -279,6 +306,7 @@ async fn patch_me_sets_a_persian_display_name() {
         app.clone(),
         "/api/v1/me",
         Some(&cookie),
+        Some(&csrf),
         serde_json::json!({ "display_name": name }),
     )
     .await;
@@ -311,9 +339,9 @@ async fn patch_me_missing_display_name_is_400_required() {
     reset_db(&pool).await;
     let cfg = common::test_config();
     let app = common::spawn_app(cfg.clone()).await;
-    let (cookie, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (cookie, csrf, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
 
-    let resp = patch_json(app, "/api/v1/me", Some(&cookie), serde_json::json!({})).await;
+    let resp = patch_json(app, "/api/v1/me", Some(&cookie), Some(&csrf), serde_json::json!({})).await;
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     let body = json_body(resp).await;
     assert_eq!(error_code(&body), "validation_error");
@@ -329,13 +357,14 @@ async fn patch_me_blank_display_name_is_400_required() {
     reset_db(&pool).await;
     let cfg = common::test_config();
     let app = common::spawn_app(cfg.clone()).await;
-    let (cookie, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (cookie, csrf, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
 
     for blank in ["", "   ", "\t\n "] {
         let resp = patch_json(
             app.clone(),
             "/api/v1/me",
             Some(&cookie),
+            Some(&csrf),
             serde_json::json!({ "display_name": blank }),
         )
         .await;
@@ -355,7 +384,7 @@ async fn patch_me_81_multibyte_chars_is_400_too_long() {
     reset_db(&pool).await;
     let cfg = common::test_config();
     let app = common::spawn_app(cfg.clone()).await;
-    let (cookie, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (cookie, csrf, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
 
     // 81 Persian digits (multi-byte): the limit is chars, not bytes.
     let name81 = "۱".repeat(81);
@@ -363,6 +392,7 @@ async fn patch_me_81_multibyte_chars_is_400_too_long() {
         app,
         "/api/v1/me",
         Some(&cookie),
+        Some(&csrf),
         serde_json::json!({ "display_name": &name81 }),
     )
     .await;
@@ -381,7 +411,7 @@ async fn patch_me_exactly_80_multibyte_chars_is_200() {
     reset_db(&pool).await;
     let cfg = common::test_config();
     let app = common::spawn_app(cfg.clone()).await;
-    let (cookie, user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (cookie, csrf, user) = register_user(&app, &pool, &cfg, "+989123456789").await;
     let public_id = user["public_id"].as_str().expect("public_id").to_string();
 
     // Exactly 80 Persian digits (multi-byte) must pass the boundary.
@@ -390,6 +420,7 @@ async fn patch_me_exactly_80_multibyte_chars_is_200() {
         app,
         "/api/v1/me",
         Some(&cookie),
+        Some(&csrf),
         serde_json::json!({ "display_name": &name80 }),
     )
     .await;
@@ -420,6 +451,7 @@ async fn patch_me_without_cookie_is_401_unauthorized() {
         app,
         "/api/v1/me",
         None,
+        None,
         serde_json::json!({ "display_name": "کاربر" }),
     )
     .await;
@@ -430,7 +462,7 @@ async fn patch_me_without_cookie_is_401_unauthorized() {
 // --- Task 3: POST /api/v1/auth/logout --------------------------------------
 
 #[tokio::test]
-async fn logout_revokes_the_session_and_clears_the_cookie() {
+async fn logout_revokes_the_session_and_clears_both_cookies() {
     let _lock = DB_LOCK.lock().await;
     let Some(pool) = common::test_pool().await else {
         return;
@@ -438,22 +470,25 @@ async fn logout_revokes_the_session_and_clears_the_cookie() {
     reset_db(&pool).await;
     let cfg = common::test_config();
     let app = common::spawn_app(cfg.clone()).await;
-    let (cookie, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (cookie, csrf, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
 
-    let resp = post_with_cookie(app.clone(), "/api/v1/auth/logout", Some(&cookie)).await;
+    let resp = post_with_cookie(app.clone(), "/api/v1/auth/logout", Some(&cookie), Some(&csrf)).await;
     assert_eq!(resp.status(), StatusCode::OK);
-    // Owned copy first: json_body(resp) below moves the response.
-    let set_cookie = resp
+    // Owned copies first: json_body(resp) below moves the response.
+    let mut clears: Vec<String> = resp
         .headers()
-        .get(axum::http::header::SET_COOKIE)
-        .expect("Set-Cookie header")
-        .to_str()
-        .expect("ascii cookie")
-        .to_string();
-    // Clearing cookie with matching flags and Max-Age=0 (Review Focus 4).
+        .get_all(axum::http::header::SET_COOKIE)
+        .iter()
+        .map(|v| v.to_str().expect("ascii cookie").to_string())
+        .collect();
+    clears.sort();
+    // Both cookies cleared with matching flags and Max-Age=0 (Review Focus 4).
     assert_eq!(
-        set_cookie,
-        "shabdar_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+        clears,
+        [
+            "shabdar_csrf=; Path=/; SameSite=Lax; Max-Age=0",
+            "shabdar_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0",
+        ]
     );
     let body = json_body(resp).await;
     assert_eq!(body, serde_json::json!({ "ok": true }));
@@ -482,10 +517,16 @@ async fn logout_revokes_only_the_presented_session() {
     // Two sessions for one user: disable the resend cooldown.
     cfg.otp_resend_secs = 0;
     let app = common::spawn_app(cfg.clone()).await;
-    let (cookie_a, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
-    let (cookie_b, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (cookie_a, csrf_a, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (cookie_b, _csrf_b, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
 
-    let resp = post_with_cookie(app.clone(), "/api/v1/auth/logout", Some(&cookie_a)).await;
+    let resp = post_with_cookie(
+        app.clone(),
+        "/api/v1/auth/logout",
+        Some(&cookie_a),
+        Some(&csrf_a),
+    )
+    .await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     // Exactly one session revoked (approved decision 5).
@@ -512,7 +553,134 @@ async fn logout_without_cookie_is_401_unauthorized() {
     reset_db(&pool).await;
     let app = common::spawn_app(common::test_config()).await;
 
-    let resp = post_with_cookie(app, "/api/v1/auth/logout", None).await;
+    let resp = post_with_cookie(app, "/api/v1/auth/logout", None, None).await;
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(error_code(&json_body(resp).await), "unauthorized");
+}
+
+// --- Task 8: double-submit CSRF (shabdar_csrf + csrf_failed) ---------------
+
+#[tokio::test]
+async fn verify_sets_session_and_csrf_cookies() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (challenge_id, code) = challenge_with_code(&pool, &cfg, "+989123456789", "register").await;
+
+    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&challenge_id, &code)).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    // Owned copies first: json_body(resp) below moves the response.
+    let mut cookies: Vec<String> = resp
+        .headers()
+        .get_all(axum::http::header::SET_COOKIE)
+        .iter()
+        .map(|v| v.to_str().expect("ascii cookie").to_string())
+        .collect();
+    cookies.sort();
+    assert_eq!(cookies.len(), 2, "session + csrf Set-Cookie: {cookies:?}");
+
+    // Session cookie: the approved Phase 1 flags.
+    let session = cookies
+        .iter()
+        .find(|c| c.starts_with("shabdar_session="))
+        .expect("session cookie");
+    let token = session
+        .strip_prefix("shabdar_session=")
+        .and_then(|rest| rest.split(';').next())
+        .expect("token");
+    assert_eq!(token.len(), 64);
+    assert_eq!(
+        session,
+        &format!("shabdar_session={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000")
+    );
+
+    // CSRF cookie: NOT HttpOnly, 26-char ULID token (approved CSRF proposal).
+    let csrf = cookies
+        .iter()
+        .find(|c| c.starts_with("shabdar_csrf="))
+        .expect("csrf cookie");
+    let csrf_token = csrf
+        .strip_prefix("shabdar_csrf=")
+        .and_then(|rest| rest.split(';').next())
+        .expect("csrf token");
+    assert!(is_crockford_ulid(csrf_token), "csrf token must be a ULID: {csrf_token}");
+    assert_eq!(csrf, &format!("shabdar_csrf={csrf_token}; Path=/; SameSite=Lax"));
+
+    let body = json_body(resp).await;
+    assert_eq!(body["is_new_user"], true);
+}
+
+#[tokio::test]
+async fn patch_me_without_csrf_header_is_403_and_does_not_mutate() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, _csrf, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    let resp = patch_json(
+        app.clone(),
+        "/api/v1/me",
+        Some(&cookie),
+        None,
+        serde_json::json!({ "display_name": "دزد" }),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    assert_eq!(error_code(&json_body(resp).await), "csrf_failed");
+
+    // No state change: the display name is untouched.
+    let resp = get_with_cookie(app, "/api/v1/me", Some(&cookie)).await;
+    let body = json_body(resp).await;
+    assert!(body["user"]["display_name"].is_null(), "mutation must not apply");
+}
+
+#[tokio::test]
+async fn patch_me_with_wrong_csrf_header_is_403() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, _csrf, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    let resp = patch_json(
+        app,
+        "/api/v1/me",
+        Some(&cookie),
+        Some("wrong-token"),
+        serde_json::json!({ "display_name": "دزد" }),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    assert_eq!(error_code(&json_body(resp).await), "csrf_failed");
+}
+
+#[tokio::test]
+async fn logout_without_csrf_header_is_403_and_the_session_still_works() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, _csrf, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    let resp = post_with_cookie(app.clone(), "/api/v1/auth/logout", Some(&cookie), None).await;
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    assert_eq!(error_code(&json_body(resp).await), "csrf_failed");
+
+    // A failed CSRF check must not revoke anything: the session still works.
+    let resp = get_with_cookie(app, "/api/v1/me", Some(&cookie)).await;
+    assert_eq!(resp.status(), StatusCode::OK);
 }

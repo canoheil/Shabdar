@@ -2,6 +2,7 @@
 //! wires the process; integration tests in tests/ import from here.
 
 pub mod config;
+pub mod csrf;
 pub mod db;
 pub mod error;
 pub mod otp;

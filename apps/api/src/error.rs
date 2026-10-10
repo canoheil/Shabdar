@@ -130,11 +130,11 @@ mod tests {
             .collect()
     }
 
-    /// The plan's contract table, pinned exactly: HTTP status + code for all 11
+    /// The plan's contract table, pinned exactly: HTTP status + code for all 12
     /// variants, plus a non-empty message on every one.
     #[tokio::test]
     async fn status_and_code_match_contract_for_every_variant() {
-        let cases: [(super::ApiError, StatusCode, &str); 11] = [
+        let cases: [(super::ApiError, StatusCode, &str); 12] = [
             (
                 super::ApiError::Validation { fields: fields(&[]) },
                 StatusCode::BAD_REQUEST,
@@ -174,6 +174,11 @@ mod tests {
                 super::ApiError::Unauthorized,
                 StatusCode::UNAUTHORIZED,
                 "unauthorized",
+            ),
+            (
+                super::ApiError::CsrfFailed,
+                StatusCode::FORBIDDEN,
+                "csrf_failed",
             ),
         ];
         for (err, want_status, want_code) in cases {
