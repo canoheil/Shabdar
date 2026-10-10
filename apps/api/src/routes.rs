@@ -1,7 +1,8 @@
 //! The single router builder every task extends (docs/PHASE1_PLAN.md).
 //! Handlers stay thin: they parse HTTP and call one service function.
 //! Routes so far: GET /api/v1/health, POST /api/v1/auth/otp/request,
-//! POST /api/v1/auth/otp/verify.
+//! POST /api/v1/auth/otp/verify, GET/PATCH /api/v1/me,
+//! POST /api/v1/auth/logout.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
