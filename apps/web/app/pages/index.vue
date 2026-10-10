@@ -1,6 +1,6 @@
 <template>
   <section class="home">
-    <h1>شبدار</h1>
+    <h1>شبدر</h1>
     <p>بازارچهٔ آگهی‌های محلی — نسخهٔ در حال ساخت.</p>
 
     <!-- Auth state (plan Task 7): session cookie rides SSR via
@@ -9,7 +9,7 @@
       <p>در حال بارگذاری…</p>
     </template>
     <template v-else-if="me">
-      <p>خوش آمدید، {{ me.user.display_name ?? 'کاربر شبدار' }}</p>
+      <p>خوش آمدید، {{ me.user.display_name ?? 'کاربر شبدر' }}</p>
       <button type="button" class="btn" :disabled="loggingOut" @click="logout">
         خروج
       </button>

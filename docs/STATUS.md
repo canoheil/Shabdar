@@ -21,7 +21,7 @@ Phase 1 complete: all 10 tasks merged to main (PR #4, 61bb87a — part A PR #3 +
 - Nearby-seller map is deferred to a later phase.
 - Phase 2 error contract additions (approved in plan review): `not_found` (404), `unauthorized` (401), `csrf_failed` (403, WP 3); PATCH /me field reasons `required` / `too_long` (chars, not bytes). Extractor rejection is deliberately generic (no probing signal). Logout revokes exactly the presented session.
 - `apps/web` is TypeScript (`<script setup lang="ts">`), deps frozen to `nuxt` + `typescript`; no vue-tsc in the Termux gate (run `nuxi typecheck` in a Codespace/PC before big merges); no vitest (revisit after the UI stabilizes).
-- Brand name: the correct Persian display name is «شبدر» (fixed 2026-10-10; «شبدار» was a spelling mistake). Technical identifiers stay `Shabdar`/`shabdar`.
+- Brand name: the correct Persian display name is «شبدر» (fixed 2026-10-10; the earlier spelling was wrong). Technical identifiers stay `Shabdar`/`shabdar`.
 
 ## Must do before public launch
 - Persian profanity filter for comments. Comments are unfiltered in v1.

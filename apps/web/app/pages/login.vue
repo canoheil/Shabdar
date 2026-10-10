@@ -16,7 +16,7 @@
 -->
 <template>
   <section class="login">
-    <h1>ورود به شبدار</h1>
+    <h1>ورود به شبدر</h1>
 
     <!-- Purpose toggle: ورود / ثبت‌نام (PRODUCT.md §3 — separate flows). -->
     <div class="login__purpose" role="group" aria-label="نوع ورود">

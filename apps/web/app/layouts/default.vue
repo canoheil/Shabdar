@@ -1,7 +1,7 @@
 <template>
   <div class="shell">
     <header class="shell__header">
-      <NuxtLink to="/" class="shell__brand">شبدار</NuxtLink>
+      <NuxtLink to="/" class="shell__brand">شبدر</NuxtLink>
       <nav class="shell__nav" aria-label="ناوبری اصلی">
         <NuxtLink to="/login" class="shell__nav-link">ورود</NuxtLink>
       </nav>
@@ -10,7 +10,7 @@
       <slot />
     </main>
     <footer class="shell__footer">
-      <p>شبدار — بازارچهٔ آگهی‌های محلی</p>
+      <p>شبدر — بازارچهٔ آگهی‌های محلی</p>
     </footer>
   </div>
 </template>
