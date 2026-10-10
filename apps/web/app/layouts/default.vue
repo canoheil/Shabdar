@@ -3,7 +3,7 @@
     <header class="shell__header">
       <NuxtLink to="/" class="shell__brand">شبدار</NuxtLink>
       <nav class="shell__nav" aria-label="ناوبری اصلی">
-        <!-- لینک ورود در بستهٔ کاری ۲، تسک ۷ اضافه می‌شود -->
+        <NuxtLink to="/login" class="shell__nav-link">ورود</NuxtLink>
       </nav>
     </header>
     <main class="shell__main">
@@ -14,3 +14,14 @@
     </footer>
   </div>
 </template>
+
+<style scoped>
+.shell__nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px; /* touch target (ui-ux-pro-max) */
+  padding-inline: 0.75rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+</style>
