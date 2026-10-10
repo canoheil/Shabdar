@@ -1,7 +1,7 @@
 # Status
 
 ## Current phase
-Phase 1 complete: all 10 tasks merged to main (PR #4, 61bb87a — part A PR #3 + part B PR #4). Phase 2 planning done: `docs/PHASE2_PLAN.md` written (2026-10-10), awaiting plan review and the CSRF decision (plan Open question 1).
+Phase 1 complete: all 10 tasks merged to main (PR #4, 61bb87a — part A PR #3 + part B PR #4). Phase 2 plan `docs/PHASE2_PLAN.md` approved (2026-10-10, all open questions answered; CSRF = double-submit `shabdar_csrf` cookie). **Phase 2 Work Package 1 (API session surface, plan Tasks 1–4) implemented 2026-10-10 on `arena/6945d175-shabdar` — UNVERIFIED: the sandbox cannot run cargo. Run the WP 1 verification gate on Termux (`cargo test`, `cargo clippy --all-targets -- -D warnings` + the auth smoke) and paste the output back before trusting it.** WP 2 (Nuxt skeleton) and WP 3 (CSRF) not started.
 
 ## Decisions made
 - Listings are published only after admin approval (pending → active).
@@ -19,11 +19,12 @@ Phase 1 complete: all 10 tasks merged to main (PR #4, 61bb87a — part A PR #3 +
 - Launch focus: Rasht. National coverage later.
 - Development runs on Termux on the phone. No production server yet.
 - Nearby-seller map is deferred to a later phase.
+- Phase 2 error contract additions (approved in plan review): `not_found` (404), `unauthorized` (401), `csrf_failed` (403, WP 3); PATCH /me field reasons `required` / `too_long` (chars, not bytes). Extractor rejection is deliberately generic (no probing signal). Logout revokes exactly the presented session.
 
 ## Must do before public launch
 - Persian profanity filter for comments. Comments are unfiltered in v1.
 - Choose SMS provider and budget.
-- Decide CSRF delivery (proposal drafted in docs/PHASE2_PLAN.md, awaiting approval).
+- Decide CSRF delivery — **decided 2026-10-10** (double-submit `shabdar_csrf` cookie, plan design of record); implementation lands in WP 3.
 - Privacy policy and terms of use.
 
 ## Open questions
@@ -33,20 +34,20 @@ Phase 1 complete: all 10 tasks merged to main (PR #4, 61bb87a — part A PR #3 +
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-docs: Phase 2 plan (docs/PHASE2_PLAN.md) + STATUS sync. No code changes.
+Phase 2 WP 1 (plan Tasks 1–4) on `arena/6945d175-shabdar`, RED and GREEN commits per task: `CurrentUser` extractor (generic 401 `unauthorized`), `GET/PATCH /api/v1/me`, `POST /api/v1/auth/logout`, 404 `not_found` fallback. **UNVERIFIED — `cargo test` / `cargo clippy --all-targets -- -D warnings` not run (no cargo in the sandbox); verified nowhere yet.**
 
 ## Open items for later tasks
-- Placeholder 200 `ok` fallback (apps/api/src/routes.rs): scheduled to be fixed by docs/PHASE2_PLAN.md Task 4 (404 `not_found` envelope).
+- Placeholder 200 `ok` fallback (apps/api/src/routes.rs): **fixed by docs/PHASE2_PLAN.md Task 4 (404 `not_found` envelope) — UNVERIFIED** (landed in WP 1, pending the Termux run).
 - Malformed-JSON error shape (axum default rejection body): NOT in docs/PHASE2_PLAN.md (scope cap) — needs a follow-up plan (plan Open question 3).
 
 ## Next step
-Review docs/PHASE2_PLAN.md and answer its Open question 1 (approve the double-submit `shabdar_csrf` CSRF proposal or name another option — Work Package 3 is gated on it). Then execute Work Package 1 (API session surface).
+Run the WP 1 verification gate on Termux (docs/PHASE2_PLAN.md "WP 1 verification"): `cargo test` (full suite) and `cargo clippy --all-targets -- -D warnings`, then the auth smoke (otp request → verify → /me → PATCH /me with a Persian name → logout → replay 401, and `GET /api/v1/unknown` → 404 `not_found`). Paste the output back. If green, execute Work Package 2 (Nuxt 4 skeleton).
 
 ## Next: Phase 2
 Covered by docs/PHASE2_PLAN.md (auth/session surface + Nuxt 4 skeleton):
-- Nuxt frontend with the same-origin API proxy (forwards the session cookie and `X-Forwarded-For`).
-- `/me`, `/auth/logout`, and CSRF token delivery (proposal awaiting approval).
-- Fix the placeholder 200 fallback (404 error envelope).
+- Nuxt frontend with the same-origin API proxy (forwards the session cookie and `X-Forwarded-For`) — WP 2, not started.
+- `/me`, `/auth/logout` — **built in WP 1 (Tasks 1–3), UNVERIFIED**; CSRF token delivery approved (double-submit `shabdar_csrf`) — WP 3, not started.
+- Fix the placeholder 200 fallback (404 error envelope) — **built in WP 1 (Task 4), UNVERIFIED**.
 
 Follow-up plan(s) after that:
 - Listings domain: draft → pending → admin approval → active.
