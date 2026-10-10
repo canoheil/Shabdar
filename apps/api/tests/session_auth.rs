@@ -55,6 +55,24 @@ async fn get_with_cookie(
     app.oneshot(req).await.unwrap()
 }
 
+/// PATCH a JSON body with an optional raw `Cookie:` header value.
+async fn patch_json(
+    app: axum::Router,
+    path: &str,
+    cookie: Option<&str>,
+    body: serde_json::Value,
+) -> axum::response::Response {
+    let mut builder = Request::builder()
+        .method("PATCH")
+        .uri(path)
+        .header("content-type", "application/json");
+    if let Some(value) = cookie {
+        builder = builder.header("cookie", value);
+    }
+    let req = builder.body(Body::from(body.to_string())).unwrap();
+    app.oneshot(req).await.unwrap()
+}
+
 /// Collect a response body into parsed JSON.
 async fn json_body(resp: axum::response::Response) -> serde_json::Value {
     let bytes = BodyExt::collect(resp.into_body())
@@ -222,6 +240,174 @@ async fn me_for_suspended_user_is_401_unauthorized() {
         .expect("suspend user");
 
     let resp = get_with_cookie(app, "/api/v1/me", Some(&cookie)).await;
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(error_code(&json_body(resp).await), "unauthorized");
+}
+
+// --- Task 2: PATCH /api/v1/me (display_name) -------------------------------
+
+#[tokio::test]
+async fn patch_me_sets_a_persian_display_name() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let public_id = user["public_id"].as_str().expect("public_id").to_string();
+    // A valid Persian name (10 chars).
+    let name = "آزمایش نام";
+
+    let resp = patch_json(
+        app.clone(),
+        "/api/v1/me",
+        Some(&cookie),
+        serde_json::json!({ "display_name": name }),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = json_body(resp).await;
+    assert_eq!(
+        body,
+        serde_json::json!({
+            "user": {
+                "public_id": public_id,
+                "display_name": name,
+                "is_admin": false,
+            }
+        })
+    );
+
+    // GET /me reflects the new name.
+    let resp = get_with_cookie(app, "/api/v1/me", Some(&cookie)).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = json_body(resp).await;
+    assert_eq!(body["user"]["display_name"], name);
+}
+
+#[tokio::test]
+async fn patch_me_missing_display_name_is_400_required() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    let resp = patch_json(app, "/api/v1/me", Some(&cookie), serde_json::json!({})).await;
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let body = json_body(resp).await;
+    assert_eq!(error_code(&body), "validation_error");
+    assert_eq!(body["error"]["fields"]["display_name"], "required");
+}
+
+#[tokio::test]
+async fn patch_me_blank_display_name_is_400_required() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    for blank in ["", "   ", "\t\n "] {
+        let resp = patch_json(
+            app.clone(),
+            "/api/v1/me",
+            Some(&cookie),
+            serde_json::json!({ "display_name": blank }),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "blank {blank:?}");
+        let body = json_body(resp).await;
+        assert_eq!(error_code(&body), "validation_error");
+        assert_eq!(body["error"]["fields"]["display_name"], "required");
+    }
+}
+
+#[tokio::test]
+async fn patch_me_81_multibyte_chars_is_400_too_long() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    // 81 Persian digits (multi-byte): the limit is chars, not bytes.
+    let name81 = "۱".repeat(81);
+    let resp = patch_json(
+        app,
+        "/api/v1/me",
+        Some(&cookie),
+        serde_json::json!({ "display_name": &name81 }),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let body = json_body(resp).await;
+    assert_eq!(error_code(&body), "validation_error");
+    assert_eq!(body["error"]["fields"]["display_name"], "too_long");
+}
+
+#[tokio::test]
+async fn patch_me_exactly_80_multibyte_chars_is_200() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let public_id = user["public_id"].as_str().expect("public_id").to_string();
+
+    // Exactly 80 Persian digits (multi-byte) must pass the boundary.
+    let name80 = "۱".repeat(80);
+    let resp = patch_json(
+        app,
+        "/api/v1/me",
+        Some(&cookie),
+        serde_json::json!({ "display_name": &name80 }),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = json_body(resp).await;
+    assert_eq!(
+        body,
+        serde_json::json!({
+            "user": {
+                "public_id": public_id,
+                "display_name": name80,
+                "is_admin": false,
+            }
+        })
+    );
+}
+
+#[tokio::test]
+async fn patch_me_without_cookie_is_401_unauthorized() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let app = common::spawn_app(common::test_config()).await;
+
+    let resp = patch_json(
+        app,
+        "/api/v1/me",
+        None,
+        serde_json::json!({ "display_name": "کاربر" }),
+    )
+    .await;
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(error_code(&json_body(resp).await), "unauthorized");
 }
