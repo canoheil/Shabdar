@@ -1,7 +1,7 @@
 # Status
 
 ## Current phase
-Phase 1 complete: all 10 tasks merged to main (PR #4, 61bb87a — part A PR #3 + part B PR #4). Phase 2 plan `docs/PHASE2_PLAN.md` approved (2026-10-10, all open questions answered; CSRF = double-submit `shabdar_csrf` cookie). **Phase 2 Work Package 1 (API session surface, plan Tasks 1–4) implemented 2026-10-10 on `arena/6945d175-shabdar` — UNVERIFIED: the sandbox cannot run cargo. Run the WP 1 verification gate on Termux (`cargo test`, `cargo clippy --all-targets -- -D warnings` + the auth smoke) and paste the output back before trusting it.** WP 2 (Nuxt skeleton) and WP 3 (CSRF) not started.
+Phase 1 complete: all 10 tasks merged to main (PR #4, 61bb87a — part A PR #3 + part B PR #4). Phase 2 plan `docs/PHASE2_PLAN.md` approved (2026-10-10, all open questions answered; CSRF = double-submit `shabdar_csrf` cookie). **Phase 2 Work Package 1 (API session surface, plan Tasks 1–4) VERIFIED on Termux at `721f6a7`: `cargo test` 70/70 green (32 unit, 15 auth_otp, 4 db_migrations, 2 health, 3 not_found, 14 session_auth), `cargo clippy --all-targets -- -D warnings` clean.** Next: Work Package 2 (Nuxt 4 skeleton + OTP login).
 
 ## Decisions made
 - Listings are published only after admin approval (pending → active).
@@ -34,20 +34,20 @@ Phase 1 complete: all 10 tasks merged to main (PR #4, 61bb87a — part A PR #3 +
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-fix(api): drop child tables first in migrations test — Termux run found `tests/db_migrations.rs` dropping parent `users` before child `sessions` (error 1451 via `fk_sessions_user`); now drops in dependency order (sessions → otp_challenges → users → _sqlx_migrations) and `migrations_apply_on_empty_database` also asserts `sessions` exists after migrate. **Still UNVERIFIED: the first Termux run had clippy clean and 32 unit + 15 auth_otp green but stopped at this failure — session_auth, not_found, health have not run yet. Re-run `cargo test` (full suite) and `cargo clippy --all-targets -- -D warnings`.**
+**721f6a7** — WP 1 tip, verified on Termux: `cargo test` 70/70 green (32 unit, 15 auth_otp, 4 db_migrations, 2 health, 3 not_found, 14 session_auth) and clippy clean at this commit.
 
 ## Open items for later tasks
-- Placeholder 200 `ok` fallback (apps/api/src/routes.rs): **fixed by docs/PHASE2_PLAN.md Task 4 (404 `not_found` envelope) — UNVERIFIED** (landed in WP 1, pending the Termux run).
+- Placeholder 200 `ok` fallback (apps/api/src/routes.rs): fixed by docs/PHASE2_PLAN.md Task 4 (404 `not_found` envelope) — **verified on Termux** (tests/not_found.rs green).
 - Malformed-JSON error shape (axum default rejection body): NOT in docs/PHASE2_PLAN.md (scope cap) — needs a follow-up plan (plan Open question 3).
 
 ## Next step
-Run the WP 1 verification gate on Termux (docs/PHASE2_PLAN.md "WP 1 verification"): `cargo test` (full suite) and `cargo clippy --all-targets -- -D warnings`, then the auth smoke (otp request → verify → /me → PATCH /me with a Persian name → logout → replay 401, and `GET /api/v1/unknown` → 404 `not_found`). Paste the output back. If green, execute Work Package 2 (Nuxt 4 skeleton).
+Execute Work Package 2 (docs/PHASE2_PLAN.md, Tasks 5–7): Node toolchain + `apps/web` Nuxt 4 scaffold (RTL shell), same-origin `/api` proxy, OTP login page + home auth state. TypeScript throughout (`<script setup lang="ts">`), no vue-tsc, no vitest, no dependencies beyond `nuxt` + `typescript`. WP 2 verification is the plan's manual phone gate (curl + browser smoke).
 
 ## Next: Phase 2
 Covered by docs/PHASE2_PLAN.md (auth/session surface + Nuxt 4 skeleton):
-- Nuxt frontend with the same-origin API proxy (forwards the session cookie and `X-Forwarded-For`) — WP 2, not started.
-- `/me`, `/auth/logout` — **built in WP 1 (Tasks 1–3), UNVERIFIED**; CSRF token delivery approved (double-submit `shabdar_csrf`) — WP 3, not started.
-- Fix the placeholder 200 fallback (404 error envelope) — **built in WP 1 (Task 4), UNVERIFIED**.
+- Nuxt frontend with the same-origin API proxy (forwards the session cookie and `X-Forwarded-For`) — **WP 2, in progress**.
+- `/me`, `/auth/logout` — **built and verified in WP 1**; CSRF token delivery approved (double-submit `shabdar_csrf`) — WP 3, not started.
+- Fix the placeholder 200 fallback (404 error envelope) — **built and verified in WP 1 (Task 4)**.
 
 Follow-up plan(s) after that:
 - Listings domain: draft → pending → admin approval → active.
