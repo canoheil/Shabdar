@@ -29,6 +29,9 @@ pub enum ApiError {
     /// 401 for a missing/invalid/expired session or non-active user
     /// (Phase 2 extractor, `unauthorized` — deliberately generic).
     Unauthorized,
+    /// 403 when `X-CSRF-Token` is missing or ≠ the `shabdar_csrf` cookie
+    /// (Phase 2 CSRF, `csrf_failed`).
+    CsrfFailed,
     Internal,
 }
 
@@ -45,6 +48,7 @@ impl ApiError {
             | ApiError::NoAccount
             | ApiError::Unauthorized => StatusCode::UNAUTHORIZED,
             ApiError::NotFound => StatusCode::NOT_FOUND,
+            ApiError::CsrfFailed => StatusCode::FORBIDDEN,
             ApiError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -61,6 +65,7 @@ impl ApiError {
             ApiError::NoAccount => "no_account",
             ApiError::NotFound => "not_found",
             ApiError::Unauthorized => "unauthorized",
+            ApiError::CsrfFailed => "csrf_failed",
             ApiError::Internal => "internal_error",
         }
     }
@@ -79,6 +84,7 @@ impl ApiError {
             ApiError::NoAccount => "No account exists for this phone number",
             ApiError::NotFound => "Not found",
             ApiError::Unauthorized => "Not authenticated",
+            ApiError::CsrfFailed => "CSRF token missing or invalid",
             ApiError::Internal => "Internal server error",
         }
     }

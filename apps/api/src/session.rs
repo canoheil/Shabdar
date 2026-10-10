@@ -100,7 +100,8 @@ pub struct CurrentUser {
 }
 
 /// Pull `name=value` out of the Cookie header(s); None when absent.
-fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
+/// Also used by csrf.rs for the `shabdar_csrf` double-submit check.
+pub fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
     for header in headers.get_all(axum::http::header::COOKIE) {
         let Ok(text) = header.to_str() else {
             continue;

@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use axum::extract::State;
 use axum::http::header::{HeaderName, SET_COOKIE};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::{
     middleware,
@@ -68,8 +68,11 @@ struct UpdateMeBody {
 async fn update_me(
     State(state): State<AppState>,
     user: CurrentUser,
+    headers: HeaderMap,
     Json(body): Json<UpdateMeBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    // CSRF first (plan Task 8): a failed check must not mutate anything.
+    crate::csrf::check_csrf(&headers)?;
     let name = body.display_name.unwrap_or_default();
     let trimmed = name.trim();
     if trimmed.is_empty() {
@@ -94,15 +97,19 @@ async fn update_me(
 }
 
 /// POST /api/v1/auth/logout — revokes exactly the presented session and
-/// clears the cookie (plan Task 3). Returns exactly {"ok":true}.
+/// clears both cookies (plan Task 3 + Task 8). Returns exactly {"ok":true}.
 async fn logout(
     State(state): State<AppState>,
     user: CurrentUser,
-) -> Result<([(HeaderName, String); 1], Json<serde_json::Value>), ApiError> {
+    headers: HeaderMap,
+) -> Result<([(HeaderName, String); 2], Json<serde_json::Value>), ApiError> {
+    // CSRF first (plan Task 8): a failed check must not revoke anything.
+    crate::csrf::check_csrf(&headers)?;
     crate::session::delete_session(&state.pool, user.session_id).await?;
     let clear_cookie = crate::session::build_clear_cookie(&state.config);
+    let clear_csrf = crate::csrf::build_csrf_clear_cookie(&state.config);
     Ok((
-        [(SET_COOKIE, clear_cookie)],
+        [(SET_COOKIE, clear_cookie), (SET_COOKIE, clear_csrf)],
         Json(serde_json::json!({ "ok": true })),
     ))
 }
@@ -195,7 +202,7 @@ async fn otp_verify(
 ) -> Result<
     (
         StatusCode,
-        [(HeaderName, String); 1],
+        [(HeaderName, String); 2],
         Json<serde_json::Value>,
     ),
     ApiError,
@@ -216,10 +223,14 @@ async fn otp_verify(
     let outcome =
         crate::otp_service::verify_challenge(&state.pool, &state.config, &challenge_id, &code)
             .await?;
+    // Two Set-Cookie headers (approved CSRF proposal): the session cookie and
+    // the double-submit shabdar_csrf cookie (a fresh ULID per login).
     let cookie = crate::session::build_set_cookie(&state.config, &outcome.session_token);
+    let csrf_token = ulid::Ulid::new().to_string();
+    let csrf_cookie = crate::csrf::build_csrf_cookie(&state.config, &csrf_token);
     Ok((
         StatusCode::OK,
-        [(SET_COOKIE, cookie)],
+        [(SET_COOKIE, cookie), (SET_COOKIE, csrf_cookie)],
         Json(serde_json::json!({
             "user": {
                 "public_id": outcome.user.public_id,

@@ -1,9 +1,57 @@
 //! Double-submit CSRF (docs/PHASE2_PLAN.md "CSRF proposal", approved
-//! 2026-10-10). Implementation lands with the GREEN commit; this file starts
-//! with the tests that pin the frozen contract (TDD RED).
+//! 2026-10-10). Every state-changing request that uses a session must carry
+//! header `X-CSRF-Token` equal to the `shabdar_csrf` cookie value. Today that
+//! is PATCH /api/v1/me and POST /api/v1/auth/logout; every Phase 3+ mutation
+//! calls `check_csrf` the same way (see routes.rs). OTP endpoints and all
+//! GETs are exempt.
+
+use axum::http::HeaderMap;
+
+use crate::config::Config;
+use crate::error::ApiError;
+
+/// The csrf cookie name — part of the frozen design (not configurable).
+pub const CSRF_COOKIE_NAME: &str = "shabdar_csrf";
+
+/// The exact Set-Cookie value for the csrf cookie: NOT HttpOnly (the browser
+/// must read it for double-submit), `Secure` only when configured.
+pub fn build_csrf_cookie(cfg: &Config, token: &str) -> String {
+    let mut cookie = format!("{CSRF_COOKIE_NAME}={token}; Path=/; SameSite=Lax");
+    if cfg.cookie_secure {
+        cookie.push_str("; Secure");
+    }
+    cookie
+}
+
+/// The clearing Set-Cookie (Max-Age=0), same flags as build_csrf_cookie.
+pub fn build_csrf_clear_cookie(cfg: &Config) -> String {
+    let mut cookie = format!("{CSRF_COOKIE_NAME}=; Path=/; SameSite=Lax; Max-Age=0");
+    if cfg.cookie_secure {
+        cookie.push_str("; Secure");
+    }
+    cookie
+}
+
+/// Double-submit check: the X-CSRF-Token header must equal the shabdar_csrf
+/// cookie value (both present, equal). Any mismatch or absence → 403
+/// `csrf_failed`; the calling handler must not mutate anything.
+pub fn check_csrf(headers: &HeaderMap) -> Result<(), ApiError> {
+    let cookie =
+        crate::session::cookie_value(headers, CSRF_COOKIE_NAME).ok_or(ApiError::CsrfFailed)?;
+    let token = headers
+        .get("x-csrf-token")
+        .and_then(|value| value.to_str().ok())
+        .ok_or(ApiError::CsrfFailed)?;
+    if token == cookie {
+        Ok(())
+    } else {
+        Err(ApiError::CsrfFailed)
+    }
+}
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use axum::http::HeaderMap;
 
     use crate::config::Config;
