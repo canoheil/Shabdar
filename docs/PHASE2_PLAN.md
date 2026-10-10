@@ -1,21 +1,21 @@
 # Phase 2 Implementation Plan — Auth/session surface + Nuxt 4 skeleton with OTP login
 
-> **خلاصه فارسی:** این سند برنامهٔ اجرایی فاز ۲ است: تکمیل بخش احراز هویت/نشست API و ساخت اسکلت فرانت Nuxt 4 با ورود OTP. در API سه مسیر `GET /api/v1/me`، `PATCH /api/v1/me` و `POST /api/v1/auth/logout` اضافه می‌شود و یک extractor نشست کوکی `shabdar_session` را می‌خواند (هش توکن، بررسی انقضا، رد کاربر معلق). فالبک ۲۰۰ placeholder با پاسخ ۴۰۴ و `not_found` در همان پاکت خطای مستندشده جایگزین می‌شود. در `apps/web` یک اپ Nuxt 4 با چیدمان RTL (`lang="fa" dir="rtl"`)، پروکسی هم‌مبدأ `/api` (با ارسال کوکی و `X-Forwarded-For`) و صفحهٔ ورود با جریان کامل OTP (شماره، ویرایش شماره، کد) ساخته می‌شود. برای CSRF یک گزینهٔ ساده پیشنهاد شده (کوکی double-submit `shabdar_csrf`) که **پیش از اجرا باید تأیید شود** — بستهٔ کاری ۳ تا آن زمان متوقف است. برنامه در سه بستهٔ کاری ۳ تا ۴ تسکی با یک نقطهٔ تأیید هرکدام سازمان‌دهی شده؛ هر تسک TDD است. نصب Node/npm روی ترموکس در متن برنامه آمده است.
+> **خلاصه فارسی:** این سند برنامهٔ اجرایی فاز ۲ است: تکمیل بخش احراز هویت/نشست API و ساخت اسکلت فرانت Nuxt 4 با ورود OTP. در API سه مسیر `GET /api/v1/me`، `PATCH /api/v1/me` و `POST /api/v1/auth/logout` اضافه می‌شود و یک extractor نشست کوکی `shabdar_session` را می‌خواند (هش توکن، بررسی انقضا، رد کاربر معلق). فالبک ۲۰۰ placeholder با پاسخ ۴۰۴ و `not_found` در همان پاکت خطای مستندشده جایگزین می‌شود. در `apps/web` یک اپ Nuxt 4 با چیدمان RTL (`lang="fa" dir="rtl"`)، پروکسی هم‌مبدأ `/api` (با ارسال کوکی و `X-Forwarded-For`) و صفحهٔ ورود با جریان کامل OTP (شماره، ویرایش شماره، کد) ساخته می‌شود. کد `apps/web` به‌طور کامل TypeScript است (`<script setup lang="ts">`، بدون typecheck در گیت ترموکس). گزینهٔ CSRF (کوکی double-submit `shabdar_csrf`) در تاریخ ۲۰۲۶-۱۰-۱۰ **تأیید شد**. برنامه در سه بستهٔ کاری ۳ تا ۴ تسکی با یک نقطهٔ تأیید هرکدام سازمان‌دهی شده؛ هر تسک TDD است. نصب Node/npm روی ترموکس در متن برنامه آمده است.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. The execution method is recorded in "Approved decisions (baked into this plan)" item 6.
 
 **Goal:** Finish the auth/session surface of the Axum API (`/me` read + display-name edit, logout, a session-reading extractor, a real 404 error) and add the Nuxt 4 skeleton in `apps/web` (RTL shell, same-origin `/api` proxy, OTP login page). Nothing else: no listings, no admin, no uploads.
 
-**Architecture:** The API keeps its flat-module, thin-handler shape: one `FromRequestParts` extractor (`CurrentUser`) resolves the `shabdar_session` cookie through a single joined query (hash lookup → expiry → `users.status`); handlers call small service functions. `apps/web` is a Nuxt 4 app (SSR on `:3000`) whose Nitro catch-all `server/api/[...path].ts` proxies `/api/**` to Axum (`:8080`) forwarding cookies and the client IP. The browser only ever talks to `:3000`. CSRF (Work Package 3) is a double-submit cookie, injected as a header by the Nuxt proxy — proposed, awaiting approval (Open question 1).
+**Architecture:** The API keeps its flat-module, thin-handler shape: one `FromRequestParts` extractor (`CurrentUser`) resolves the `shabdar_session` cookie through a single joined query (hash lookup → expiry → `users.status`); handlers call small service functions. `apps/web` is a Nuxt 4 app (SSR on `:3000`) whose Nitro catch-all `server/api/[...path].ts` proxies `/api/**` to Axum (`:8080`) forwarding cookies and the client IP. The browser only ever talks to `:3000`. CSRF (Work Package 3) is a double-submit cookie `shabdar_csrf`, injected as an `X-CSRF-Token` header by the Nuxt proxy — **approved 2026-10-10** (design of record in "CSRF proposal").
 
-**Tech Stack:** Rust stable (as on the phone), axum 0.8+, sqlx 0.8+ runtime queries, native MariaDB (existing). Nuxt `^4.6.1` (Vue 3, Vite 8, Nitro), Node from Termux `pkg` (`nodejs` 26.4.0 or `nodejs-lts` 24.18.0 — both satisfy Nuxt's engines floor `^22.22.3 || ^24.15.0 || >=26.0.0`). No new Rust crates. No test framework for the web app yet (Open question 2).
+**Tech Stack:** Rust stable (as on the phone), axum 0.8+, sqlx 0.8+ runtime queries, native MariaDB (existing). Nuxt `^4.6.1` (Vue 3, Vite 8, Nitro), Node from Termux `pkg` (`nodejs` 26.4.0 or `nodejs-lts` 24.18.0 — both satisfy Nuxt's engines floor `^22.22.3 || ^24.15.0 || >=26.0.0`). No new Rust crates. **TypeScript throughout `apps/web`** (`<script setup lang="ts">`, `typescript` `^6.0.3` in devDependencies, **no typecheck in the Termux gates**). No test framework for the web app (decided: not yet — revisit after the UI stabilizes).
 
 **Spec:** the Phase 2 brief of 2026-10-10 (scope items 1–5, reproduced below) + `docs/PRODUCT.md` §3, §5-D · `docs/API.md` §1–2 · `docs/ARCHITECTURE.md` §2–§9 · `docs/DATABASE.md` §1–2 · `docs/PHASE1_PLAN.md` approved decisions (esp. item 3 — the `user` object shape `/me` reuses — and item 6 — CSRF deferred to this phase).
 
 ## Scope (the brief)
 
 1. API: `GET /api/v1/me`, `PATCH /api/v1/me` (`display_name`), `POST /api/v1/auth/logout`, and a session-reading extractor that authenticates requests from the `shabdar_session` cookie (hash lookup, expiry check, suspended users rejected).
-2. CSRF design for browser mutations: **propose one simple option, explain the trade-off, ask the user to approve before implementing** (→ "CSRF proposal" below; Work Package 3 is gated on the answer).
+2. CSRF design for browser mutations: **propose one simple option, explain the trade-off, ask the user to approve before implementing** (→ "CSRF proposal" below; **approved 2026-10-10** as proposed — see "Approved decisions (plan review)").
 3. Replace the placeholder 200 `ok` fallback with a 404 JSON `not_found` error in the documented envelope.
 4. Nuxt 4 app in `apps/web`: RTL layout shell (`lang fa`, `dir rtl`), same-origin `/api` proxy to Axum forwarding cookies and `X-Forwarded-For`, and a login page with the OTP flow (phone, edit number, code).
 5. Nothing else: no listings, no admin, no uploads.
@@ -34,13 +34,13 @@
 8. **Dependencies are frozen** (see below). Any addition requires user approval first, asked as a question, never added silently.
 9. **`STATUS.md` is touched once, in the final task** (Task 10), not per task.
 
-## CSRF proposal (Open question 1 — approve before Work Package 3)
+## CSRF proposal (approved 2026-10-10 — design of record for Work Package 3)
 
 **Proposed option: double-submit cookie `shabdar_csrf`.** On `otp/verify` success the API sets a second cookie `shabdar_csrf=<26-char ULID>` (`Path=/; SameSite=Lax`, **not** `HttpOnly`, `+ Secure` when `COOKIE_SECURE=true`) alongside `shabdar_session`. Every state-changing request that uses a session (today: `PATCH /me`, `POST /auth/logout`) must carry header `X-CSRF-Token` equal to the `shabdar_csrf` cookie value; mismatch or absence → 403 `csrf_failed` and **no state change**. The Nuxt server proxy copies the cookie value into the `X-CSRF-Token` header on proxied mutations, so browser code never handles the token. Logout clears both cookies. The two public OTP endpoints stay exempt (no session exists yet; they are rate-limited).
 
 **Trade-off:** one extra cookie and one small check per mutation, but no migration, no token storage, no client-side plumbing, and curl smoke tests just echo the cookie value into the header. The weakness of plain double-submit is cookie injection from an untrusted subdomain — acceptable today (single domain, no untrusted subdomains); the upgrade path, if subdomains ever appear, is binding the token to the session hash (a `sessions.csrf_token` column). Rejected one-liners: (a) `SameSite=Lax` alone — already blocks classic cross-site POSTs, but API.md §1 and ARCHITECTURE.md §7 mandate a token; (b) a bare custom-header check with a fixed value — lazier but not a "token" per the docs and a fixed value is guessable; (c) synchronizer token in the `sessions` row — strongest binding, but costs a migration and delivery plumbing the skeleton does not need yet.
 
-**Work Package 3 implements this only after the user approves (or names a different option — then Tasks 8–9 are re-cut against that answer).**
+**Approved 2026-10-10 as proposed (Open question 1). Work Package 3 implements this design unchanged; Tasks 8–9 are no longer gated.**
 
 ## Global constraints (from the docs, verbatim)
 
@@ -55,6 +55,7 @@
 - Never commit secrets, `.env`, or real phone numbers (AGENTS.md).
 - Scope item 5 is law: **no listings, no admin, no uploads** in this phase.
 - Node/npm are installed and used on the phone; record real timings and sizes (never guess).
+- `apps/web` is TypeScript (approved 2026-10-10): every `.vue` script is `<script setup lang="ts">`; `typescript` (`^6.0.3`) lives in `devDependencies`; **no typecheck step in the Termux verification gates** (`vue-tsc` is not installed on the phone). `apps/web/README.md` must state: run `nuxi typecheck` in a Codespace/PC before big merges.
 
 ## File map
 
@@ -93,7 +94,7 @@ docs/STATUS.md                        # updated in Task 10 (once)
 
 **Rust: none new.** Everything needed (`sha2`, `hmac`, `getrandom`, `ulid`, `serde`, axum, sqlx) is already in `apps/api/Cargo.toml` from Phase 1.
 
-**Web:** `nuxt` (`^4.6.1`) as the only direct dependency; its transitive tree (Vue, Vite 8, Nitro, h3) comes with it. **No** UI kit, no Pinia, no axios (`$fetch` is built in), no vitest yet (Open question 2).
+**Web:** `nuxt` (`^4.6.1`) as the only runtime dependency; `typescript` (`^6.0.3`, ≈24 MB unpacked — nuxt 4.6.1 does not ship it) as the only devDependency. The transitive tree (Vue, Vite 8, Nitro, h3) comes with nuxt. **No** UI kit, no Pinia, no axios (`$fetch` is built in), **no `vue-tsc`** (no typecheck in the Termux gate — run `nuxi typecheck` in a Codespace/PC before big merges), and no vitest (decided: not yet — revisit after the UI stabilizes).
 
 ## Error contract additions (exact)
 
@@ -241,11 +242,11 @@ curl -s http://127.0.0.1:8080/api/v1/unknown       # 404 envelope with "not_foun
 
 **Interfaces (produces):** a bootable Nuxt 4 app on `localhost:3000` with `<html lang="fa" dir="rtl">` (via `app.head.htmlAttrs` in `nuxt.config.ts`), `runtimeConfig.apiBase` (default `http://127.0.0.1:8080`, override `NUXT_API_BASE`), and a placeholder home page inside the RTL layout shell.
 
-**Scaffold by hand, not `nuxi init`** (no interactive prompts on the phone; five small files beat a generator). `package.json`: `{"name":"shabdar-web","private":true,"type":"module","scripts":{"dev":"nuxt dev","build":"nuxt build","preview":"nuxt preview"},"dependencies":{"nuxt":"^4.6.1"}}`. `.gitignore`: `node_modules`, `.nuxt`, `.output`, `.env*`. `main.css`: system font stack + a few logical-property rules (self-hosted Persian font is deferred — flagged below).
+**Scaffold by hand, not `nuxi init`** (no interactive prompts on the phone; five small files beat a generator). `package.json`: `{"name":"shabdar-web","private":true,"type":"module","scripts":{"dev":"nuxt dev","build":"nuxt build","preview":"nuxt preview"},"dependencies":{"nuxt":"^4.6.1"},"devDependencies":{"typescript":"^6.0.3"}}`. `.gitignore`: `node_modules`, `.nuxt`, `.output`, `.env*`. `main.css`: system font stack + a few logical-property rules (self-hosted Persian font is deferred — flagged below).
 
 - [ ] **Step 1: Install and record the cost (Termux):** `pkg install nodejs npm` (or `nodejs-lts npm`) → `node --version` satisfies `^22.22.3 || ^24.15.0 || >=26.0.0`; `cd apps/web && npm install` — **record wall time and `du -sh node_modules`** for the README (Task 10).
 - [ ] **Step 2: Verify RED (boot check before writing app files):** `npm run dev` with only `package.json` + `nuxt.config.ts` present → expected: Nuxt boots and `/` is the Nuxt welcome/404 (proves toolchain; this is scaffolding — the TDD exception).
-- [ ] **Step 3: Implement** the files above. Persian placeholder copy only (no fake features).
+- [ ] **Step 3: Implement** the files above. Persian placeholder copy only (no fake features). Every `.vue` script uses `<script setup lang="ts">` (approved decision — TS throughout `apps/web`; no typecheck runs in the gate).
 - [ ] **Step 4: Verify GREEN** — `npm run dev` → `curl -s http://localhost:3000/ | grep -o 'lang="fa"'` and `dir="rtl"` both present; page renders in the phone browser.
 - [ ] **Step 5: Commit** — `git add apps/web && git commit -m "feat(web): nuxt 4 rtl skeleton"`.
 
@@ -276,11 +277,13 @@ curl -s http://127.0.0.1:8080/api/v1/unknown       # 404 envelope with "not_foun
 ### Task 7: Login page with the OTP flow + home auth state
 
 **Files:**
-- Create: `apps/web/app/pages/login.vue`, `apps/web/app/pages/index.vue` (replace placeholder) · Modify: `apps/web/app/layouts/default.vue` (nav link)
+- Create: `apps/web/app/pages/login.vue`, `apps/web/app/pages/index.vue` (replace placeholder), `apps/web/app/types.ts` · Modify: `apps/web/app/layouts/default.vue` (nav link)
 
 **Interfaces (consumes):** the proxy from Task 6; API contracts `POST /api/v1/auth/otp/request` `{phone,purpose}` → `{challenge_id,expires_in_seconds,resend_after_seconds}`, `POST /api/v1/auth/otp/verify` `{challenge_id,code}` → sets cookie + `{user:{…},is_new_user}`, `GET /api/v1/me` → `{user:{…}}`, `POST /api/v1/auth/logout` → `{ok:true}`; error envelope `{error:{code,…}}` for messages.
 
-**Login page (single component, local step state — no store):** purpose toggle (ورود / ثبت‌نام → `login`/`register`, PRODUCT.md §3 "separate flows"); step `phone`: phone field (send as typed — the API normalizes Persian digits) + "ارسال کد"; step `code`: shows the entered number with a "ویرایش شماره" button (back to `phone`, number preserved — PRODUCT.md §5-D), code field + submit + resend countdown from `resend_after_seconds`. Error mapping from `error.code`: `invalid_phone`, `rate_limited` (show the wait), `invalid_code`, `challenge_expired`, `challenge_locked`, `no_account` → Persian messages; unknown → generic. On verify 200 → `navigateTo('/')`. Home: `useFetch('/api/v1/me', { headers: useRequestHeaders(['cookie']) })` (the cookie must ride SSR requests), shows `display_name` (or a neutral "کاربر شبدار") when logged in, "خروج" button (`$fetch` POST logout → refresh) or "ورود" link when not.
+**Interfaces (produces):** `app/types.ts` exporting `interface ApiUser { public_id: string; display_name: string | null; is_admin: boolean }` and `interface ApiErrorBody { error: { code: string; message: string; fields?: Record<string, string> }; request_id: string }` (copies of the frozen contracts; both pages import them).
+
+All `.vue` scripts use `<script setup lang="ts">` (approved decision). **Login page (single component, local step state — no store):** purpose toggle (ورود / ثبت‌نام → `login`/`register`, PRODUCT.md §3 "separate flows"); step `phone`: phone field (send as typed — the API normalizes Persian digits) + "ارسال کد"; step `code`: shows the entered number with a "ویرایش شماره" button (back to `phone`, number preserved — PRODUCT.md §5-D), code field + submit + resend countdown from `resend_after_seconds`. Error mapping from `error.code`: `invalid_phone`, `rate_limited` (show the wait), `invalid_code`, `challenge_expired`, `challenge_locked`, `no_account` → Persian messages; unknown → generic. On verify 200 → `navigateTo('/')`. Home: `useFetch('/api/v1/me', { headers: useRequestHeaders(['cookie']) })` (the cookie must ride SSR requests), shows `display_name` (or a neutral "کاربر شبدار") when logged in, "خروج" button (`$fetch` POST logout → refresh) or "ورود" link when not.
 
 - [ ] **Step 1: Write the flow as states first** (scaffolding-quality UI; the expected-failure checks are manual: each state below is asserted in the WP gate). For each state pin the expected rendering: phone step idle/loading/error; code step with countdown; error banner bound to `error.code`.
 - [ ] **Step 2: Implement** the two pages + layout link (Persian copy; RTL logical properties; touch targets ≥ 44 px per ui-ux-pro-max).
@@ -301,9 +304,9 @@ curl -s http://127.0.0.1:8080/api/v1/unknown       # 404 envelope with "not_foun
 4. Browser: login flow (purpose ورود) + "ویرایش شماره" + one wrong code (banner) + resend countdown visible.
 5. Record boot time (`time npm run dev` until "ready") and any Termux quirks for the README.
 
-## Work Package 3 — CSRF + docs (Tasks 8–10) — **GATED: start only after Open question 1 is answered**
+## Work Package 3 — CSRF + docs (Tasks 8–10) — **approved 2026-10-10; no longer gated**
 
-*(Until WP 3 lands, `PATCH /me` and `logout` run without CSRF — accepted for the localhost-only dev phase. Tasks 8–9 below implement the proposal as written; a different answer to Open question 1 re-cuts these two tasks.)*
+*(Until WP 3 lands, `PATCH /me` and `logout` run without CSRF — accepted for the localhost-only dev phase. Tasks 8–9 implement the approved design as written.)*
 
 ### Task 8: CSRF on the API (`shabdar_csrf` + `csrf_failed`)
 
@@ -348,7 +351,7 @@ curl -s http://127.0.0.1:8080/api/v1/unknown       # 404 envelope with "not_foun
 **Files:**
 - Create: `apps/web/README.md` · Modify: `apps/api/README.md`, `docs/API.md`, `docs/STATUS.md`
 
-- [ ] **Step 1: `apps/web/README.md`** — Node/npm install (`pkg`), engines floor, the recorded `npm install` cost + `node_modules` size, `npm run dev` workflow, `NUXT_API_BASE`, `termux-wake-lock`, and the Rolldown/Android note with the contingency used (if any).
+- [ ] **Step 1: `apps/web/README.md`** — Node/npm install (`pkg`), engines floor, the recorded `npm install` cost + `node_modules` size, `npm run dev` workflow, `NUXT_API_BASE`, `termux-wake-lock`, the Rolldown/Android note with the contingency used (if any), and the TypeScript policy line (approved decision): **run `nuxi typecheck` in a Codespace/PC before big merges** (no typecheck in the Termux gate; `vue-tsc` is not installed on the phone).
 - [ ] **Step 2: `apps/api/README.md`** — add `GET/PATCH /me`, `POST /auth/logout` to the endpoint table; the two/three new error codes; the CSRF cookie + `X-CSRF-Token` rule (with the curl recipe: echo the cookie value into the header); remove "Known deviations" item 1 (fixed in Task 4) and update item 2's status (malformed-JSON still open — not this plan).
 - [ ] **Step 3: `docs/API.md`** — add `not_found`, `unauthorized`, `csrf_failed` to the error tables; record the CSRF delivery decision (§1/§14) as decided; pin the `/me` + logout response shapes.
 - [ ] **Step 4: Full manual smoke** — the Phase 1 smoke script + WP gates re-run through the proxy (register → me → PATCH → logout), including one `curl` mutation with the CSRF header (documents the recipe).
@@ -380,17 +383,25 @@ WP 1 and WP 3 are incremental Rust (~2–4 min per `cargo test`, one full suite 
 ## Flagged doc conflicts and gaps
 
 1. **API.md error tables** name no code for 404 or "not authenticated" (and §3 promises "404" without a code). This plan adds `not_found` / `unauthorized` / `csrf_failed`; Task 10 records them. GAP, not contradiction.
-2. **API.md §1** says "CSRF token required for state-changing requests" while **§14** still lists delivery as open. The proposal above resolves delivery (pending Open question 1).
+2. **API.md §1** says "CSRF token required for state-changing requests" while **§14** still lists delivery as open. The design above resolves delivery (**approved 2026-10-10**).
 3. **ARCHITECTURE.md §4** shows `routes/ handlers/ services/ db/ auth/` directories; the Phase 1 plan deferred that split "until a second module needs them" (the listings domain). Listings are out of scope here, so this plan keeps flat modules and re-defers the restructure — a deliberate, already-approved deviation from §4's tree, consistent with §4's own "Keep folders shallow" rule.
-4. **ARCHITECTURE.md §9 (Nuxt/UI)** expects component tests ("OTP form with edit-number"). This plan ships curl checks + manual browser smoke only; a vitest harness is Open question 2 (Node install weight on the phone).
+4. **ARCHITECTURE.md §9 (Nuxt/UI)** expects component tests ("OTP form with edit-number"). This plan ships curl checks + manual browser smoke only; vitest is deferred by decision (revisit after the UI stabilizes).
 5. **ARCHITECTURE.md §8** wants a self-hosted Persian font; the skeleton uses system fonts. Font selection is deferred to a UI phase (must precede public launch).
 6. **STATUS.md "Next: Phase 2" list is broader than this plan.** Per-IP OTP rate limiting, the malformed-JSON error shape, the SMS provider decision, the Persian profanity filter, and the listings domain are **not** in this plan (scope item 5 + the brief's items 1–4). They need follow-up plan(s) (Open question 3).
 7. **API.md §2** never pins the `GET /me` / `PATCH /me` response shapes; this plan pins `{"user":{…}}` per the Phase 1 approved decision ("`/me` reuses this shape").
 
+## Approved decisions (plan review, answered by the user on 2026-10-10)
+
+1. **TypeScript throughout `apps/web`** (the language question the plan left open): `.vue` files use `<script setup lang="ts">`; `typescript` (`^6.0.3`) is the one devDependency; **no typecheck step in the Termux verification gates** (`vue-tsc` is not installed on the phone). `apps/web/README.md` carries the line: run `nuxi typecheck` in a Codespace/PC before big merges. Folded into Global constraints, Dependencies, and Tasks 5, 7, 10.
+2. **CSRF: approved — double-submit cookie `shabdar_csrf`, exactly as proposed** (answers Open question 1). Work Package 3 is unblocked and implements the "CSRF proposal" design of record unchanged.
+3. **Component tests (Open question 2): not yet.** No vitest / `@vue/test-utils` in this phase; revisit after the UI stabilizes.
+
+Questions 3–5 below remain open.
+
 ## Open questions
 
-1. **CSRF: approve the double-submit `shabdar_csrf` cookie proposal** (section "CSRF proposal"): approve as written, or name a different option? **Work Package 3 is blocked on this.**
-2. **Component tests for the OTP form** (ARCHITECTURE.md §9): add vitest + `@vue/test-utils` (extra Node install weight and `node_modules` size on the phone) now, or keep manual smoke for the skeleton and add a test harness in a later phase?
+1. **CSRF: approve the double-submit `shabdar_csrf` cookie proposal** (section "CSRF proposal"): approve as written, or name a different option? **[Answered 2026-10-10 — approved as proposed; see "Approved decisions (plan review)". Work Package 3 is unblocked.]**
+2. **Component tests for the OTP form** (ARCHITECTURE.md §9): add vitest + `@vue/test-utils` (extra Node install weight and `node_modules` size on the phone) now, or keep manual smoke for the skeleton and add a test harness in a later phase? **[Answered 2026-10-10 — not yet; revisit after the UI stabilizes.]**
 3. **Follow-up plans for the rest of STATUS's Phase 2 list** (per-IP OTP rate limits + malformed-JSON error shape, SMS provider, profanity filter, listings domain): confirm they are separate plan(s) after this one, in the order you prefer.
 4. **`GET /me` / `PATCH /me` envelope** `{"user":{"public_id","display_name","is_admin"}}` (Phase 1 shape reuse): confirm, or prefer the user object at the top level?
 5. **Suspended/deleted users** get a generic 401 `unauthorized` from the extractor (no "you are suspended" signal). Confirm, or should a suspended user see a dedicated code (e.g. `account_suspended`) after authentication succeeds?
