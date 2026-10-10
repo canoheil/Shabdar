@@ -11,3 +11,4 @@ pub mod request_id;
 pub mod routes;
 pub mod session;
 pub mod state;
+pub mod user_service;

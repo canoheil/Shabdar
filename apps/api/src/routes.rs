@@ -28,7 +28,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/health", get(health))
         .route("/api/v1/auth/otp/request", post(otp_request))
         .route("/api/v1/auth/otp/verify", post(otp_verify))
-        .route("/api/v1/me", get(me))
+        .route("/api/v1/me", get(me).patch(update_me))
         // Task 1 placeholder until real routes exist; a later task turns the
         // fallback into a proper 404.
         .fallback(placeholder_ok)
@@ -52,6 +52,43 @@ async fn me(user: CurrentUser) -> Json<serde_json::Value> {
             "is_admin": user.is_admin,
         }
     }))
+}
+
+/// Request body for PATCH /api/v1/me (plan Task 2).
+#[derive(Deserialize)]
+struct UpdateMeBody {
+    display_name: Option<String>,
+}
+
+/// PATCH /api/v1/me — set the display name (plan Task 2). Validation:
+/// required, trimmed, 1–80 characters (chars, not bytes — VARCHAR(80) under
+/// utf8mb4). Missing/empty after trim → `required`; over 80 chars → `too_long`.
+async fn update_me(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Json(body): Json<UpdateMeBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let name = body.display_name.unwrap_or_default();
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        let mut fields = BTreeMap::new();
+        fields.insert("display_name".to_string(), "required".to_string());
+        return Err(ApiError::Validation { fields });
+    }
+    if trimmed.chars().count() > 80 {
+        let mut fields = BTreeMap::new();
+        fields.insert("display_name".to_string(), "too_long".to_string());
+        return Err(ApiError::Validation { fields });
+    }
+
+    crate::user_service::update_display_name(&state.pool, user.user_id, trimmed).await?;
+    Ok(Json(serde_json::json!({
+        "user": {
+            "public_id": user.public_id,
+            "display_name": trimmed,
+            "is_admin": user.is_admin,
+        }
+    })))
 }
 
 /// GET /api/v1/health — approved shape (plan review §5):
