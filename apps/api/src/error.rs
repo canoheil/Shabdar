@@ -24,6 +24,14 @@ pub enum ApiError {
     ChallengeExpired,
     ChallengeLocked,
     NoAccount,
+    /// 404 for unknown paths (Phase 2 fallback, `not_found`).
+    NotFound,
+    /// 401 for a missing/invalid/expired session or non-active user
+    /// (Phase 2 extractor, `unauthorized` — deliberately generic).
+    Unauthorized,
+    /// 403 when `X-CSRF-Token` is missing or ≠ the `shabdar_csrf` cookie
+    /// (Phase 2 CSRF, `csrf_failed`).
+    CsrfFailed,
     Internal,
 }
 
@@ -37,7 +45,10 @@ impl ApiError {
             ApiError::InvalidCode
             | ApiError::ChallengeExpired
             | ApiError::ChallengeLocked
-            | ApiError::NoAccount => StatusCode::UNAUTHORIZED,
+            | ApiError::NoAccount
+            | ApiError::Unauthorized => StatusCode::UNAUTHORIZED,
+            ApiError::NotFound => StatusCode::NOT_FOUND,
+            ApiError::CsrfFailed => StatusCode::FORBIDDEN,
             ApiError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -52,6 +63,9 @@ impl ApiError {
             ApiError::ChallengeExpired => "challenge_expired",
             ApiError::ChallengeLocked => "challenge_locked",
             ApiError::NoAccount => "no_account",
+            ApiError::NotFound => "not_found",
+            ApiError::Unauthorized => "unauthorized",
+            ApiError::CsrfFailed => "csrf_failed",
             ApiError::Internal => "internal_error",
         }
     }
@@ -68,6 +82,9 @@ impl ApiError {
             ApiError::ChallengeExpired => "Code expired; request a new one",
             ApiError::ChallengeLocked => "Too many wrong attempts; request a new code",
             ApiError::NoAccount => "No account exists for this phone number",
+            ApiError::NotFound => "Not found",
+            ApiError::Unauthorized => "Not authenticated",
+            ApiError::CsrfFailed => "CSRF token missing or invalid",
             ApiError::Internal => "Internal server error",
         }
     }
@@ -119,11 +136,11 @@ mod tests {
             .collect()
     }
 
-    /// The plan's contract table, pinned exactly: HTTP status + code for all 9
+    /// The plan's contract table, pinned exactly: HTTP status + code for all 12
     /// variants, plus a non-empty message on every one.
     #[tokio::test]
     async fn status_and_code_match_contract_for_every_variant() {
-        let cases: [(super::ApiError, StatusCode, &str); 9] = [
+        let cases: [(super::ApiError, StatusCode, &str); 12] = [
             (
                 super::ApiError::Validation { fields: fields(&[]) },
                 StatusCode::BAD_REQUEST,
@@ -156,6 +173,18 @@ mod tests {
                 super::ApiError::Internal,
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internal_error",
+            ),
+            // Phase 2 additions (docs/PHASE2_PLAN.md "Error contract additions").
+            (super::ApiError::NotFound, StatusCode::NOT_FOUND, "not_found"),
+            (
+                super::ApiError::Unauthorized,
+                StatusCode::UNAUTHORIZED,
+                "unauthorized",
+            ),
+            (
+                super::ApiError::CsrfFailed,
+                StatusCode::FORBIDDEN,
+                "csrf_failed",
             ),
         ];
         for (err, want_status, want_code) in cases {

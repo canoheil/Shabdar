@@ -11,11 +11,13 @@ use shabdar_api::db::run_migrations;
 /// Both DB tests share one database; run them one at a time.
 static DB_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-/// Drop only what migration 0001 owns (plus sqlx's bookkeeping table, so the
-/// run truly starts at zero). Callers run through common::test_pool(), which
-/// already refused every database not named *_test.
+/// Drop everything the migrations own (plus sqlx's bookkeeping table, so the
+/// run truly starts at zero), in FK dependency order — child tables first:
+/// `sessions.user_id` references `users.id` (fk_sessions_user), so dropping
+/// `users` before `sessions` fails with error 1451. Callers run through
+/// common::test_pool(), which already refused every database not named *_test.
 async fn drop_owned_tables(pool: &sqlx::MySqlPool) {
-    for table in ["otp_challenges", "users", "_sqlx_migrations"] {
+    for table in ["sessions", "otp_challenges", "users", "_sqlx_migrations"] {
         let sql = format!("DROP TABLE IF EXISTS {table}"); // fixed literals, not user input
         sqlx::query(&sql).execute(pool).await.expect("drop failed");
     }
@@ -32,7 +34,7 @@ async fn migrations_apply_on_empty_database() {
 
     run_migrations(&pool).await.expect("first apply must succeed");
 
-    for table in ["users", "otp_challenges"] {
+    for table in ["users", "otp_challenges", "sessions"] {
         let sql = format!("SELECT COUNT(*) AS c FROM {table}"); // fixed literals
         let row = sqlx::query(&sql)
             .fetch_one(&pool)

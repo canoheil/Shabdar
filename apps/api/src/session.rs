@@ -2,12 +2,17 @@
 //! (docs/PHASE1_PLAN.md, Task 9; migration 0002). The raw token is returned
 //! to the client once and never persisted.
 
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
+use axum::http::HeaderMap;
 use chrono::{Duration, Utc};
 use sha2::{Digest, Sha256};
 use sqlx::MySqlPool;
+use sqlx::Row;
 
 use crate::config::Config;
 use crate::error::ApiError;
+use crate::state::AppState;
 
 /// Generate a session token: 32 random bytes, hex-encoded (64 chars).
 pub fn generate_token() -> String {
@@ -56,6 +61,104 @@ pub async fn create_session(
     .await
     .map_err(|_| ApiError::Internal)?;
     Ok(token)
+}
+
+/// The exact Set-Cookie value that clears the session cookie: same flags as
+/// build_set_cookie with Max-Age=0 (flag parity — Review Focus 4).
+pub fn build_clear_cookie(cfg: &Config) -> String {
+    let mut cookie = format!(
+        "{}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0",
+        cfg.cookie_name
+    );
+    if cfg.cookie_secure {
+        cookie.push_str("; Secure");
+    }
+    cookie
+}
+
+/// Revoke exactly the presented session (approved decision 5 — bulk
+/// revocation by user_id is the later admin phase).
+pub async fn delete_session(pool: &MySqlPool, session_id: u64) -> Result<(), ApiError> {
+    sqlx::query("DELETE FROM sessions WHERE id = ?")
+        .bind(session_id)
+        .execute(pool)
+        .await
+        .map_err(|_| ApiError::Internal)?;
+    Ok(())
+}
+
+/// The authenticated user behind a valid `shabdar_session` cookie (Phase 2,
+/// docs/PHASE2_PLAN.md Task 1). Rejection is deliberately generic: a missing
+/// cookie, an unknown or expired session, and a non-active user all get the
+/// same 401 `unauthorized` (ARCHITECTURE.md §7 — no probing signal).
+pub struct CurrentUser {
+    pub session_id: u64,
+    pub user_id: u64,
+    pub public_id: String,
+    pub display_name: Option<String>,
+    pub is_admin: bool,
+}
+
+/// Pull `name=value` out of the Cookie header(s); None when absent.
+/// Also used by csrf.rs for the `shabdar_csrf` double-submit check.
+pub fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
+    for header in headers.get_all(axum::http::header::COOKIE) {
+        let Ok(text) = header.to_str() else {
+            continue;
+        };
+        for pair in text.split(';') {
+            if let Some((key, value)) = pair.trim().split_once('=') {
+                if key == name {
+                    return Some(value.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+impl FromRequestParts<AppState> for CurrentUser {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        // Missing Cookie header or missing COOKIE_NAME entry → generic 401.
+        let token =
+            cookie_value(&parts.headers, &state.config.cookie_name).ok_or(ApiError::Unauthorized)?;
+        let token_hash = hash_token(&token);
+        // One joined lookup (plan Task 1): session + user in a single query.
+        let row = sqlx::query(
+            "SELECT s.id AS session_id, s.expires_at, u.id AS user_id, \
+             u.public_id, u.display_name, u.is_admin, u.status \
+             FROM sessions s JOIN users u ON u.id = s.user_id \
+             WHERE s.token_hash = ?",
+        )
+        .bind(&token_hash[..])
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|_| ApiError::Internal)?
+        .ok_or(ApiError::Unauthorized)?;
+        let expires_at: chrono::DateTime<Utc> =
+            row.try_get("expires_at").map_err(|_| ApiError::Internal)?;
+        // Expired at or past the boundary → generic 401. No lazy delete;
+        // cleanup jobs are a later phase.
+        if expires_at <= Utc::now() {
+            return Err(ApiError::Unauthorized);
+        }
+        let status: String = row.try_get("status").map_err(|_| ApiError::Internal)?;
+        if status != "active" {
+            return Err(ApiError::Unauthorized);
+        }
+        Ok(CurrentUser {
+            session_id: row.try_get("session_id").map_err(|_| ApiError::Internal)?,
+            user_id: row.try_get("user_id").map_err(|_| ApiError::Internal)?,
+            public_id: row.try_get("public_id").map_err(|_| ApiError::Internal)?,
+            display_name: row.try_get("display_name").map_err(|_| ApiError::Internal)?,
+            is_admin: row.try_get("is_admin").map_err(|_| ApiError::Internal)?,
+        })
+    }
 }
 
 /// Lowercase hex of a byte slice (no hex crate — five lines, per the plan's ladder).
@@ -127,6 +230,21 @@ mod tests {
         assert_eq!(
             build_set_cookie(&cfg, "tok123"),
             "shabdar_session=tok123; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000; Secure"
+        );
+    }
+
+    #[test]
+    fn clear_cookie_has_the_approved_flags() {
+        // Flag parity with build_set_cookie (Review Focus 4), Max-Age=0.
+        let cfg = test_cfg(false);
+        assert_eq!(
+            build_clear_cookie(&cfg),
+            "shabdar_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+        );
+        let cfg = test_cfg(true);
+        assert_eq!(
+            build_clear_cookie(&cfg),
+            "shabdar_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure"
         );
     }
 }

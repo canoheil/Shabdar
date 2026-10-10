@@ -1,10 +1,13 @@
 # Shabdar API (`apps/api`)
 
-Rust + Axum REST API for the Shabdar marketplace. Phase 1 scope: MariaDB via
-sqlx (runtime queries only — no compile-time macros), `GET /api/v1/health`,
-and dev-mode OTP login (`POST /api/v1/auth/otp/request` +
-`POST /api/v1/auth/otp/verify`) issuing a 30-day session cookie. The Nuxt
-frontend and the listings domain are Phase 2.
+Rust + Axum REST API for the Shabdar marketplace. Phase 1 + 2 scope: MariaDB
+via sqlx (runtime queries only — no compile-time macros), `GET /api/v1/health`,
+dev-mode OTP login (`POST /api/v1/auth/otp/request` +
+`POST /api/v1/auth/otp/verify`) issuing a 30-day session cookie + a CSRF
+cookie, the session surface (`GET`/`PATCH /api/v1/me`,
+`POST /api/v1/auth/logout`), and a `404 not_found` fallback. The Nuxt frontend
+lives in `apps/web` and talks to this API through its same-origin `/api`
+proxy. The listings domain is next.
 
 Development happens on Termux (Android). No Docker; MariaDB runs as a native
 service on the phone.
@@ -85,18 +88,41 @@ Keep the phone awake during long runs: `termux-wake-lock`.
   edit: seconds. Measure and record the first cold `cargo build` / `cargo test`
   on your device when you run them.
 
-## Endpoints (Phase 1)
+## Endpoints (Phase 1–2)
 
 | Method | Path | Summary |
 |---|---|---|
 | GET | `/api/v1/health` | 200 `{"status":"ok","database":"ok"}` or 503 `{"status":"error","database":"error"}` |
 | POST | `/api/v1/auth/otp/request` | Body `{"phone","purpose"}` → `{"challenge_id","expires_in_seconds","resend_after_seconds"}` |
-| POST | `/api/v1/auth/otp/verify` | Body `{"challenge_id","code"}` → sets the `shabdar_session` cookie, returns `{"user":{"public_id","display_name","is_admin"},"is_new_user"}` |
+| POST | `/api/v1/auth/otp/verify` | Body `{"challenge_id","code"}` → sets the `shabdar_session` cookie (`Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`) and the `shabdar_csrf` cookie (`Path=/; SameSite=Lax`, **not** HttpOnly), returns `{"user":{"public_id","display_name","is_admin"},"is_new_user"}` |
+| POST | `/api/v1/auth/logout` | Requires session + `X-CSRF-Token` (double-submit; see below). Revokes exactly the presented session, clears both cookies → `{"ok":true}` |
+| GET | `/api/v1/me` | Requires session → `{"user":{"public_id","display_name","is_admin"}}` |
+| PATCH | `/api/v1/me` | Requires session + `X-CSRF-Token`. Body `{"display_name":"…"}` (trimmed, 1–80 chars) → the same `{"user":{…}}` shape with the new value. Field errors: `fields: {"display_name":"required"|"too_long"}` |
 
 Error envelope (all endpoints): `{"error":{"code","message","fields"?},"request_id"}`.
 Auth error codes: `validation_error`, `invalid_phone`, `invalid_purpose`,
 `rate_limited`, `invalid_code`, `challenge_expired`, `challenge_locked`,
 `no_account`, `internal_error`.
+Session/fallback codes: `unauthorized` (401, missing/invalid/expired session
+or non-active user — generic, no probing), `csrf_failed` (403, header missing
+or ≠ the cookie), `not_found` (404 fallback for unknown paths).
+
+### CSRF (Phase 2)
+
+`otp/verify` sets two cookies: `shabdar_session` (HttpOnly) and `shabdar_csrf`
+(**not** HttpOnly). Every state-changing request that uses a session (today
+`PATCH /me`, `POST /auth/logout`) must send header `X-CSRF-Token` equal to the
+`shabdar_csrf` cookie value — mismatch or absence → 403 `csrf_failed`, no
+state change. The Nuxt proxy injects the header from the cookie on mutations,
+so the browser never handles the token. curl recipe:
+
+```sh
+curl -s -X PATCH http://127.0.0.1:8080/api/v1/me \
+  -H 'content-type: application/json' \
+  -H "cookie: shabdar_session=$SESSION; shabdar_csrf=$CSRF" \
+  -H "x-csrf-token: $CSRF" \
+  -d '{"display_name":"کاربر"}'
+```
 
 ## Smoke test (manual, on the phone)
 
@@ -108,11 +134,9 @@ With `OTP_DEV_MODE=true` in a debug build:
 4. Correct code → 200; `curl -i` shows the exact cookie flags (`Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`).
 5. Restart the server → the old cookie still works (the session row survives — end-to-end proof).
 
-## Known deviations (Phase 1)
+## Known deviations (WP 1–2)
 
-- Unknown paths fall back to a placeholder `200 ok` instead of a 404 error
-  envelope (decide before Phase 2).
 - Malformed JSON bodies get axum's default rejection body, not the error
-  envelope (Phase 2 error-hardening pass).
+  envelope. **Not in the Phase 2 plan — needs a follow-up plan.**
 - No SMS provider: debug builds print the OTP code to the log; real SMS
   sending arrives with the provider decision.
