@@ -15,5 +15,19 @@ export default defineEventHandler(async (event) => {
   if (cookie) setHeader(event, 'cookie', cookie)
   const ip = getRequestIP(event, { xForwarded: true })
   if (ip) setHeader(event, 'x-forwarded-for', ip)
+  // CSRF header injection (plan Task 9): on mutations, copy the shabdar_csrf
+  // cookie value into X-CSRF-Token when the client did not send one — browser
+  // code never handles the token.
+  const method = event.method.toUpperCase()
+  const isMutation =
+    method === 'POST' || method === 'PATCH' || method === 'PUT' || method === 'DELETE'
+  if (isMutation && !getHeader(event, 'x-csrf-token') && cookie) {
+    const csrf = cookie
+      .split(';')
+      .map((pair) => pair.trim())
+      .find((pair) => pair.startsWith('shabdar_csrf='))
+      ?.slice('shabdar_csrf='.length)
+    if (csrf) setHeader(event, 'x-csrf-token', csrf)
+  }
   return proxyRequest(event, joinURL(config.apiBase, event.path))
 })
