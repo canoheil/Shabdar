@@ -34,7 +34,7 @@ Phase 1 complete: all 10 tasks merged to main (PR #4, 61bb87a — part A PR #3 +
 - Verify MariaDB version and spatial behavior before the nearby feature.
 
 ## Last commit
-Phase 2 WP 1 (plan Tasks 1–4) on `arena/6945d175-shabdar`, RED and GREEN commits per task: `CurrentUser` extractor (generic 401 `unauthorized`), `GET/PATCH /api/v1/me`, `POST /api/v1/auth/logout`, 404 `not_found` fallback. **UNVERIFIED — `cargo test` / `cargo clippy --all-targets -- -D warnings` not run (no cargo in the sandbox); verified nowhere yet.**
+fix(api): drop child tables first in migrations test — Termux run found `tests/db_migrations.rs` dropping parent `users` before child `sessions` (error 1451 via `fk_sessions_user`); now drops in dependency order (sessions → otp_challenges → users → _sqlx_migrations) and `migrations_apply_on_empty_database` also asserts `sessions` exists after migrate. **Still UNVERIFIED: the first Termux run had clippy clean and 32 unit + 15 auth_otp green but stopped at this failure — session_auth, not_found, health have not run yet. Re-run `cargo test` (full suite) and `cargo clippy --all-targets -- -D warnings`.**
 
 ## Open items for later tasks
 - Placeholder 200 `ok` fallback (apps/api/src/routes.rs): **fixed by docs/PHASE2_PLAN.md Task 4 (404 `not_found` envelope) — UNVERIFIED** (landed in WP 1, pending the Termux run).
