@@ -207,4 +207,19 @@ mod tests {
             "shabdar_session=tok123; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000; Secure"
         );
     }
+
+    #[test]
+    fn clear_cookie_has_the_approved_flags() {
+        // Flag parity with build_set_cookie (Review Focus 4), Max-Age=0.
+        let cfg = test_cfg(false);
+        assert_eq!(
+            build_clear_cookie(&cfg),
+            "shabdar_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+        );
+        let cfg = test_cfg(true);
+        assert_eq!(
+            build_clear_cookie(&cfg),
+            "shabdar_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure"
+        );
+    }
 }

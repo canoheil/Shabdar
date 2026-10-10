@@ -9,6 +9,7 @@ mod common;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
+use sqlx::Row;
 use tower::ServiceExt;
 
 /// All auth tests share one database; run them one at a time.
@@ -70,6 +71,20 @@ async fn patch_json(
         builder = builder.header("cookie", value);
     }
     let req = builder.body(Body::from(body.to_string())).unwrap();
+    app.oneshot(req).await.unwrap()
+}
+
+/// POST with an empty body and an optional raw `Cookie:` header value.
+async fn post_with_cookie(
+    app: axum::Router,
+    path: &str,
+    cookie: Option<&str>,
+) -> axum::response::Response {
+    let mut builder = Request::builder().method("POST").uri(path);
+    if let Some(value) = cookie {
+        builder = builder.header("cookie", value);
+    }
+    let req = builder.body(Body::empty()).unwrap();
     app.oneshot(req).await.unwrap()
 }
 
@@ -408,6 +423,96 @@ async fn patch_me_without_cookie_is_401_unauthorized() {
         serde_json::json!({ "display_name": "کاربر" }),
     )
     .await;
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(error_code(&json_body(resp).await), "unauthorized");
+}
+
+// --- Task 3: POST /api/v1/auth/logout --------------------------------------
+
+#[tokio::test]
+async fn logout_revokes_the_session_and_clears_the_cookie() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    let resp = post_with_cookie(app.clone(), "/api/v1/auth/logout", Some(&cookie)).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    // Owned copy first: json_body(resp) below moves the response.
+    let set_cookie = resp
+        .headers()
+        .get(axum::http::header::SET_COOKIE)
+        .expect("Set-Cookie header")
+        .to_str()
+        .expect("ascii cookie")
+        .to_string();
+    // Clearing cookie with matching flags and Max-Age=0 (Review Focus 4).
+    assert_eq!(
+        set_cookie,
+        "shabdar_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+    );
+    let body = json_body(resp).await;
+    assert_eq!(body, serde_json::json!({ "ok": true }));
+
+    // The sessions row is gone.
+    let row = sqlx::query("SELECT COUNT(*) AS c FROM sessions")
+        .fetch_one(&pool)
+        .await
+        .expect("count");
+    assert_eq!(row.try_get::<i64, _>("c").expect("count"), 0);
+
+    // Replaying the same cookie afterwards → 401.
+    let resp = get_with_cookie(app, "/api/v1/me", Some(&cookie)).await;
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(error_code(&json_body(resp).await), "unauthorized");
+}
+
+#[tokio::test]
+async fn logout_revokes_only_the_presented_session() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let mut cfg = common::test_config();
+    // Two sessions for one user: disable the resend cooldown.
+    cfg.otp_resend_secs = 0;
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie_a, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (cookie_b, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    let resp = post_with_cookie(app.clone(), "/api/v1/auth/logout", Some(&cookie_a)).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Exactly one session revoked (approved decision 5).
+    let row = sqlx::query("SELECT COUNT(*) AS c FROM sessions")
+        .fetch_one(&pool)
+        .await
+        .expect("count");
+    assert_eq!(row.try_get::<i64, _>("c").expect("count"), 1);
+
+    // Session B still works; session A is dead.
+    let resp = get_with_cookie(app.clone(), "/api/v1/me", Some(&cookie_b)).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let resp = get_with_cookie(app, "/api/v1/me", Some(&cookie_a)).await;
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(error_code(&json_body(resp).await), "unauthorized");
+}
+
+#[tokio::test]
+async fn logout_without_cookie_is_401_unauthorized() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let app = common::spawn_app(common::test_config()).await;
+
+    let resp = post_with_cookie(app, "/api/v1/auth/logout", None).await;
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(error_code(&json_body(resp).await), "unauthorized");
 }
