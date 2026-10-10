@@ -26,7 +26,7 @@
 
 1. **`user` object shape** (PHASE1 plan review item 3): `GET /me` and `PATCH /me` return exactly `{"user":{"public_id","display_name","is_admin"}}`; `POST /auth/logout` returns exactly `{"ok":true}`.
 2. **New error codes** (additions to the frozen set, never renames): `not_found` (404), `unauthorized` (401), `csrf_failed` (403). See "Error contract additions".
-3. **Extractor rejection is generic:** missing cookie, unknown/expired session, and suspended/deleted users all return 401 `unauthorized` — no probing signal (ARCHITECTURE.md §7). (Confirm — Open question 5.)
+3. **Extractor rejection is generic:** missing cookie, unknown/expired session, and suspended/deleted users all return 401 `unauthorized` — no probing signal (ARCHITECTURE.md §7). Confirmed 2026-10-10 (plan review item 6): no dedicated code.
 4. **`display_name` validation:** required, trimmed, 1–80 **characters** (not bytes — `VARCHAR(80)` under `utf8mb4`); missing/empty → `validation_error` with `fields: {"display_name":"required"}`, over 80 chars → `fields: {"display_name":"too_long"}`. No charset rules (free text; Persian names are the norm).
 5. **Logout revokes exactly one session** (the presented one): `DELETE FROM sessions WHERE id = ?` using the extractor's `session_id`. "Suspension ends all sessions" (bulk delete by `user_id`) is the later admin phase; the `(user_id, expires_at)` index already serves it.
 6. **Execution method (carried over from Phase 1 plan review item 8):** the agent implements the tasks in session; the user runs `cargo test` / browser smoke on Termux and pastes the output back. The agent commits and pushes to the session branch; **no PRs** (the user opens them).
@@ -387,7 +387,7 @@ WP 1 and WP 3 are incremental Rust (~2–4 min per `cargo test`, one full suite 
 3. **ARCHITECTURE.md §4** shows `routes/ handlers/ services/ db/ auth/` directories; the Phase 1 plan deferred that split "until a second module needs them" (the listings domain). Listings are out of scope here, so this plan keeps flat modules and re-defers the restructure — a deliberate, already-approved deviation from §4's tree, consistent with §4's own "Keep folders shallow" rule.
 4. **ARCHITECTURE.md §9 (Nuxt/UI)** expects component tests ("OTP form with edit-number"). This plan ships curl checks + manual browser smoke only; vitest is deferred by decision (revisit after the UI stabilizes).
 5. **ARCHITECTURE.md §8** wants a self-hosted Persian font; the skeleton uses system fonts. Font selection is deferred to a UI phase (must precede public launch).
-6. **STATUS.md "Next: Phase 2" list is broader than this plan.** Per-IP OTP rate limiting, the malformed-JSON error shape, the SMS provider decision, the Persian profanity filter, and the listings domain are **not** in this plan (scope item 5 + the brief's items 1–4). They need follow-up plan(s) (Open question 3).
+6. **STATUS.md "Next: Phase 2" list is broader than this plan.** Per-IP OTP rate limiting, the malformed-JSON error shape, the SMS provider decision, the Persian profanity filter, and the listings domain are **not** in this plan (scope item 5 + the brief's items 1–4). They need follow-up plan(s) in the decided order (plan review item 4: (a) listings, (b) per-IP OTP limits + malformed-JSON, (c) profanity filter, (d) SMS provider).
 7. **API.md §2** never pins the `GET /me` / `PATCH /me` response shapes; this plan pins `{"user":{…}}` per the Phase 1 approved decision ("`/me` reuses this shape").
 
 ## Approved decisions (plan review, answered by the user on 2026-10-10)
@@ -395,13 +395,16 @@ WP 1 and WP 3 are incremental Rust (~2–4 min per `cargo test`, one full suite 
 1. **TypeScript throughout `apps/web`** (the language question the plan left open): `.vue` files use `<script setup lang="ts">`; `typescript` (`^6.0.3`) is the one devDependency; **no typecheck step in the Termux verification gates** (`vue-tsc` is not installed on the phone). `apps/web/README.md` carries the line: run `nuxi typecheck` in a Codespace/PC before big merges. Folded into Global constraints, Dependencies, and Tasks 5, 7, 10.
 2. **CSRF: approved — double-submit cookie `shabdar_csrf`, exactly as proposed** (answers Open question 1). Work Package 3 is unblocked and implements the "CSRF proposal" design of record unchanged.
 3. **Component tests (Open question 2): not yet.** No vitest / `@vue/test-utils` in this phase; revisit after the UI stabilizes.
+4. **Follow-up plan order (answers Open question 3):** confirmed — the rest of STATUS's Phase 2 list lands in separate plans after this one, in this order: (a) listings domain (categories, cities, listing create/submit, uploads, admin queue), (b) per-IP OTP rate limits + malformed-JSON error shape, (c) profanity filter, (d) SMS provider.
+5. **`GET /me` / `PATCH /me` envelope (answers Open question 4):** keep `{"user":{"public_id","display_name","is_admin"}}` exactly as pinned (Phase 1 shape reuse).
+6. **Suspended/deleted users (answers Open question 5):** generic 401 `unauthorized` from the extractor; **no dedicated code** (no `account_suspended`).
 
-Questions 3–5 below remain open.
+All five open questions are answered (2026-10-10); the numbered list below is kept for the record.
 
 ## Open questions
 
 1. **CSRF: approve the double-submit `shabdar_csrf` cookie proposal** (section "CSRF proposal"): approve as written, or name a different option? **[Answered 2026-10-10 — approved as proposed; see "Approved decisions (plan review)". Work Package 3 is unblocked.]**
 2. **Component tests for the OTP form** (ARCHITECTURE.md §9): add vitest + `@vue/test-utils` (extra Node install weight and `node_modules` size on the phone) now, or keep manual smoke for the skeleton and add a test harness in a later phase? **[Answered 2026-10-10 — not yet; revisit after the UI stabilizes.]**
-3. **Follow-up plans for the rest of STATUS's Phase 2 list** (per-IP OTP rate limits + malformed-JSON error shape, SMS provider, profanity filter, listings domain): confirm they are separate plan(s) after this one, in the order you prefer.
-4. **`GET /me` / `PATCH /me` envelope** `{"user":{"public_id","display_name","is_admin"}}` (Phase 1 shape reuse): confirm, or prefer the user object at the top level?
-5. **Suspended/deleted users** get a generic 401 `unauthorized` from the extractor (no "you are suspended" signal). Confirm, or should a suspended user see a dedicated code (e.g. `account_suspended`) after authentication succeeds?
+3. **Follow-up plans for the rest of STATUS's Phase 2 list** (per-IP OTP rate limits + malformed-JSON error shape, SMS provider, profanity filter, listings domain): confirm they are separate plan(s) after this one, in the order you prefer. **[Answered 2026-10-10 — confirmed: separate plans after this one, in order (a) listings domain (categories, cities, listing create/submit, uploads, admin queue), (b) per-IP OTP rate limits + malformed-JSON error shape, (c) profanity filter, (d) SMS provider.]**
+4. **`GET /me` / `PATCH /me` envelope** `{"user":{"public_id","display_name","is_admin"}}` (Phase 1 shape reuse): confirm, or prefer the user object at the top level? **[Answered 2026-10-10 — keep the `{"user":{…}}` envelope as pinned.]**
+5. **Suspended/deleted users** get a generic 401 `unauthorized` from the extractor (no "you are suspended" signal). Confirm, or should a suspended user see a dedicated code (e.g. `account_suspended`) after authentication succeeds? **[Answered 2026-10-10 — generic 401 `unauthorized`; no dedicated code.]**
