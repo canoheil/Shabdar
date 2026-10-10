@@ -119,11 +119,11 @@ mod tests {
             .collect()
     }
 
-    /// The plan's contract table, pinned exactly: HTTP status + code for all 9
+    /// The plan's contract table, pinned exactly: HTTP status + code for all 11
     /// variants, plus a non-empty message on every one.
     #[tokio::test]
     async fn status_and_code_match_contract_for_every_variant() {
-        let cases: [(super::ApiError, StatusCode, &str); 9] = [
+        let cases: [(super::ApiError, StatusCode, &str); 11] = [
             (
                 super::ApiError::Validation { fields: fields(&[]) },
                 StatusCode::BAD_REQUEST,
@@ -156,6 +156,13 @@ mod tests {
                 super::ApiError::Internal,
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internal_error",
+            ),
+            // Phase 2 additions (docs/PHASE2_PLAN.md "Error contract additions").
+            (super::ApiError::NotFound, StatusCode::NOT_FOUND, "not_found"),
+            (
+                super::ApiError::Unauthorized,
+                StatusCode::UNAUTHORIZED,
+                "unauthorized",
             ),
         ];
         for (err, want_status, want_code) in cases {
