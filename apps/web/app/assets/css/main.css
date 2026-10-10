@@ -1,0 +1,118 @@
+/* Base styles for the RTL shell (docs/PHASE2_PLAN.md Task 5). System fonts
+   for now — a self-hosted Persian font is deferred to a UI phase
+   (ARCHITECTURE.md §8). Logical properties only, so RTL needs no mirror
+   rules. Touch targets stay >= 44px (ui-ux-pro-max). */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, 'Segoe UI', Tahoma, Arial, sans-serif;
+  line-height: 1.7;
+  color: #1a1a1a;
+  background: #fafafa;
+}
+
+.shell {
+  min-block-size: 100dvh; /* dvh, not vh — mobile browser chrome */
+  display: flex;
+  flex-direction: column;
+}
+
+.shell__header,
+.shell__main,
+.shell__footer {
+  padding-inline: 1rem;
+}
+
+.shell__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 0.5rem;
+  border-block-end: 1px solid #e0e0e0;
+  background: #fff;
+}
+
+.shell__brand {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: inherit;
+  text-decoration: none;
+}
+
+.shell__nav {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.shell__main {
+  flex: 1;
+  inline-size: 100%;
+  max-inline-size: 40rem;
+  margin-inline: auto;
+  padding-block: 1.5rem;
+}
+
+.shell__footer {
+  padding-block: 0.75rem;
+  border-block-start: 1px solid #e0e0e0;
+  color: #666;
+  font-size: 0.875rem;
+  background: #fff;
+}
+
+/* Buttons and inputs: >= 44px touch targets (ui-ux-pro-max). */
+.btn {
+  min-block-size: 44px;
+  padding-inline: 1.25rem;
+  padding-block: 0.5rem;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: #2b6cb0;
+  border: 1px solid #2b6cb0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn--secondary {
+  color: #2b6cb0;
+  background: #fff;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.field__input {
+  min-block-size: 44px;
+  inline-size: 100%;
+  padding-inline: 0.75rem;
+  font: inherit;
+  border: 1px solid #cbd5e0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.field__input:focus {
+  outline: 2px solid #2b6cb0;
+  outline-offset: 2px;
+}
+
+a {
+  color: #2b6cb0;
+}
