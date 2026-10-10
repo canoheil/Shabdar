@@ -30,17 +30,17 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/auth/otp/verify", post(otp_verify))
         .route("/api/v1/auth/logout", post(logout))
         .route("/api/v1/me", get(me).patch(update_me))
-        // Task 1 placeholder until real routes exist; a later task turns the
-        // fallback into a proper 404.
-        .fallback(placeholder_ok)
+        // Unknown paths: 404 in the documented envelope (plan Task 4).
+        .fallback(not_found)
         // Request IDs wrap every route, fallback included.
         .layer(middleware::from_fn(request_id_middleware))
         .with_state(state)
 }
 
-/// Placeholder handler: the literal string `ok`.
-async fn placeholder_ok() -> &'static str {
-    "ok"
+/// Fallback: unknown paths get 404 `not_found` in the documented envelope
+/// (plan Task 4).
+async fn not_found() -> axum::response::Response {
+    ApiError::NotFound.into_response()
 }
 
 /// GET /api/v1/me — the pinned Phase 1 user shape (PHASE2 plan review 5):
