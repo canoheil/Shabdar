@@ -32,17 +32,61 @@ pub fn build_csrf_clear_cookie(cfg: &Config) -> String {
     cookie
 }
 
-/// Double-submit check: the X-CSRF-Token header must equal the shabdar_csrf
-/// cookie value (both present, equal). Any mismatch or absence → 403
-/// `csrf_failed`; the calling handler must not mutate anything.
+/// Every `shabdar_csrf` value across all `Cookie` headers. The check needs
+/// the complete list: exactly one value is required, because a duplicated
+/// cookie (cookie tossing) must not be silently ignored.
+fn csrf_cookie_values(headers: &HeaderMap) -> Vec<&str> {
+    let mut values = Vec::new();
+    for header in headers.get_all(axum::http::header::COOKIE) {
+        let Ok(text) = header.to_str() else {
+            continue;
+        };
+        for pair in text.split(';') {
+            if let Some((name, value)) = pair.trim().split_once('=') {
+                if name == CSRF_COOKIE_NAME {
+                    values.push(value);
+                }
+            }
+        }
+    }
+    values
+}
+
+/// Constant-time byte equality (dependency set is frozen — no `subtle`
+/// crate). Lengths are compared first; token lengths are not secret (ULIDs
+/// are fixed-width) and an early reject only reveals "different length".
+fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+/// Double-submit check: exactly one non-blank `shabdar_csrf` cookie value
+/// and a non-blank `X-CSRF-Token` header, equal in constant time. Empty or
+/// blank tokens never match (`"" == ""` is not proof of anything), duplicated
+/// cookies are rejected (cookie tossing), and any other mismatch or absence
+/// → 403 `csrf_failed`; the calling handler must not mutate anything.
 pub fn check_csrf(headers: &HeaderMap) -> Result<(), ApiError> {
-    let cookie =
-        crate::session::cookie_value(headers, CSRF_COOKIE_NAME).ok_or(ApiError::CsrfFailed)?;
-    let token = headers
+    let values = csrf_cookie_values(headers);
+    if values.len() != 1 {
+        return Err(ApiError::CsrfFailed);
+    }
+    let cookie = values[0];
+    let Some(token) = headers
         .get("x-csrf-token")
         .and_then(|value| value.to_str().ok())
-        .ok_or(ApiError::CsrfFailed)?;
-    if token == cookie {
+    else {
+        return Err(ApiError::CsrfFailed);
+    };
+    if cookie.trim().is_empty() || token.trim().is_empty() {
+        return Err(ApiError::CsrfFailed);
+    }
+    if ct_eq(cookie.as_bytes(), token.as_bytes()) {
         Ok(())
     } else {
         Err(ApiError::CsrfFailed)
@@ -110,25 +154,97 @@ mod tests {
     }
 
     #[test]
-    fn check_csrf_passes_only_on_matching_header_and_cookie() {
+    fn check_csrf_accepts_a_matching_pair_and_real_cookie_shapes() {
         let good = headers(Some("shabdar_csrf=tok123"), Some("tok123"));
         assert!(check_csrf(&good).is_ok(), "matching pair must pass");
         assert!(
             check_csrf(&good).is_ok(),
             "check must be repeatable (GETs skip it; mutations call once)"
         );
+        // The real browser/proxy shape: session cookie alongside the csrf one.
+        let both = headers(
+            Some("shabdar_session=abc; shabdar_csrf=tok123"),
+            Some("tok123"),
+        );
+        assert!(
+            check_csrf(&both).is_ok(),
+            "the session cookie must not confuse the scan"
+        );
+    }
 
-        // Missing header, wrong header, missing cookie, empty cookie.
-        for map in [
-            headers(Some("shabdar_csrf=tok123"), None),
-            headers(Some("shabdar_csrf=tok123"), Some("tok124")),
-            headers(None, Some("tok123")),
-            headers(Some("shabdar_csrf="), Some("")),
-        ] {
-            assert!(matches!(
-                check_csrf(&map),
-                Err(crate::error::ApiError::CsrfFailed)
-            ));
-        }
+    #[test]
+    fn check_csrf_rejects_missing_header() {
+        let map = headers(Some("shabdar_csrf=tok123"), None);
+        assert!(matches!(check_csrf(&map), Err(ApiError::CsrfFailed)));
+    }
+
+    #[test]
+    fn check_csrf_rejects_missing_cookie() {
+        let map = headers(None, Some("tok123"));
+        assert!(matches!(check_csrf(&map), Err(ApiError::CsrfFailed)));
+    }
+
+    #[test]
+    fn check_csrf_rejects_empty_tokens() {
+        // The regression: "" == "" used to pass.
+        let map = headers(Some("shabdar_csrf="), Some(""));
+        assert!(matches!(check_csrf(&map), Err(ApiError::CsrfFailed)));
+    }
+
+    #[test]
+    fn check_csrf_rejects_one_sided_empty_tokens() {
+        assert!(matches!(
+            check_csrf(&headers(Some("shabdar_csrf="), Some("tok123"))),
+            Err(ApiError::CsrfFailed)
+        ));
+        assert!(matches!(
+            check_csrf(&headers(Some("shabdar_csrf=tok123"), Some(""))),
+            Err(ApiError::CsrfFailed)
+        ));
+    }
+
+    #[test]
+    fn check_csrf_rejects_blank_whitespace_tokens() {
+        let map = headers(Some("shabdar_csrf=   "), Some("  "));
+        assert!(matches!(check_csrf(&map), Err(ApiError::CsrfFailed)));
+        let map = headers(Some("shabdar_csrf=tok123"), Some("   "));
+        assert!(matches!(check_csrf(&map), Err(ApiError::CsrfFailed)));
+    }
+
+    #[test]
+    fn check_csrf_rejects_mismatched_tokens() {
+        let map = headers(Some("shabdar_csrf=tok123"), Some("tok124"));
+        assert!(matches!(check_csrf(&map), Err(ApiError::CsrfFailed)));
+    }
+
+    #[test]
+    fn check_csrf_rejects_different_length_tokens() {
+        let map = headers(Some("shabdar_csrf=tok123"), Some("tok123-extra"));
+        assert!(matches!(check_csrf(&map), Err(ApiError::CsrfFailed)));
+    }
+
+    #[test]
+    fn check_csrf_rejects_duplicated_cookies() {
+        // Two shabdar_csrf values in one Cookie header (cookie tossing).
+        let mut map = HeaderMap::new();
+        map.insert(
+            axum::http::header::COOKIE,
+            "shabdar_csrf=tok123; shabdar_csrf=tok123".parse().unwrap(),
+        );
+        map.insert("x-csrf-token", "tok123".parse().unwrap());
+        assert!(matches!(check_csrf(&map), Err(ApiError::CsrfFailed)));
+
+        // The same value split across two Cookie headers.
+        let mut map = HeaderMap::new();
+        map.append(
+            axum::http::header::COOKIE,
+            "shabdar_csrf=tok123".parse().unwrap(),
+        );
+        map.append(
+            axum::http::header::COOKIE,
+            "shabdar_session=abc; shabdar_csrf=tok123".parse().unwrap(),
+        );
+        map.insert("x-csrf-token", "tok123".parse().unwrap());
+        assert!(matches!(check_csrf(&map), Err(ApiError::CsrfFailed)));
     }
 }

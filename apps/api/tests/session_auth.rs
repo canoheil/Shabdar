@@ -684,3 +684,46 @@ async fn logout_without_csrf_header_is_403_and_the_session_still_works() {
     let resp = get_with_cookie(app, "/api/v1/me", Some(&cookie)).await;
     assert_eq!(resp.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn csrf_empty_or_blank_tokens_are_403_and_do_not_mutate() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, _csrf, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    // Empty X-CSRF-Token with otherwise-valid cookies.
+    let resp = patch_json(
+        app.clone(),
+        "/api/v1/me",
+        Some(&cookie),
+        Some(""),
+        serde_json::json!({ "display_name": "دزد" }),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    assert_eq!(error_code(&json_body(resp).await), "csrf_failed");
+
+    // The exact bypass shape: empty shabdar_csrf cookie + empty header.
+    let session_pair = cookie.split(';').next().expect("session pair first").trim();
+    let empty_cookie = format!("{session_pair}; shabdar_csrf=");
+    let resp = patch_json(
+        app.clone(),
+        "/api/v1/me",
+        Some(&empty_cookie),
+        Some(""),
+        serde_json::json!({ "display_name": "دزد" }),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    assert_eq!(error_code(&json_body(resp).await), "csrf_failed");
+
+    // No state change: the display name is untouched.
+    let resp = get_with_cookie(app, "/api/v1/me", Some(&cookie)).await;
+    let body = json_body(resp).await;
+    assert!(body["user"]["display_name"].is_null(), "mutation must not apply");
+}

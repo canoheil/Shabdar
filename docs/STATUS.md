@@ -4,10 +4,12 @@ Updated 2026-10-10 after WP 3 implementation (docs: phase 2 sync). Warnings:
 
 - **WP 1 gate PASSED on Termux (70/70 + clippy, commit `721f6a7`) — user-verified.**
 - **WP 2 gate PASSED on Termux (manual, commit `1311093`) — user-verified.**
-- **WP 3 built at this commit — UNVERIFIED.** The CSRF cookie/header
-  contract (Tasks 8–10) needs the Termux gate + the curl matrix below before
-  it may be marked verified. *Note: the WP 1 curl smoke's `PATCH /me` step now
-  needs the `X-CSRF-Token` header (403 `csrf_failed` without it).*
+- **WP 3 built at `3e5404f` — first Termux run found 1 failing unit test
+  (csrf empty-token acceptance, `3e5404f`), fixed in this commit — still
+  UNVERIFIED.** The CSRF cookie/header contract (Tasks 8–10) needs a full
+  re-run of the Termux gate + the curl matrix below before it may be marked
+  verified. *Note: the WP 1 curl smoke's `PATCH /me` step now needs the
+  `X-CSRF-Token` header (403 `csrf_failed` without it).*
 
 ## Verification results (WP 1 gate, on the phone — PASS)
 
@@ -24,14 +26,23 @@ Updated 2026-10-10 after WP 3 implementation (docs: phase 2 sync). Warnings:
   register+login end-to-end with `OTP_DEV_MODE`, session survives reload,
   logout works.
 
-## Verification results (WP 3 gate — NOT RUN)
+## Verification results (WP 3 gate — PARTIAL, needs a full re-run)
 
-- `cargo test` in `apps/api` (now includes the csrf unit tests + the rewritten
-  `session_auth` matrix) and `cargo clippy --all-targets -- -D warnings`.
-- curl matrix via the Nuxt proxy (:3000) and direct (:8080): PATCH /me without
-  the header → 200 through the proxy (Task 9 injection) but 403 `csrf_failed`
-  direct; wrong header value → 403; logout → 200 `{"ok":true}` with both
-  cookies cleared.
+- `cargo test` at `3e5404f` (Termux): clippy clean, 34 unit tests green,
+  **1 FAILED** — `csrf::tests::check_csrf_passes_only_on_matching_header_and_cookie`
+  (check accepted empty cookie + empty header). Cargo stopped at the failing
+  lib binary, so `session_auth`/`auth_otp`/the rest **did not run**.
+- Fixed in this commit: `check_csrf` now rejects empty/blank token pairs,
+  rejects duplicated `shabdar_csrf` cookies (cookie tossing), and compares
+  in constant time; one unit test per rejected shape + one HTTP-level
+  regression test (`csrf_empty_or_blank_tokens_are_403_and_do_not_mutate`).
+  **All of this is UNVERIFIED until the suite runs again.**
+- Still to run: `cargo test` + `cargo clippy --all-targets -- -D warnings`
+  in `apps/api`, and the curl matrix via the Nuxt proxy (:3000) and direct
+  (:8080): PATCH /me without the header → 200 through the proxy (Task 9
+  injection) but 403 `csrf_failed` direct; wrong header value → 403;
+  empty header + empty csrf cookie → 403; logout → 200 `{"ok":true}` with
+  both cookies cleared.
 
 ## Marking rules
 
@@ -58,6 +69,7 @@ Updated 2026-10-10 after WP 3 implementation (docs: phase 2 sync). Warnings:
 - **Phase 1 base — code complete; the WP 1 gate PASSED on Termux
   (70/70 + clippy clean, commit `721f6a7`) — user-verified.**
 - **Phase 2 — WP 1 + WP 2 complete (WP 2 user-verified at `1311093`); WP 3
-  built at this commit and UNVERIFIED** (CSRF cookie + checks, proxy header
-  injection, docs sync). Next: run the WP 3 gate on Termux and paste the
-  output; then the listings domain, then the launch fixes.
+  built, first Termux run caught 1 bug (empty-token CSRF acceptance), fixed
+  in this commit and UNVERIFIED pending a full re-run.** Next: re-run the
+  WP 3 gate on Termux and paste the output; then the listings domain, then
+  the launch fixes.
