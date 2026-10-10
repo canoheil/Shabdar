@@ -5,7 +5,7 @@
 ## 1. Conventions
 
 - Base path: `/api/v1`. JSON in and out, UTF-8, Persian text as-is.
-- Session: opaque cookie, `HttpOnly`, `Secure` in production, `SameSite=Lax`, CSRF token required for state-changing requests. Final session storage and revocation are decided in ARCHITECTURE.md.
+- Session: opaque `shabdar_session` cookie — `HttpOnly`, `Secure` when `COOKIE_SECURE=true`, `SameSite=Lax`, 30-day TTL; revoked by deleting the `sessions` row. CSRF (decided 2026-10-10, delivered in WP 3): double-submit cookie `shabdar_csrf` (not `HttpOnly`) + required `X-CSRF-Token` header on state-changing requests; mismatch or absence → 403 `csrf_failed`.
 - Public identifiers only. Listings use `slug` in public read URLs and `public_id` in write paths. Users, comments, reports, and conversations use `public_id`.
 - Dates are ISO-8601 UTC. Prices are integer `price_toman`.
 - Lists return `{ "data": [...], "page": { "next_cursor": "…", "has_more": true } }`. Page size is capped at 50. Cursors are opaque.
@@ -23,14 +23,14 @@
 | Method | Path | Auth | Summary |
 |---|---|---|---|
 | POST | `/auth/otp/request` | Public, rate-limited | Body: `{ phone, purpose: "login" \| "register" }`. Returns exactly `{"challenge_id","expires_in_seconds","resend_after_seconds"}`. Same response shape whether or not the account exists. |
-| POST | `/auth/otp/verify` | Public, rate-limited | Body: `{ challenge_id, code }`. Sets the `shabdar_session` cookie (`Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`, plus `Secure` when `COOKIE_SECURE=true`). Returns exactly `{"user":{"public_id","display_name","is_admin"},"is_new_user"}` (`display_name` is `null` until set). Single use, expiry, attempt limit. |
-| POST | `/auth/logout` | User | Ends the session and clears the cookie. |
-| GET | `/me` | User | Current user summary and role flags (`is_admin`). |
-| PATCH | `/me` | User | Body: `{ display_name }`. |
+| POST | `/auth/otp/verify` | Public, rate-limited | Body: `{ challenge_id, code }`. Sets the `shabdar_session` cookie (`Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`, plus `Secure` when `COOKIE_SECURE=true`) and the `shabdar_csrf` cookie (`Path=/; SameSite=Lax`, not `HttpOnly`, fresh ULID). Returns exactly `{"user":{"public_id","display_name","is_admin"},"is_new_user"}` (`display_name` is `null` until set). Single use, expiry, attempt limit. |
+| POST | `/auth/logout` | User + CSRF | Revokes exactly the presented session; clears both cookies. → `{"ok":true}`. |
+| GET | `/me` | User | → `{"user":{"public_id","display_name","is_admin"}}`. |
+| PATCH | `/me` | User + CSRF | Body: `{ display_name }` (required, trimmed, 1–80 chars) → the same `{"user":{…}}` shape with the new value. Field errors: `fields: {"display_name":"required"|"too_long"}`. |
 
 Server rules: the client never decides whether an account is created. `purpose` is checked against the stored challenge. Phone changes are not in v1.
 
-Error codes used by the auth endpoints:
+Error codes used by the auth and session endpoints:
 
 | HTTP | code | When |
 |---|---|---|
@@ -42,6 +42,9 @@ Error codes used by the auth endpoints:
 | 401 | `challenge_expired` | Past the challenge's `expires_at` |
 | 401 | `challenge_locked` | Wrong-code limit (`OTP_MAX_ATTEMPTS`) reached |
 | 401 | `no_account` | `purpose=login` with a correct code but no account |
+| 401 | `unauthorized` | Missing/invalid/expired session cookie or non-active user (generic — no probing) |
+| 403 | `csrf_failed` | `X-CSRF-Token` missing or ≠ the `shabdar_csrf` cookie on a state-changing request |
+| 404 | `not_found` | Unknown path (fallback) |
 | 500 | `internal_error` | Anything else; never leaks SQL details |
 
 ## 3. Public discovery
@@ -169,7 +172,7 @@ All endpoints are under `/api/v1/admin`. Each requires `is_admin = true`. Each m
 
 ## 14. Open API decisions
 
-- Session model and CSRF token delivery (ARCHITECTURE.md).
+- Session model and CSRF token delivery: **decided 2026-10-10** — `sessions` table with SHA-256 token hashes (30-day TTL); CSRF = double-submit `shabdar_csrf` cookie + `X-CSRF-Token` header (WP 3).
 - OTP provider, resend limits, and attempt limits.
 - Whether editing an `active` listing is allowed (v1 says no).
 - Keyword search behavior and sort tie-breakers.
