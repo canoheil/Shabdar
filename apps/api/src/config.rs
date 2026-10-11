@@ -19,6 +19,9 @@ pub struct Config {
     pub session_ttl_secs: u32,
     pub cookie_name: String,
     pub cookie_secure: bool,
+    pub media_dir: String,
+    pub max_image_bytes: u64,
+    pub max_images_per_listing: u8,
 }
 
 impl Config {
@@ -38,6 +41,10 @@ impl Config {
             session_ttl_secs: parse_u32("SESSION_TTL_SECS", 2_592_000)?,
             cookie_name: optional_string("COOKIE_NAME", "shabdar_session"),
             cookie_secure: parse_bool("COOKIE_SECURE", false)?,
+            media_dir: optional_string("MEDIA_DIR", "./data/media"),
+            max_image_bytes: parse_u64("MAX_IMAGE_BYTES", 5_242_880)?,
+            max_images_per_listing: u8::try_from(parse_u32("MAX_IMAGES_PER_LISTING", 8)?)
+                .map_err(|_| "MAX_IMAGES_PER_LISTING must fit in 0..=255".to_string())?,
         })
     }
 }
@@ -72,6 +79,15 @@ fn parse_u32(name: &str, default: u32) -> Result<u32, String> {
     }
 }
 
+fn parse_u64(name: &str, default: u64) -> Result<u64, String> {
+    match std::env::var(name) {
+        Err(_) => Ok(default),
+        Ok(v) => v
+            .parse()
+            .map_err(|_| format!("{name} must be a non-negative integer, got {v:?}")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Mutex, MutexGuard};
@@ -81,7 +97,7 @@ mod tests {
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     /// Every variable Config reads (keep in sync with from_env).
-    const VARS: [&str; 10] = [
+    const VARS: [&str; 13] = [
         "DATABASE_URL",
         "OTP_PEPPER",
         "BIND_ADDR",
@@ -92,6 +108,9 @@ mod tests {
         "SESSION_TTL_SECS",
         "COOKIE_NAME",
         "COOKIE_SECURE",
+        "MEDIA_DIR",
+        "MAX_IMAGE_BYTES",
+        "MAX_IMAGES_PER_LISTING",
     ];
 
     /// Saves all VARS, clears them, and restores the saved values on drop.
@@ -150,6 +169,9 @@ mod tests {
         assert_eq!(cfg.session_ttl_secs, 2_592_000);
         assert_eq!(cfg.cookie_name, "shabdar_session");
         assert!(!cfg.cookie_secure);
+        assert_eq!(cfg.media_dir, "./data/media");
+        assert_eq!(cfg.max_image_bytes, 5_242_880);
+        assert_eq!(cfg.max_images_per_listing, 8);
     }
 
     #[test]
@@ -163,6 +185,9 @@ mod tests {
         env.set("SESSION_TTL_SECS", "3600");
         env.set("COOKIE_NAME", "test_cookie");
         env.set("COOKIE_SECURE", "1");
+        env.set("MEDIA_DIR", "/tmp/media");
+        env.set("MAX_IMAGE_BYTES", "1048576");
+        env.set("MAX_IMAGES_PER_LISTING", "3");
         let cfg = super::Config::from_env().expect("valid env");
         assert_eq!(cfg.bind_addr, "0.0.0.0:9000");
         assert!(cfg.otp_dev_mode);
@@ -172,6 +197,9 @@ mod tests {
         assert_eq!(cfg.session_ttl_secs, 3600);
         assert_eq!(cfg.cookie_name, "test_cookie");
         assert!(cfg.cookie_secure);
+        assert_eq!(cfg.media_dir, "/tmp/media");
+        assert_eq!(cfg.max_image_bytes, 1_048_576);
+        assert_eq!(cfg.max_images_per_listing, 3);
     }
 
     #[test]

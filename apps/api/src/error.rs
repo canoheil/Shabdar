@@ -32,6 +32,11 @@ pub enum ApiError {
     /// 403 when `X-CSRF-Token` is missing or ≠ the `shabdar_csrf` cookie
     /// (Phase 2 CSRF, `csrf_failed`).
     CsrfFailed,
+    /// 403 when the caller is not the owner (seller routes) or not an admin
+    /// (admin routes). Message names no target (Phase 3, `forbidden`).
+    Forbidden,
+    /// 410 for publicly removed or deleted listings (Phase 3, `gone`).
+    Gone,
     Internal,
 }
 
@@ -48,7 +53,8 @@ impl ApiError {
             | ApiError::NoAccount
             | ApiError::Unauthorized => StatusCode::UNAUTHORIZED,
             ApiError::NotFound => StatusCode::NOT_FOUND,
-            ApiError::CsrfFailed => StatusCode::FORBIDDEN,
+            ApiError::CsrfFailed | ApiError::Forbidden => StatusCode::FORBIDDEN,
+            ApiError::Gone => StatusCode::GONE,
             ApiError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -66,6 +72,8 @@ impl ApiError {
             ApiError::NotFound => "not_found",
             ApiError::Unauthorized => "unauthorized",
             ApiError::CsrfFailed => "csrf_failed",
+            ApiError::Forbidden => "forbidden",
+            ApiError::Gone => "gone",
             ApiError::Internal => "internal_error",
         }
     }
@@ -85,6 +93,8 @@ impl ApiError {
             ApiError::NotFound => "Not found",
             ApiError::Unauthorized => "Not authenticated",
             ApiError::CsrfFailed => "CSRF token missing or invalid",
+            ApiError::Forbidden => "Not allowed",
+            ApiError::Gone => "Listing is no longer available",
             ApiError::Internal => "Internal server error",
         }
     }
@@ -136,11 +146,11 @@ mod tests {
             .collect()
     }
 
-    /// The plan's contract table, pinned exactly: HTTP status + code for all 12
+    /// The plan's contract table, pinned exactly: HTTP status + code for all 14
     /// variants, plus a non-empty message on every one.
     #[tokio::test]
     async fn status_and_code_match_contract_for_every_variant() {
-        let cases: [(super::ApiError, StatusCode, &str); 12] = [
+        let cases: [(super::ApiError, StatusCode, &str); 14] = [
             (
                 super::ApiError::Validation { fields: fields(&[]) },
                 StatusCode::BAD_REQUEST,
@@ -186,6 +196,12 @@ mod tests {
                 StatusCode::FORBIDDEN,
                 "csrf_failed",
             ),
+            (
+                super::ApiError::Forbidden,
+                StatusCode::FORBIDDEN,
+                "forbidden",
+            ),
+            (super::ApiError::Gone, StatusCode::GONE, "gone"),
         ];
         for (err, want_status, want_code) in cases {
             let (status, body) = render(err).await;

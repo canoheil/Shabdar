@@ -60,6 +60,9 @@ pub fn test_config() -> Config {
         session_ttl_secs: 2_592_000,
         cookie_name: "shabdar_session".to_string(),
         cookie_secure: false,
+        media_dir: "./data/media".to_string(),
+        max_image_bytes: 5_242_880,
+        max_images_per_listing: 8,
     }
 }
 

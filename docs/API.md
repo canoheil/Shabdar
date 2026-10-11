@@ -44,7 +44,9 @@ Error codes used by the auth and session endpoints:
 | 401 | `no_account` | `purpose=login` with a correct code but no account |
 | 401 | `unauthorized` | Missing/invalid/expired session cookie or non-active user (generic — no probing) |
 | 403 | `csrf_failed` | `X-CSRF-Token` missing or ≠ the `shabdar_csrf` cookie on a state-changing request |
-| 404 | `not_found` | Unknown path (fallback) |
+| 403 | `forbidden` | Not the owner (seller routes) or not an admin (admin routes); decided 2026-10-11 (Phase 3) |
+| 404 | `not_found` | Unknown path (fallback), unknown slug, or non-`active` listing read publicly (no existence signal) |
+| 410 | `gone` | `removed` or soft-deleted listing read publicly; decided 2026-10-11 (Phase 3) |
 | 500 | `internal_error` | Anything else; never leaks SQL details |
 
 ## 3. Public discovery
@@ -177,3 +179,4 @@ All endpoints are under `/api/v1/admin`. Each requires `is_admin = true`. Each m
 - Whether editing an `active` listing is allowed (v1 says no).
 - Keyword search behavior and sort tie-breakers.
 - Whether `comments` on `archived` listings are visible to the public.
+- Phase 3 resolutions (**decided 2026-10-11**): `negotiable` leaves `price_toman` optional (`fixed` requires it, `free` forbids it); public slugs are Persian with numeric-suffix dedup; description bound is 5000 chars; public feed sorts `newest` only (price/popular/search are the discovery follow-up); `/me/listings` ships without a cursor; image validation is magic bytes + size + count (no decode until the image-moderation decision); unknown `category`/`city`/`province` filter slugs → 400 (never an empty list).
