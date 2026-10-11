@@ -18,8 +18,20 @@ static DB_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// Drop everything the migrations own (FK-safe order) and re-apply, so every
 /// test starts from a clean schema (same helper as tests/auth_otp.rs).
+/// Phase 3 tables drop first (see auth_otp.rs: FK error 1451/3730 otherwise).
 async fn reset_db(pool: &sqlx::MySqlPool) {
-    for table in ["sessions", "otp_challenges", "users", "_sqlx_migrations"] {
+    for table in [
+        "listing_images",
+        "listings",
+        "admin_audit_logs",
+        "sessions",
+        "otp_challenges",
+        "cities",
+        "categories",
+        "provinces",
+        "users",
+        "_sqlx_migrations",
+    ] {
         let sql = format!("DROP TABLE IF EXISTS {table}"); // fixed literals, not user input
         sqlx::query(&sql).execute(pool).await.expect("drop failed");
     }
