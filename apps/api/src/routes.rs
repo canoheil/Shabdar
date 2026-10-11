@@ -15,7 +15,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::{
     middleware,
-    routing::{get, post},
+    routing::{get, patch, post},
     Json, Router,
 };
 use serde::Deserialize;
@@ -34,6 +34,15 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/auth/otp/verify", post(otp_verify))
         .route("/api/v1/auth/logout", post(logout))
         .route("/api/v1/me", get(me).patch(update_me))
+        .route("/api/v1/me/listings", get(my_listings))
+        .route("/api/v1/listings", post(create_listing))
+        .route(
+            "/api/v1/listings/{public_id}",
+            patch(edit_listing).delete(delete_listing),
+        )
+        .route("/api/v1/listings/{public_id}/submit", post(submit_listing))
+        .route("/api/v1/listings/{public_id}/mark-sold", post(mark_sold_listing))
+        .route("/api/v1/listings/{public_id}/archive", post(archive_listing))
         .route("/api/v1/categories", get(categories))
         .route("/api/v1/locations/provinces", get(provinces))
         .route(
@@ -134,6 +143,87 @@ async fn logout(
         two_set_cookies(clear_cookie, clear_csrf),
         Json(serde_json::json!({ "ok": true })),
     ))
+}
+
+/// GET /api/v1/me/listings — the seller's own listings (Phase 3 Task 3).
+/// Query: `status` (all|pending|active|rejected|sold|archived, default all).
+async fn my_listings(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let status = params.get("status").map(String::as_str).unwrap_or("all");
+    let items = crate::listings::my_listings(&state.pool, user.user_id, status).await?;
+    Ok(Json(serde_json::json!({ "data": items })))
+}
+
+/// POST /api/v1/listings — create a draft (Phase 3 Task 3).
+async fn create_listing(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Json(body): Json<crate::listings::CreateBody>,
+) -> Result<Json<crate::listings::ListingOut>, ApiError> {
+    // CSRF first: a failed check must not create anything.
+    crate::csrf::check_csrf(&headers)?;
+    Ok(Json(crate::listings::create_draft(&state.pool, user.user_id, body).await?))
+}
+
+/// PATCH /api/v1/listings/{public_id} — edit a draft/rejected listing.
+async fn edit_listing(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    Json(body): Json<crate::listings::EditBody>,
+) -> Result<Json<crate::listings::ListingOut>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    Ok(Json(crate::listings::edit_listing(&state.pool, user.user_id, &public_id, body).await?))
+}
+
+/// POST /api/v1/listings/{public_id}/submit — draft|rejected → pending.
+async fn submit_listing(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+) -> Result<Json<crate::listings::ListingOut>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    Ok(Json(crate::listings::transition(&state.pool, user.user_id, &public_id, "submit").await?))
+}
+
+/// POST /api/v1/listings/{public_id}/mark-sold — active → sold.
+async fn mark_sold_listing(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+) -> Result<Json<crate::listings::ListingOut>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    Ok(Json(crate::listings::transition(&state.pool, user.user_id, &public_id, "mark-sold").await?))
+}
+
+/// POST /api/v1/listings/{public_id}/archive — active → archived.
+async fn archive_listing(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+) -> Result<Json<crate::listings::ListingOut>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    Ok(Json(crate::listings::transition(&state.pool, user.user_id, &public_id, "archive").await?))
+}
+
+/// DELETE /api/v1/listings/{public_id} — soft-delete draft|rejected|archived.
+async fn delete_listing(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::listings::transition(&state.pool, user.user_id, &public_id, "delete").await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 /// GET /api/v1/categories — active categories, sort-ordered (Phase 3 Task 2).

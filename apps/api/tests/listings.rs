@@ -6,6 +6,7 @@ mod common;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
 use http_body_util::BodyExt;
+use sqlx::Row;
 use tower::ServiceExt;
 
 /// Send one request with an optional JSON body; return status + parsed JSON.
@@ -99,4 +100,344 @@ async fn cities_of_unknown_province_is_not_found() {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["error"]["code"], "not_found");
+}
+
+// --- Task 3: seller listing write + state machine ---------------------------
+
+/// All listing-write tests share one database; run them one at a time.
+static WRITE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Drop everything the migrations own (same child-first order as
+/// tests/db_migrations.rs) and re-apply, so each test starts clean.
+async fn reset_db(pool: &sqlx::MySqlPool) {
+    for table in [
+        "listing_images",
+        "listings",
+        "admin_audit_logs",
+        "sessions",
+        "otp_challenges",
+        "cities",
+        "categories",
+        "provinces",
+        "users",
+        "_sqlx_migrations",
+    ] {
+        let sql = format!("DROP TABLE IF EXISTS {table}"); // fixed literals
+        sqlx::query(&sql).execute(pool).await.expect("drop failed");
+    }
+    shabdar_api::db::run_migrations(pool)
+        .await
+        .expect("migrations apply");
+}
+
+/// Build a challenge with a KNOWN code via the service (same construction as
+/// tests/session_auth.rs).
+async fn challenge_with_code(
+    pool: &sqlx::MySqlPool,
+    cfg: &shabdar_api::config::Config,
+    phone: &str,
+    purpose: &str,
+) -> (String, String) {
+    let code = shabdar_api::otp::generate_code();
+    let created = shabdar_api::otp_service::create_challenge(pool, cfg, phone, purpose, &code)
+        .await
+        .expect("create challenge");
+    (created.public_id, code)
+}
+
+/// Register through the real OTP flow; return (cookie header, csrf token).
+async fn register_user(
+    app: &axum::Router,
+    pool: &sqlx::MySqlPool,
+    cfg: &shabdar_api::config::Config,
+    phone: &str,
+) -> (String, String) {
+    let (challenge_id, code) = challenge_with_code(pool, cfg, phone, "register").await;
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/api/v1/auth/otp/verify")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::json!({ "challenge_id": challenge_id, "code": code }).to_string(),
+        ))
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let mut session = String::new();
+    let mut csrf = String::new();
+    for value in resp.headers().get_all(axum::http::header::SET_COOKIE) {
+        let text = value.to_str().expect("ascii cookie");
+        if let Some(rest) = text.strip_prefix("shabdar_session=") {
+            session = format!("shabdar_session={}", rest.split(';').next().unwrap());
+        } else if let Some(rest) = text.strip_prefix("shabdar_csrf=") {
+            csrf = rest.split(';').next().unwrap().to_string();
+        }
+    }
+    assert!(!session.is_empty(), "session Set-Cookie");
+    assert!(!csrf.is_empty(), "csrf Set-Cookie");
+    (format!("{session}; shabdar_csrf={csrf}"), csrf)
+}
+
+/// Send a JSON request with optional auth (cookie + csrf token for mutations).
+async fn send_authed(
+    app: axum::Router,
+    method: Method,
+    path: &str,
+    cookie: Option<&str>,
+    csrf: Option<&str>,
+    body: Option<serde_json::Value>,
+) -> (StatusCode, serde_json::Value) {
+    let mut builder = Request::builder().method(method).uri(path);
+    if let Some(c) = cookie {
+        builder = builder.header("cookie", c);
+    }
+    if let Some(t) = csrf {
+        builder = builder.header("x-csrf-token", t);
+    }
+    let req = if let Some(json) = body {
+        builder = builder.header("content-type", "application/json");
+        builder.body(Body::from(json.to_string())).unwrap()
+    } else {
+        builder.body(Body::empty()).unwrap()
+    };
+    let resp = app.oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = BodyExt::collect(resp.into_body())
+        .await
+        .unwrap()
+        .to_bytes();
+    (status, serde_json::from_slice(&bytes).expect("JSON body"))
+}
+
+fn valid_draft() -> serde_json::Value {
+    serde_json::json!({
+        "category_id": 1,
+        "city_id": 1,
+        "title": "فرش دستباف",
+        "description": "فرش دستباف در حد نو",
+        "price_toman": 5_000_000,
+        "price_type": "fixed",
+    })
+}
+
+#[tokio::test]
+async fn create_draft_returns_draft_with_ids() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    let (status, body) =
+        send_authed(app, Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(valid_draft())).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["status"], "draft");
+    let public_id = body["public_id"].as_str().expect("public_id");
+    assert_eq!(public_id.len(), 26, "public_id is a 26-char ULID");
+    assert!(!body["slug"].as_str().expect("slug").is_empty(), "slug generated");
+}
+
+#[tokio::test]
+async fn create_draft_validation_pins_field_reasons() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    // Empty title → required.
+    let mut bad = valid_draft();
+    bad["title"] = serde_json::json!("");
+    let (status, body) =
+        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(bad)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "validation_error");
+    assert_eq!(body["error"]["fields"]["title"], "required");
+
+    // 161-char title → too_long.
+    let mut bad = valid_draft();
+    bad["title"] = serde_json::json!("x".repeat(161));
+    let (status, body) =
+        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(bad)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["fields"]["title"], "too_long");
+
+    // Unknown category → unknown_category.
+    let mut bad = valid_draft();
+    bad["category_id"] = serde_json::json!(999);
+    let (status, body) =
+        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(bad)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["fields"]["category_id"], "unknown_category");
+
+    // fixed without price → invalid_price.
+    let mut bad = valid_draft();
+    bad["price_toman"] = serde_json::Value::Null;
+    let (status, body) =
+        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(bad)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["fields"]["price_toman"], "invalid_price");
+
+    // free with a price → invalid_price.
+    let mut bad = valid_draft();
+    bad["price_type"] = serde_json::json!("free");
+    let (status, body) =
+        send_authed(app, Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(bad)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["fields"]["price_toman"], "invalid_price");
+}
+
+#[tokio::test]
+async fn edit_by_non_owner_is_forbidden() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie_a, csrf_a) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (cookie_b, csrf_b) = register_user(&app, &pool, &cfg, "+989009876543").await;
+
+    let (status, body) =
+        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie_a), Some(&csrf_a), Some(valid_draft())).await;
+    assert_eq!(status, StatusCode::OK);
+    let public_id = body["public_id"].as_str().unwrap().to_string();
+
+    let (status, body) = send_authed(
+        app,
+        Method::PATCH,
+        &format!("/api/v1/listings/{public_id}"),
+        Some(&cookie_b),
+        Some(&csrf_b),
+        Some(serde_json::json!({ "title": "hijacked" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"]["code"], "forbidden");
+}
+
+#[tokio::test]
+async fn mutation_without_csrf_changes_nothing() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    let (status, body) =
+        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(valid_draft())).await;
+    assert_eq!(status, StatusCode::OK);
+    let public_id = body["public_id"].as_str().unwrap().to_string();
+
+    // No CSRF header → 403 and the title is unchanged afterwards.
+    let (status, body) = send_authed(
+        app.clone(),
+        Method::PATCH,
+        &format!("/api/v1/listings/{public_id}"),
+        Some(&cookie),
+        None,
+        Some(serde_json::json!({ "title": "changed" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"]["code"], "csrf_failed");
+
+    let row = sqlx::query("SELECT title FROM listings WHERE public_id = ?")
+        .bind(&public_id)
+        .fetch_one(&pool)
+        .await
+        .expect("listing row");
+    let title: String = row.try_get("title").unwrap();
+    assert_eq!(title, "فرش دستباف");
+}
+
+#[tokio::test]
+async fn submit_requires_an_image_then_moves_to_pending() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    let (status, body) =
+        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(valid_draft())).await;
+    assert_eq!(status, StatusCode::OK);
+    let public_id = body["public_id"].as_str().unwrap().to_string();
+
+    // No images → 400.
+    let (status, body) = send_authed(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/listings/{public_id}/submit"),
+        Some(&cookie),
+        Some(&csrf),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "validation_error");
+
+    // One image row (direct setup — Task 5 owns the upload endpoint).
+    sqlx::query(
+        "INSERT INTO listing_images (listing_id, storage_key, sort_order, created_at) \
+         SELECT id, 'setup/cover.png', 0, NOW(3) FROM listings WHERE public_id = ?",
+    )
+    .bind(&public_id)
+    .execute(&pool)
+    .await
+    .expect("image setup row");
+
+    let (status, body) = send_authed(
+        app,
+        Method::POST,
+        &format!("/api/v1/listings/{public_id}/submit"),
+        Some(&cookie),
+        Some(&csrf),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["status"], "pending");
+}
+
+#[tokio::test]
+async fn mark_sold_from_pending_is_rejected() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    let (status, body) =
+        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(valid_draft())).await;
+    assert_eq!(status, StatusCode::OK);
+    let public_id = body["public_id"].as_str().unwrap().to_string();
+
+    let (status, body) = send_authed(
+        app,
+        Method::POST,
+        &format!("/api/v1/listings/{public_id}/mark-sold"),
+        Some(&cookie),
+        Some(&csrf),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "validation_error");
 }
