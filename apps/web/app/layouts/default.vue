@@ -3,6 +3,7 @@
     <header class="shell__header">
       <NuxtLink to="/" class="shell__brand">شبدر</NuxtLink>
       <nav class="shell__nav" aria-label="ناوبری اصلی">
+        <NuxtLink to="/post" class="shell__nav-link">ثبت آگهی</NuxtLink>
         <NuxtLink to="/login" class="shell__nav-link">ورود</NuxtLink>
       </nav>
     </header>
