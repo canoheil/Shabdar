@@ -4,7 +4,7 @@ Updated 2026-10-11 after the Phase 3 gate (API serial suite + dev-stack e2e,
 all on Termux).
 
 - **Phase 3 is COMPLETE — listings vertical slice (Tasks 0–8).**
-- **Last commit: `2c96a81`.**
+- **Last commit: `8f2f15b`** (review fix pass; Phase 3 tasks closed at `43310c9`).
 - **Next: discovery follow-up** (keyword search, `price_asc`/`price_desc`/
   `popular` sorts, `/me/dashboard/summary` counts) **in a new plan**; then the
   launch blockers below. No application code until that plan is approved.

@@ -33,7 +33,7 @@ files**: no `.env` is committed, and credentials are exported in the shell.
 | `SESSION_TTL_SECS` | no | `2592000` | Session lifetime (30 days); also the cookie `Max-Age` |
 | `COOKIE_NAME` | no | `shabdar_session` | Session cookie name |
 | `COOKIE_SECURE` | no | `false` | Set `true` behind HTTPS. `false` is correct for `http://localhost` only — never expose real sessions over plain HTTP |
-| `MEDIA_DIR` | no | `./data/media` | Local disk root for listing images (created at startup); served files never use client paths |
+| `MEDIA_DIR` | no | `./data/media` | Local disk root for listing images (created lazily on first upload; served at `/media/…`); served files never use client paths |
 | `MAX_IMAGE_BYTES` | no | `5242880` | Max bytes per image (5 MB) |
 | `MAX_IMAGES_PER_LISTING` | no | `8` | Max images per listing |
 
@@ -109,7 +109,7 @@ Keep the phone awake during long runs: `termux-wake-lock`.
 | PATCH | `/api/v1/me` | Requires session + `X-CSRF-Token`. Body `{"display_name":"…"}` (trimmed, 1–80 chars) → the same `{"user":{…}}` shape with the new value. Field errors: `fields: {"display_name":"required"|"too_long"}` |
 | GET | `/api/v1/categories` | Active categories `[{id,parent_id,name_fa,slug,sort_order}]` |
 | GET | `/api/v1/locations/provinces` | `[{name_fa,slug}]` (seed: Gilan) |
-| GET | `/api/v1/locations/provinces/{slug}/cities` | `[{name_fa,slug,is_launch_city}]`; unknown province → 404 |
+| GET | `/api/v1/locations/provinces/{slug}/cities` | `[{id,name_fa,slug,is_launch_city}]`; unknown province → 404 |
 | POST | `/api/v1/listings` | Requires session + CSRF. Draft body `{category_id,city_id,title,description,price_toman?,price_type}` → `draft` with server-made `slug` |
 | PATCH | `/api/v1/listings/{public_id}` | Owner, `draft`/`rejected` only (active is immutable in v1) |
 | POST | `/api/v1/listings/{public_id}/submit` | Owner, needs ≥ 1 image → `pending` |
