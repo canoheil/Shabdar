@@ -212,6 +212,48 @@ pub async fn set_order(
     Ok(())
 }
 
+/// Validates a `/media/<key>` path: exactly `<26-char ULID>/<26-char ULID>`
+/// with an image extension. Anything else → None (404 — never a filesystem
+/// read). The charset makes traversal impossible: no dots except the one
+/// before the extension, no slashes except the separator.
+fn valid_media_key(key: &str) -> Option<&'static str> {
+    let (dir, file) = key.split_once('/')?;
+    if dir.len() != 26 || !is_crockford(dir) {
+        return None;
+    }
+    let (name, ext) = file.rsplit_once('.')?;
+    if name.len() != 26 || !is_crockford(name) {
+        return None;
+    }
+    match ext {
+        "jpg" => Some("image/jpeg"),
+        "png" => Some("image/png"),
+        "webp" => Some("image/webp"),
+        _ => None,
+    }
+}
+
+fn is_crockford(s: &str) -> bool {
+    s.bytes().all(|b| {
+        matches!(b,
+            b'0'..=b'9' | b'A'..=b'H' | b'J'..=b'K' | b'M'..=b'N' | b'P'..=b'T' | b'V'..=b'Z')
+    })
+}
+
+/// Reads one stored file for `GET /media/…`. No auth: a listing's photos are
+/// public exactly like the listing, and the ULID keys are unguessable.
+/// Missing files and malformed keys are both 404 (no existence signal).
+pub async fn read_media(
+    cfg: &crate::config::Config,
+    key: &str,
+) -> Result<(Vec<u8>, &'static str), ApiError> {
+    let content_type = valid_media_key(key).ok_or(ApiError::NotFound)?;
+    let bytes = tokio::fs::read(std::path::Path::new(&cfg.media_dir).join(key))
+        .await
+        .map_err(|_| ApiError::NotFound)?;
+    Ok((bytes, content_type))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

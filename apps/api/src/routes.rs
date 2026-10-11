@@ -57,6 +57,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/admin/listings/{public_id}/approve", post(admin_approve))
         .route("/api/v1/admin/listings/{public_id}/reject", post(admin_reject))
         .route("/api/v1/admin/listings/{public_id}/remove", post(admin_remove))
+        .route("/media/{*key}", get(serve_media))
         .route("/api/v1/categories", get(categories))
         .route("/api/v1/locations/provinces", get(provinces))
         .route(
@@ -424,6 +425,20 @@ async fn sitemap_listings(
     )
     .await?;
     Ok(Json(page))
+}
+
+/// GET /media/{*key} — serves one stored listing photo (public, like the
+/// listing itself). Strict key shape; traversal and unknown keys → 404.
+async fn serve_media(
+    State(state): State<AppState>,
+    Path(key): Path<String>,
+) -> Result<(StatusCode, [(axum::http::header::HeaderName, &'static str); 1], Vec<u8>), ApiError> {
+    let (bytes, content_type) = crate::listing_images::read_media(&state.config, &key).await?;
+    Ok((
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, content_type)],
+        bytes,
+    ))
 }
 
 /// GET /api/v1/categories — active categories, sort-ordered (Phase 3 Task 2).

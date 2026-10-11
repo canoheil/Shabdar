@@ -154,8 +154,26 @@ fn media_cfg(dir: &str) -> shabdar_api::config::Config {
     cfg
 }
 
+/// GET a path; return status + raw bytes + content-type.
+async fn get_raw(app: axum::Router, path: &str) -> (StatusCode, Vec<u8>, Option<String>) {
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(path)
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
+    let bytes = BodyExt::collect(resp.into_body()).await.unwrap().to_bytes().to_vec();
+    (status, bytes, content_type)
+}
+
 #[tokio::test]
-async fn upload_png_succeeds_and_file_lands_on_disk() {
+async fn uploaded_file_is_served_back_with_bytes() {
     let _lock = UPLOAD_LOCK.lock().await;
     let Some(pool) = common::test_pool().await else {
         return;
@@ -177,9 +195,29 @@ async fn upload_png_succeeds_and_file_lands_on_disk() {
     );
     // WebP rides the same path (third accepted signature).
     let (status, body) =
-        upload(app, &public_id, &cookie, Some(&csrf), "a.webp", "image/webp", &webp_bytes()).await;
+        upload(app.clone(), &public_id, &cookie, Some(&csrf), "a.webp", "image/webp", &webp_bytes()).await;
     assert_eq!(status, StatusCode::OK);
     assert!(body["url"].as_str().unwrap().ends_with(".webp"));
+
+    // The minted URL serves the exact bytes back (no auth needed — reading a
+    // listing's photo is public, like the listing itself).
+    let url = body["url"].as_str().unwrap().to_string();
+    let (status, bytes, content_type) = get_raw(app.clone(), &url).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(bytes, webp_bytes());
+    assert_eq!(content_type.as_deref(), Some("image/webp"));
+
+    // Unknown keys, wrong extensions, and traversal shapes are all 404 —
+    // never a file outside MEDIA_DIR, never a 500.
+    for path in [
+        "/media/AAAAAAAAAAAAAAAAAAAAAAAAAA/BBBBBBBBBBBBBBBBBBBBBBBBBB.png".to_string(),
+        format!("/media/{}.exe", &key[..key.len() - 4]),
+        "/media/../../etc/passwd".to_string(),
+        "/media/%2e%2e/%2e%2e/etc/passwd".to_string(),
+    ] {
+        let (status, _, _) = get_raw(app.clone(), &path).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{path}");
+    }
     let _ = std::fs::remove_dir_all(dir);
 }
 
