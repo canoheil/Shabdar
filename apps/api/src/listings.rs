@@ -353,12 +353,13 @@ pub async fn edit_listing(
     let new_city: u32 = body.city_id.unwrap_or_else(|| row.try_get("city_id").unwrap_or(0));
 
     // A new title means a new slug (same collision retry, excluding own row).
+    // Exhaustion returns 400, never a 500 on the UNIQUE index.
     let old_title: String = row.try_get("title").map_err(|_| ApiError::Internal)?;
     let mut slug: String = row.try_get("slug").map_err(|_| ApiError::Internal)?;
     if new_title != old_title {
         let base = make_slug(&new_title);
-        slug = base.clone();
-        for attempt in 1..=5 {
+        let mut free: Option<String> = None;
+        for attempt in 1..=6 {
             let candidate = if attempt == 1 { base.clone() } else { format!("{base}-{attempt}") };
             let clash: Option<u64> = sqlx::query_scalar("SELECT id FROM listings WHERE slug = ? AND id <> ?")
                 .bind(&candidate)
@@ -367,10 +368,15 @@ pub async fn edit_listing(
                 .await
                 .map_err(|_| ApiError::Internal)?;
             if clash.is_none() {
-                slug = candidate;
+                free = Some(candidate);
                 break;
             }
         }
+        slug = free.ok_or_else(|| {
+            let mut fields = BTreeMap::new();
+            fields.insert("slug".to_string(), "unavailable".to_string());
+            ApiError::Validation { fields }
+        })?;
     }
 
     sqlx::query(
@@ -499,7 +505,7 @@ pub async fn my_listings(
     seller_id: u64,
     status: &str,
 ) -> Result<Vec<ListingOut>, ApiError> {
-    const ALLOWED: [&str; 5] = ["pending", "active", "rejected", "sold", "archived"];
+    const ALLOWED: [&str; 6] = ["draft", "pending", "active", "rejected", "sold", "archived"];
     let rows = if status == "all" || status.is_empty() {
         sqlx::query(
             "SELECT * FROM listings WHERE seller_id = ? AND deleted_at IS NULL \

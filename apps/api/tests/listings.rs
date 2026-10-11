@@ -414,6 +414,100 @@ async fn submit_requires_an_image_then_moves_to_pending() {
 }
 
 #[tokio::test]
+async fn dashboard_filters_drafts() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    let (status, _) =
+        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(valid_draft())).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // Drafts are the seller's working set: the explicit filter must list them.
+    let (status, body) = send_authed(
+        app,
+        Method::GET,
+        "/api/v1/me/listings?status=draft",
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"].as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn same_title_by_two_sellers_yields_distinct_slugs() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie_a, csrf_a) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (cookie_b, csrf_b) = register_user(&app, &pool, &cfg, "+989009876543").await;
+
+    let mut draft = valid_draft();
+    draft["title"] = serde_json::json!("فرش دستباف");
+    let (status, first) =
+        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie_a), Some(&csrf_a), Some(draft.clone())).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, second) =
+        send_authed(app, Method::POST, "/api/v1/listings", Some(&cookie_b), Some(&csrf_b), Some(draft)).await;
+    assert_eq!(status, StatusCode::OK);
+    let slug_a = first["slug"].as_str().unwrap();
+    let slug_b = second["slug"].as_str().unwrap();
+    assert!(!slug_a.is_empty() && !slug_b.is_empty());
+    assert_ne!(slug_a, slug_b, "suffix dedup, never a 500");
+}
+
+#[tokio::test]
+async fn edit_slug_exhaustion_is_400_not_500() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    // Six identical titles take base, -2, -3, -4, -5, -6.
+    let mut draft = valid_draft();
+    draft["title"] = serde_json::json!("مبل راحتی");
+    for _ in 0..6 {
+        let (status, _) =
+            send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(draft.clone())).await;
+        assert_eq!(status, StatusCode::OK);
+    }
+    // A seventh listing with another title…
+    let (status, body) =
+        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(valid_draft())).await;
+    assert_eq!(status, StatusCode::OK);
+    let public_id = body["public_id"].as_str().unwrap().to_string();
+
+    // …renamed onto the exhausted slug must 400, never 500 on UNIQUE.
+    let (status, body) = send_authed(
+        app,
+        Method::PATCH,
+        &format!("/api/v1/listings/{public_id}"),
+        Some(&cookie),
+        Some(&csrf),
+        Some(serde_json::json!({ "title": "مبل راحتی" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "validation_error");
+}
+
+#[tokio::test]
 async fn mark_sold_from_pending_is_rejected() {
     let _lock = WRITE_LOCK.lock().await;
     let Some(pool) = common::test_pool().await else {
