@@ -33,6 +33,7 @@ export interface ApiProvince {
 }
 
 export interface ApiCity {
+  id: number
   name_fa: string
   slug: string
   is_launch_city: boolean

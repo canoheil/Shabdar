@@ -81,10 +81,6 @@
 <script setup lang="ts">
 import type { ApiCategory, ApiCity, ApiErrorBody, ApiListingOut } from '~/types'
 
-interface CityWithId extends ApiCity {
-  id: number
-}
-
 const route = useRoute()
 const editingId = typeof route.query.edit === 'string' ? route.query.edit : ''
 
@@ -117,15 +113,12 @@ if (meError.value) {
 }
 
 const { data: categories } = await useFetch<{ data: ApiCategory[] }>('/api/v1/categories')
-// City ids are not in the public payload — resolve Rasht (id 1) statically
-// for v1 (ponytail: the city picker stays single-launch-city until the
-// reference endpoints grow ids; Gilan has exactly one city today).
-const { data: citiesRaw } = await useFetch<{ data: ApiCity[] }>(
+// Cities carry real ids (no index fiction). Launch scope stays Gilan-only:
+// Rasht is the single launch city (PRODUCT.md §1), wider coverage arrives
+// with the national rollout, not a second hardcoded province.
+const { data: cities } = await useFetch<{ data: ApiCity[] }>(
   '/api/v1/locations/provinces/gilan/cities',
 )
-const cities = computed<{ data: (ApiCity & { id: number })[] }>(() => ({
-  data: (citiesRaw.value?.data ?? []).map((c, i) => ({ ...c, id: i + 1 })),
-}))
 
 // Edit mode: prefill from the seller's own listings.
 if (editingId) {

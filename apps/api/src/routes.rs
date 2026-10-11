@@ -501,7 +501,7 @@ async fn province_cities(
         .ok_or(ApiError::NotFound)?;
     let province_id: u16 = province.try_get("id").map_err(|_| ApiError::Internal)?;
     let rows = sqlx::query(
-        "SELECT name_fa, slug, is_launch_city FROM cities \
+        "SELECT id, name_fa, slug, is_launch_city FROM cities \
          WHERE province_id = ? ORDER BY name_fa",
     )
     .bind(province_id)
@@ -511,12 +511,13 @@ async fn province_cities(
     let data: Vec<serde_json::Value> = rows
         .into_iter()
         .map(|row| {
+            let id: u32 = row.try_get("id").map_err(|_| ApiError::Internal)?;
             let name_fa: String = row.try_get("name_fa").map_err(|_| ApiError::Internal)?;
             let slug: String = row.try_get("slug").map_err(|_| ApiError::Internal)?;
             let is_launch_city: bool =
                 row.try_get("is_launch_city").map_err(|_| ApiError::Internal)?;
             Ok(serde_json::json!({
-                "name_fa": name_fa, "slug": slug,
+                "id": id, "name_fa": name_fa, "slug": slug,
                 "is_launch_city": is_launch_city,
             }))
         })

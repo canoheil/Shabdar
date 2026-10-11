@@ -84,6 +84,8 @@ async fn cities_of_gilan_contains_launch_city_rasht() {
     assert_eq!(data.len(), 1, "exactly Rasht: {body}");
     assert_eq!(data[0]["slug"], "rasht");
     assert_eq!(data[0]["is_launch_city"], true);
+    // The post form binds real ids (no array-index fiction).
+    assert_eq!(data[0]["id"], 1);
 }
 
 #[tokio::test]
