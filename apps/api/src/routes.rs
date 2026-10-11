@@ -35,11 +35,14 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/auth/logout", post(logout))
         .route("/api/v1/me", get(me).patch(update_me))
         .route("/api/v1/me/listings", get(my_listings))
-        .route("/api/v1/listings", post(create_listing))
+        .route("/api/v1/listings", post(create_listing).get(feed_listings))
+        // One template for all single-listing methods (axum rejects two
+        // registrations of the same shape under different capture names).
         .route(
             "/api/v1/listings/{public_id}",
-            patch(edit_listing).delete(delete_listing),
+            patch(edit_listing).delete(delete_listing).get(listing_detail),
         )
+        .route("/api/v1/sitemap/listings", get(sitemap_listings))
         .route("/api/v1/listings/{public_id}/submit", post(submit_listing))
         .route("/api/v1/listings/{public_id}/mark-sold", post(mark_sold_listing))
         .route("/api/v1/listings/{public_id}/archive", post(archive_listing))
@@ -224,6 +227,47 @@ async fn delete_listing(
     crate::csrf::check_csrf(&headers)?;
     crate::listings::transition(&state.pool, user.user_id, &public_id, "delete").await?;
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// GET /api/v1/listings — public feed (Phase 3 Task 4). Query: `category`,
+/// `city`, `province` (slugs), `cursor`, `limit`. No auth: only `active`
+/// listings can ever appear (the filter is in SQL, not in memory).
+async fn feed_listings(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let page = crate::listings::feed(
+        &state.pool,
+        params.get("category").map(String::as_str),
+        params.get("city").map(String::as_str),
+        params.get("province").map(String::as_str),
+        params.get("cursor").map(String::as_str),
+        params.get("limit").map(String::as_str),
+    )
+    .await?;
+    Ok(Json(page))
+}
+
+/// GET /api/v1/listings/{slug} — public detail (Phase 3 Task 4).
+async fn listing_detail(
+    State(state): State<AppState>,
+    Path(slug): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(crate::listings::detail(&state.pool, &slug).await?))
+}
+
+/// GET /api/v1/sitemap/listings — active slugs for the Nuxt sitemap.
+async fn sitemap_listings(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let page = crate::listings::sitemap(
+        &state.pool,
+        params.get("cursor").map(String::as_str),
+        params.get("limit").map(String::as_str),
+    )
+    .await?;
+    Ok(Json(page))
 }
 
 /// GET /api/v1/categories — active categories, sort-ordered (Phase 3 Task 2).

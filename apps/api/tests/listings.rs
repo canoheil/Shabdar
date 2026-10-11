@@ -441,3 +441,229 @@ async fn mark_sold_from_pending_is_rejected() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"]["code"], "validation_error");
 }
+
+// --- Task 4: public feed, detail, sitemap -----------------------------------
+
+/// Create a draft through the API, attach one image row + submit through the
+/// API, then flip it to `active` directly (the admin approve endpoint arrives
+/// in Task 6; the flip is test setup, the reads under test are HTTP).
+async fn create_active(
+    app: &axum::Router,
+    pool: &sqlx::MySqlPool,
+    cookie: &str,
+    csrf: &str,
+    title: &str,
+) -> (String, String) {
+    let mut draft = valid_draft();
+    draft["title"] = serde_json::json!(title);
+    let (status, body) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/listings",
+        Some(cookie),
+        Some(csrf),
+        Some(draft),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let public_id = body["public_id"].as_str().unwrap().to_string();
+    let slug = body["slug"].as_str().unwrap().to_string();
+    sqlx::query(
+        "INSERT INTO listing_images (listing_id, storage_key, sort_order, created_at) \
+         SELECT id, 'setup/cover.png', 0, NOW(3) FROM listings WHERE public_id = ?",
+    )
+    .bind(&public_id)
+    .execute(pool)
+    .await
+    .expect("image setup row");
+    let (status, _) = send_authed(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/listings/{public_id}/submit"),
+        Some(cookie),
+        Some(csrf),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    sqlx::query(
+        "UPDATE listings SET status = 'active', published_at = NOW(3) WHERE public_id = ?",
+    )
+    .bind(&public_id)
+    .execute(pool)
+    .await
+    .expect("activate");
+    (public_id, slug)
+}
+
+#[tokio::test]
+async fn feed_shows_only_active_listings() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    // Empty feed shape first.
+    let (status, body) = send(app.clone(), Method::GET, "/api/v1/listings", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"], serde_json::json!([]));
+    assert_eq!(body["page"]["has_more"], false);
+
+    // One active, one draft, one pending: only the active one is public.
+    create_active(&app, &pool, &cookie, &csrf, "فرش دستباف").await;
+    let (status, _) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/listings",
+        Some(&cookie),
+        Some(&csrf),
+        Some(valid_draft()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, body) = send(app, Method::GET, "/api/v1/listings", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let data = body["data"].as_array().expect("data array");
+    assert_eq!(data.len(), 1, "only the active listing is public: {body}");
+    assert_eq!(data[0]["title"], "فرش دستباف");
+    assert_eq!(data[0]["rating_average"], 0);
+    assert_eq!(data[0]["rating_count"], 0);
+}
+
+#[tokio::test]
+async fn feed_filters_by_category_and_city() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    create_active(&app, &pool, &cookie, &csrf, "فرش دستباف").await;
+
+    let (status, body) = send(app.clone(), Method::GET, "/api/v1/listings?category=home-sweets", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"].as_array().unwrap().len(), 1);
+
+    let (status, body) = send(app.clone(), Method::GET, "/api/v1/listings?category=education", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"], serde_json::json!([]));
+
+    let (status, body) = send(app.clone(), Method::GET, "/api/v1/listings?city=rasht", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"].as_array().unwrap().len(), 1);
+
+    // Unknown filter slugs are a client error, not an empty list.
+    let (status, body) = send(app, Method::GET, "/api/v1/listings?category=nope", None).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "validation_error");
+}
+
+#[tokio::test]
+async fn feed_keyset_cursor_pages_without_gaps() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    for title in ["یک", "دو", "سه"] {
+        create_active(&app, &pool, &cookie, &csrf, title).await;
+    }
+
+    let (status, page1) = send(app.clone(), Method::GET, "/api/v1/listings?limit=2", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(page1["data"].as_array().unwrap().len(), 2);
+    assert_eq!(page1["page"]["has_more"], true);
+    let cursor = page1["page"]["next_cursor"].as_str().expect("cursor").to_string();
+
+    let (status, page2) =
+        send(app, Method::GET, &format!("/api/v1/listings?limit=2&cursor={cursor}"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(page2["data"].as_array().unwrap().len(), 1);
+    assert_eq!(page2["page"]["has_more"], false);
+
+    // Three distinct slugs across both pages — no duplicate, no drop.
+    let mut slugs: Vec<String> = page1["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .chain(page2["data"].as_array().unwrap().iter())
+        .map(|c| c["slug"].as_str().unwrap().to_string())
+        .collect();
+    slugs.sort();
+    slugs.dedup();
+    assert_eq!(slugs.len(), 3, "every active listing appears exactly once");
+}
+
+#[tokio::test]
+async fn detail_visibility_rules() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (active_id, active_slug) = create_active(&app, &pool, &cookie, &csrf, "فرش دستباف").await;
+
+    // Active → 200 with the Persian title.
+    let (status, body) = send(app.clone(), Method::GET, &format!("/api/v1/listings/{active_slug}"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["title"], "فرش دستباف");
+
+    // Removed → 410 gone (no existence detail beyond the code).
+    sqlx::query("UPDATE listings SET status = 'removed' WHERE public_id = ?")
+        .bind(&active_id)
+        .execute(&pool)
+        .await
+        .expect("remove");
+    let (status, body) = send(app.clone(), Method::GET, &format!("/api/v1/listings/{active_slug}"), None).await;
+    assert_eq!(status, StatusCode::GONE);
+    assert_eq!(body["error"]["code"], "gone");
+
+    // Draft → 404 for strangers (no existence oracle).
+    let (status, body) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/listings",
+        Some(&cookie),
+        Some(&csrf),
+        Some(valid_draft()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let draft_slug = body["slug"].as_str().unwrap().to_string();
+    let (status, body) = send(app, Method::GET, &format!("/api/v1/listings/{draft_slug}"), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"]["code"], "not_found");
+}
+
+#[tokio::test]
+async fn sitemap_lists_only_active_slugs() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (_, slug) = create_active(&app, &pool, &cookie, &csrf, "فرش دستباف").await;
+
+    let (status, body) = send(app, Method::GET, "/api/v1/sitemap/listings", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let data = body["data"].as_array().expect("data array");
+    assert_eq!(data.len(), 1);
+    assert_eq!(data[0]["url"], format!("/listings/{slug}"));
+    assert!(data[0]["updated_at"].is_string(), "updated_at present");
+}

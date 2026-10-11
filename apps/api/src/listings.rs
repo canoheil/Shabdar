@@ -527,6 +527,304 @@ pub async fn my_listings(
     rows.iter().map(listing_out).collect()
 }
 
+// --- Task 4: public reads (feed, detail, sitemap) ----------------------------
+
+/// Opaque keyset cursor: `<published-or-updated-micros>:<id>`. Plain composite
+/// text, no encoding crate (ponytail: base64 would cost a dependency for zero
+/// privacy — the values are ordering keys, documented as opaque).
+fn encode_cursor(ts: &chrono::DateTime<Utc>, id: u64) -> String {
+    format!("{}:{id}", ts.timestamp_micros())
+}
+
+fn decode_cursor(raw: &str) -> Result<(chrono::DateTime<Utc>, u64), ApiError> {
+    let (micros, id) = raw.split_once(':').ok_or_else(|| {
+        let mut fields = BTreeMap::new();
+        fields.insert("cursor".to_string(), "invalid_cursor".to_string());
+        ApiError::Validation { fields }
+    })?;
+    let ts = micros
+        .parse::<i64>()
+        .ok()
+        .and_then(chrono::DateTime::from_timestamp_micros)
+        .ok_or_else(|| {
+            let mut fields = BTreeMap::new();
+            fields.insert("cursor".to_string(), "invalid_cursor".to_string());
+            ApiError::Validation { fields }
+        })?;
+    let id = id.parse::<u64>().map_err(|_| {
+        let mut fields = BTreeMap::new();
+        fields.insert("cursor".to_string(), "invalid_cursor".to_string());
+        ApiError::Validation { fields }
+    })?;
+    Ok((ts, id))
+}
+
+fn page_limit(raw: Option<&str>) -> usize {
+    raw.and_then(|s| s.parse::<usize>().ok()).unwrap_or(20).clamp(1, 50)
+}
+
+/// Resolves an optional slug filter to its id: unknown slugs are a client
+/// error, never an empty list.
+async fn filter_id(
+    pool: &MySqlPool,
+    table: &str,
+    slug: &str,
+    field: &str,
+    reason: &str,
+) -> Result<Option<u64>, ApiError> {
+    // Fixed table names from the caller, never user input.
+    let sql = format!("SELECT id FROM {table} WHERE slug = ?");
+    let id: Option<u64> = sqlx::query_scalar(&sql)
+        .bind(slug)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| ApiError::Internal)?;
+    match id {
+        Some(id) => Ok(Some(id)),
+        None => {
+            let mut fields = BTreeMap::new();
+            fields.insert(field.to_string(), reason.to_string());
+            Err(ApiError::Validation { fields })
+        }
+    }
+}
+
+fn card_from_row(row: &sqlx::mysql::MySqlRow) -> Result<serde_json::Value, ApiError> {
+    let sum: u32 = row.try_get("rating_sum").map_err(|_| ApiError::Internal)?;
+    let count: u32 = row.try_get("rating_count").map_err(|_| ApiError::Internal)?;
+    let average = if count == 0 {
+        serde_json::json!(0)
+    } else {
+        serde_json::json!(sum as f64 / count as f64)
+    };
+    let cover: Option<String> = row.try_get("cover").map_err(|_| ApiError::Internal)?;
+    let published_at: chrono::DateTime<Utc> =
+        row.try_get("published_at").map_err(|_| ApiError::Internal)?;
+    Ok(serde_json::json!({
+        "public_id": row.try_get::<String, _>("public_id").map_err(|_| ApiError::Internal)?,
+        "slug": row.try_get::<String, _>("slug").map_err(|_| ApiError::Internal)?,
+        "title": row.try_get::<String, _>("title").map_err(|_| ApiError::Internal)?,
+        "price_toman": row.try_get::<Option<u64>, _>("price_toman").map_err(|_| ApiError::Internal)?,
+        "price_type": row.try_get::<String, _>("price_type").map_err(|_| ApiError::Internal)?,
+        "city": row.try_get::<String, _>("city").map_err(|_| ApiError::Internal)?,
+        "province": row.try_get::<String, _>("province").map_err(|_| ApiError::Internal)?,
+        "category": row.try_get::<String, _>("category").map_err(|_| ApiError::Internal)?,
+        "cover_image": cover.map(|k| format!("/media/{k}")),
+        "rating_average": average,
+        "rating_count": count,
+        "published_at": published_at.to_rfc3339(),
+    }))
+}
+
+/// GET /listings — `active` only, newest first, keyset on (published_at, id).
+/// Filters: `category`, `city`, `province` (slugs). Page size caps at 50.
+pub async fn feed(
+    pool: &MySqlPool,
+    category: Option<&str>,
+    city: Option<&str>,
+    province: Option<&str>,
+    cursor: Option<&str>,
+    limit_raw: Option<&str>,
+) -> Result<serde_json::Value, ApiError> {
+    let limit = page_limit(limit_raw);
+    let mut sql = "SELECT l.id, l.public_id, l.slug, l.title, l.price_toman, l.price_type, \
+         l.rating_sum, l.rating_count, l.published_at, c.name_fa AS city, \
+         p.name_fa AS province, cat.name_fa AS category, \
+         (SELECT storage_key FROM listing_images WHERE listing_id = l.id \
+          ORDER BY sort_order LIMIT 1) AS cover \
+         FROM listings l JOIN cities c ON c.id = l.city_id \
+         JOIN provinces p ON p.id = c.province_id \
+         JOIN categories cat ON cat.id = l.category_id \
+         WHERE l.status = 'active' AND l.deleted_at IS NULL"
+        .to_string();
+    // Fixed fragments only; every value is bound, never interpolated.
+    // Unknown filter slugs are a client error (validated up front).
+    if let Some(slug) = category {
+        filter_id(pool, "categories", slug, "category", "unknown_category").await?;
+        sql.push_str(" AND cat.slug = ?");
+    }
+    if let Some(slug) = city {
+        filter_id(pool, "cities", slug, "city", "unknown_city").await?;
+        sql.push_str(" AND c.slug = ?");
+    }
+    if let Some(slug) = province {
+        filter_id(pool, "provinces", slug, "province", "unknown_province").await?;
+        sql.push_str(" AND p.slug = ?");
+    }
+    feed_query(pool, &sql, category, city, province, cursor, limit).await
+}
+
+async fn feed_query(
+    pool: &MySqlPool,
+    base: &str,
+    category: Option<&str>,
+    city: Option<&str>,
+    province: Option<&str>,
+    cursor: Option<&str>,
+    limit: usize,
+) -> Result<serde_json::Value, ApiError> {
+    let mut sql = base.to_string();
+    // Keyset: rows strictly older than the cursor (ties break on id).
+    let anchor: Option<(chrono::DateTime<Utc>, u64)> =
+        cursor.map(decode_cursor).transpose()?;
+    if anchor.is_some() {
+        sql.push_str(" AND (l.published_at, l.id) < (?, ?)");
+    }
+    sql.push_str(" ORDER BY l.published_at DESC, l.id DESC LIMIT ?");
+    let mut q = sqlx::query(&sql);
+    if let Some(slug) = category {
+        q = q.bind(slug);
+    }
+    if let Some(slug) = city {
+        q = q.bind(slug);
+    }
+    if let Some(slug) = province {
+        q = q.bind(slug);
+    }
+    if let Some((ts, id)) = anchor {
+        q = q.bind(ts).bind(id);
+    }
+    q = q.bind((limit + 1) as i64);
+    let rows = q.fetch_all(pool).await.map_err(|_| ApiError::Internal)?;
+    // Track each card with its (published_at, id) for the next cursor.
+    let mut with_keys: Vec<(serde_json::Value, chrono::DateTime<Utc>, u64)> =
+        Vec::with_capacity(rows.len());
+    for row in &rows {
+        let ts: chrono::DateTime<Utc> = row.try_get("published_at").map_err(|_| ApiError::Internal)?;
+        let id: u64 = row.try_get("id").map_err(|_| ApiError::Internal)?;
+        with_keys.push((card_from_row(row)?, ts, id));
+    }
+    let has_more = with_keys.len() > limit;
+    with_keys.truncate(limit);
+    let next_cursor = if has_more {
+        with_keys.last().map(|(_, ts, id)| encode_cursor(ts, *id))
+    } else {
+        None
+    };
+    let data: Vec<serde_json::Value> = with_keys.into_iter().map(|(item, _, _)| item).collect();
+    Ok(serde_json::json!({
+        "data": data,
+        "page": { "next_cursor": next_cursor, "has_more": has_more },
+    }))
+}
+
+/// GET /listings/{slug} — public detail. `active` → 200; `removed` or
+/// soft-deleted → 410 `gone`; anything else (draft/pending/rejected/unknown)
+/// → 404 with no existence signal.
+pub async fn detail(pool: &MySqlPool, slug: &str) -> Result<serde_json::Value, ApiError> {
+    let row = sqlx::query(
+        "SELECT l.*, c.name_fa AS city, p.name_fa AS province, cat.name_fa AS category, \
+         u.public_id AS seller_public_id, u.display_name AS seller_name \
+         FROM listings l JOIN cities c ON c.id = l.city_id \
+         JOIN provinces p ON p.id = c.province_id \
+         JOIN categories cat ON cat.id = l.category_id \
+         JOIN users u ON u.id = l.seller_id WHERE l.slug = ?",
+    )
+    .bind(slug)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::Internal)?
+    .ok_or(ApiError::NotFound)?;
+    let status: String = row.try_get("status").map_err(|_| ApiError::Internal)?;
+    let deleted: Option<chrono::DateTime<Utc>> =
+        row.try_get("deleted_at").map_err(|_| ApiError::Internal)?;
+    if status == "removed" || deleted.is_some() {
+        return Err(ApiError::Gone);
+    }
+    if status != "active" {
+        return Err(ApiError::NotFound);
+    }
+    let id: u64 = row.try_get("id").map_err(|_| ApiError::Internal)?;
+    let images = sqlx::query(
+        "SELECT storage_key, alt_text FROM listing_images WHERE listing_id = ? ORDER BY sort_order",
+    )
+    .bind(id)
+    .fetch_all(pool)
+    .await
+    .map_err(|_| ApiError::Internal)?;
+    let images: Vec<serde_json::Value> = images
+        .iter()
+        .map(|img| {
+            let key: String = img.try_get("storage_key").map_err(|_| ApiError::Internal)?;
+            let alt: Option<String> = img.try_get("alt_text").map_err(|_| ApiError::Internal)?;
+            Ok(serde_json::json!({ "url": format!("/media/{key}"), "alt_text": alt }))
+        })
+        .collect::<Result<_, ApiError>>()?;
+    let sum: u32 = row.try_get("rating_sum").map_err(|_| ApiError::Internal)?;
+    let count: u32 = row.try_get("rating_count").map_err(|_| ApiError::Internal)?;
+    let published_at: chrono::DateTime<Utc> =
+        row.try_get("published_at").map_err(|_| ApiError::Internal)?;
+    Ok(serde_json::json!({
+        "public_id": row.try_get::<String, _>("public_id").map_err(|_| ApiError::Internal)?,
+        "slug": row.try_get::<String, _>("slug").map_err(|_| ApiError::Internal)?,
+        "title": row.try_get::<String, _>("title").map_err(|_| ApiError::Internal)?,
+        "description": row.try_get::<String, _>("description").map_err(|_| ApiError::Internal)?,
+        "price_toman": row.try_get::<Option<u64>, _>("price_toman").map_err(|_| ApiError::Internal)?,
+        "price_type": row.try_get::<String, _>("price_type").map_err(|_| ApiError::Internal)?,
+        "city": row.try_get::<String, _>("city").map_err(|_| ApiError::Internal)?,
+        "province": row.try_get::<String, _>("province").map_err(|_| ApiError::Internal)?,
+        "category": row.try_get::<String, _>("category").map_err(|_| ApiError::Internal)?,
+        "images": images,
+        "seller": {
+            "public_id": row.try_get::<String, _>("seller_public_id").map_err(|_| ApiError::Internal)?,
+            "display_name": row.try_get::<Option<String>, _>("seller_name").map_err(|_| ApiError::Internal)?,
+        },
+        "rating_average": if count == 0 { serde_json::json!(0) } else { serde_json::json!(sum as f64 / count as f64) },
+        "rating_count": count,
+        "comment_count": row.try_get::<u32, _>("comment_count").map_err(|_| ApiError::Internal)?,
+        "published_at": published_at.to_rfc3339(),
+    }))
+}
+
+/// GET /sitemap/listings — active slugs + `updated_at`, same page envelope.
+pub async fn sitemap(
+    pool: &MySqlPool,
+    cursor: Option<&str>,
+    limit_raw: Option<&str>,
+) -> Result<serde_json::Value, ApiError> {
+    let limit = page_limit(limit_raw);
+    let anchor: Option<(chrono::DateTime<Utc>, u64)> =
+        cursor.map(decode_cursor).transpose()?;
+    let mut sql = "SELECT id, slug, updated_at FROM listings \
+         WHERE status = 'active' AND deleted_at IS NULL"
+        .to_string();
+    if anchor.is_some() {
+        sql.push_str(" AND (updated_at, id) < (?, ?)");
+    }
+    sql.push_str(" ORDER BY updated_at DESC, id DESC LIMIT ?");
+    let mut q = sqlx::query(&sql);
+    if let Some((ts, id)) = anchor {
+        q = q.bind(ts).bind(id);
+    }
+    q = q.bind((limit + 1) as i64);
+    let rows = q.fetch_all(pool).await.map_err(|_| ApiError::Internal)?;
+    let mut entries: Vec<(serde_json::Value, chrono::DateTime<Utc>, u64)> =
+        Vec::with_capacity(rows.len());
+    for row in &rows {
+        let slug: String = row.try_get("slug").map_err(|_| ApiError::Internal)?;
+        let updated_at: chrono::DateTime<Utc> =
+            row.try_get("updated_at").map_err(|_| ApiError::Internal)?;
+        let id: u64 = row.try_get("id").map_err(|_| ApiError::Internal)?;
+        entries.push((
+            serde_json::json!({ "url": format!("/listings/{slug}"), "updated_at": updated_at.to_rfc3339() }),
+            updated_at,
+            id,
+        ));
+    }
+    let has_more = entries.len() > limit;
+    entries.truncate(limit);
+    let next_cursor = if has_more {
+        entries.last().map(|(_, ts, id)| encode_cursor(ts, *id))
+    } else {
+        None
+    };
+    let data: Vec<serde_json::Value> = entries.into_iter().map(|(item, _, _)| item).collect();
+    Ok(serde_json::json!({
+        "data": data,
+        "page": { "next_cursor": next_cursor, "has_more": has_more },
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
