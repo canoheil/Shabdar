@@ -12,6 +12,7 @@
 - Soft delete (`deleted_at`) for users and listings. Hard delete only for personal data on request, after a retention review.
 - Uniqueness and check constraints are enforced in the database.
 - This is a logical design, not executable migration SQL. Migrations are written after approval. Each migration is tested on an empty database.
+- Phase 3 status (2026-10-11): `provinces`, `cities` (+ Gilan/Rasht seed, Rasht = launch city), `categories` (+ the 7 launch seeds), `listings` (price CHECK: fixed requires a price, negotiable optional, free must be NULL), `listing_images`, and `admin_audit_logs` are built (migrations 0003–0006) with seeds applied. Still deferred: `listing_locations`, `support_tickets`, profanity keyword table, and everything in §2 not named here (ratings, comments, favorites, reports, blocks, conversations, messages, notifications).
 
 ## 2. Tables
 

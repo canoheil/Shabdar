@@ -1,11 +1,18 @@
 # Shabdar web (`apps/web`)
 
-Nuxt 4 SSR frontend for the Shabdar marketplace (docs/PHASE2_PLAN.md, WP 2).
+Nuxt 4 SSR frontend for the Shabdar marketplace (docs/PHASE2_PLAN.md, WP 2;
+listings pages in docs/PHASE3_PLAN.md, Task 7).
 Persian RTL (`<html lang="fa" dir="rtl">`); the browser only ever talks to
 this dev server (:3000) — its Nitro `/api/**` catch-all proxies to the Axum
 API (:8080), forwarding cookies and `X-Forwarded-For` (ARCHITECTURE.md §3).
 On mutations the proxy also copies the `shabdar_csrf` cookie value into the
 `X-CSRF-Token` header, so browser code never handles the CSRF token.
+
+Pages: `/` (active feed + category/city filters + auth block), `/login`
+(OTP flow), `/listings/[slug]` (SSR detail with canonical + JSON-LD,
+no `AggregateRating` until the ratings phase), `/post` (create/edit/submit
+with photo uploads; login-gated), `/admin/queue` (pending queue +
+approve/reject-with-reason; the API enforces `is_admin`).
 
 ## Node toolchain (Termux)
 
