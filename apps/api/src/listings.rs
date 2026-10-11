@@ -197,7 +197,7 @@ async fn check_city(pool: &MySqlPool, id: u32, errors: &mut BTreeMap<String, Str
 
 /// Load one listing by `public_id`: unknown → `NotFound`, another seller's →
 /// `Forbidden` (the plan pins 403 for non-owners).
-async fn own_listing(
+pub async fn own_listing(
     pool: &MySqlPool,
     seller_id: u64,
     public_id: &str,

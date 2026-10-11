@@ -5,6 +5,7 @@ pub mod config;
 pub mod csrf;
 pub mod db;
 pub mod error;
+pub mod listing_images;
 pub mod listings;
 pub mod otp;
 pub mod otp_service;

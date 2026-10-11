@@ -15,7 +15,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::{
     middleware,
-    routing::{get, patch, post},
+    routing::{delete, get, patch, post},
     Json, Router,
 };
 use serde::Deserialize;
@@ -46,6 +46,12 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/listings/{public_id}/submit", post(submit_listing))
         .route("/api/v1/listings/{public_id}/mark-sold", post(mark_sold_listing))
         .route("/api/v1/listings/{public_id}/archive", post(archive_listing))
+        .route("/api/v1/listings/{public_id}/images", post(upload_image))
+        .route(
+            "/api/v1/listings/{public_id}/images/{image_id}",
+            delete(delete_image),
+        )
+        .route("/api/v1/listings/{public_id}/images/order", patch(images_order))
         .route("/api/v1/categories", get(categories))
         .route("/api/v1/locations/provinces", get(provinces))
         .route(
@@ -226,6 +232,80 @@ async fn delete_listing(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     crate::csrf::check_csrf(&headers)?;
     crate::listings::transition(&state.pool, user.user_id, &public_id, "delete").await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// POST /api/v1/listings/{public_id}/images — multipart upload (Phase 3
+/// Task 5). CSRF is checked before any file or row is written; multipart
+/// parsing itself writes nothing.
+async fn upload_image(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    mut multipart: axum::extract::Multipart,
+) -> Result<Json<crate::listing_images::ImageOut>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    let mut bytes: Option<Vec<u8>> = None;
+    while let Some(field) = multipart.next_field().await.map_err(|_| {
+        let mut fields = BTreeMap::new();
+        fields.insert("images".to_string(), "unreadable".to_string());
+        ApiError::Validation { fields }
+    })? {
+        if field.name() == Some("file") {
+            bytes = Some(field.bytes().await.map_err(|_| {
+                let mut fields = BTreeMap::new();
+                fields.insert("images".to_string(), "unreadable".to_string());
+                ApiError::Validation { fields }
+            })?.to_vec());
+            break;
+        }
+    }
+    let Some(bytes) = bytes else {
+        let mut fields = BTreeMap::new();
+        fields.insert("images".to_string(), "required".to_string());
+        return Err(ApiError::Validation { fields });
+    };
+    Ok(Json(
+        crate::listing_images::add_image(&state.pool, &state.config, user.user_id, &public_id, &bytes)
+            .await?,
+    ))
+}
+
+/// DELETE /api/v1/listings/{public_id}/images/{image_id} — removes row + file.
+async fn delete_image(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path((public_id, image_id)): Path<(String, u64)>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::listing_images::remove_image(&state.pool, &state.config, user.user_id, &public_id, image_id)
+        .await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// Request body for PATCH …/images/order (Phase 3 Task 5).
+#[derive(Deserialize)]
+struct ImagesOrderBody {
+    image_ids: Option<Vec<u64>>,
+}
+
+/// PATCH /api/v1/listings/{public_id}/images/order — sets display order.
+async fn images_order(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    Json(body): Json<ImagesOrderBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    let Some(ids) = body.image_ids else {
+        let mut fields = BTreeMap::new();
+        fields.insert("image_ids".to_string(), "required".to_string());
+        return Err(ApiError::Validation { fields });
+    };
+    crate::listing_images::set_order(&state.pool, user.user_id, &public_id, &ids).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
