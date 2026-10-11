@@ -70,7 +70,7 @@ pub struct ListingOut {
     pub updated_at: String,
 }
 
-fn listing_out(row: &sqlx::mysql::MySqlRow) -> Result<ListingOut, ApiError> {
+pub fn listing_out(row: &sqlx::mysql::MySqlRow) -> Result<ListingOut, ApiError> {
     // Timestamps serialize as RFC3339 strings (ponytail: string fields dodge
     // the chrono `serde` feature — no new dependency surface for one format).
     let created_at: chrono::DateTime<Utc> = row.try_get("created_at").map_err(|_| ApiError::Internal)?;
@@ -532,11 +532,11 @@ pub async fn my_listings(
 /// Opaque keyset cursor: `<published-or-updated-micros>:<id>`. Plain composite
 /// text, no encoding crate (ponytail: base64 would cost a dependency for zero
 /// privacy — the values are ordering keys, documented as opaque).
-fn encode_cursor(ts: &chrono::DateTime<Utc>, id: u64) -> String {
+pub fn encode_cursor(ts: &chrono::DateTime<Utc>, id: u64) -> String {
     format!("{}:{id}", ts.timestamp_micros())
 }
 
-fn decode_cursor(raw: &str) -> Result<(chrono::DateTime<Utc>, u64), ApiError> {
+pub fn decode_cursor(raw: &str) -> Result<(chrono::DateTime<Utc>, u64), ApiError> {
     let (micros, id) = raw.split_once(':').ok_or_else(|| {
         let mut fields = BTreeMap::new();
         fields.insert("cursor".to_string(), "invalid_cursor".to_string());
@@ -559,7 +559,7 @@ fn decode_cursor(raw: &str) -> Result<(chrono::DateTime<Utc>, u64), ApiError> {
     Ok((ts, id))
 }
 
-fn page_limit(raw: Option<&str>) -> usize {
+pub fn page_limit(raw: Option<&str>) -> usize {
     raw.and_then(|s| s.parse::<usize>().ok()).unwrap_or(20).clamp(1, 50)
 }
 

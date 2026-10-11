@@ -52,6 +52,11 @@ pub fn router(state: AppState) -> Router {
             delete(delete_image),
         )
         .route("/api/v1/listings/{public_id}/images/order", patch(images_order))
+        .route("/api/v1/admin/listings/queue", get(admin_queue))
+        .route("/api/v1/admin/listings/{public_id}", get(admin_detail))
+        .route("/api/v1/admin/listings/{public_id}/approve", post(admin_approve))
+        .route("/api/v1/admin/listings/{public_id}/reject", post(admin_reject))
+        .route("/api/v1/admin/listings/{public_id}/remove", post(admin_remove))
         .route("/api/v1/categories", get(categories))
         .route("/api/v1/locations/provinces", get(provinces))
         .route(
@@ -283,6 +288,77 @@ async fn delete_image(
     crate::listing_images::remove_image(&state.pool, &state.config, user.user_id, &public_id, image_id)
         .await?;
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// Request body for admin reject/remove (Phase 3 Task 6).
+#[derive(Deserialize)]
+struct AdminReasonBody {
+    reason: Option<String>,
+}
+
+/// GET /api/v1/admin/listings/queue — pending oldest first (admin only).
+async fn admin_queue(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::admin::queue(
+            &state.pool,
+            params.get("cursor").map(String::as_str),
+            params.get("limit").map(String::as_str),
+        )
+        .await?,
+    ))
+}
+
+/// GET /api/v1/admin/listings/{public_id} — full view with seller info.
+async fn admin_detail(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(public_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::admin::require_admin(&user)?;
+    Ok(Json(crate::admin::admin_detail(&state.pool, &public_id).await?))
+}
+
+/// POST /api/v1/admin/listings/{public_id}/approve — pending → active.
+async fn admin_approve(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+) -> Result<Json<crate::listings::ListingOut>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(crate::admin::approve(&state.pool, &user, &public_id).await?))
+}
+
+/// POST /api/v1/admin/listings/{public_id}/reject — pending → rejected.
+async fn admin_reject(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    Json(body): Json<AdminReasonBody>,
+) -> Result<Json<crate::listings::ListingOut>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(crate::admin::reject(&state.pool, &user, &public_id, &body.reason).await?))
+}
+
+/// POST /api/v1/admin/listings/{public_id}/remove — active → removed.
+async fn admin_remove(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    Json(body): Json<AdminReasonBody>,
+) -> Result<Json<crate::listings::ListingOut>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(crate::admin::remove(&state.pool, &user, &public_id, &body.reason).await?))
 }
 
 /// Request body for PATCH …/images/order (Phase 3 Task 5).
