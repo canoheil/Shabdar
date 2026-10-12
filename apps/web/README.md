@@ -7,6 +7,8 @@ this dev server (:3000) — its Nitro `/api/**` catch-all proxies to the Axum
 API (:8080), forwarding cookies and `X-Forwarded-For` (ARCHITECTURE.md §3).
 On mutations the proxy also copies the `shabdar_csrf` cookie value into the
 `X-CSRF-Token` header, so browser code never handles the CSRF token.
+Public listing photos (`/media/**`) proxy to Axum the same way — the browser
+never talks to :8080 for images either.
 
 Pages: `/` (active feed + category/city filters + auth block), `/login`
 (OTP flow), `/listings/[slug]` (SSR detail with canonical + JSON-LD,
