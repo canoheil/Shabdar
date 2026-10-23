@@ -4,6 +4,7 @@
       <NuxtLink to="/" class="shell__brand">شبدر</NuxtLink>
       <nav class="shell__nav" aria-label="ناوبری اصلی">
         <NuxtLink to="/post" class="shell__nav-link">ثبت آگهی</NuxtLink>
+        <NuxtLink to="/me" class="shell__nav-link">داشبورد</NuxtLink>
         <NuxtLink to="/login" class="shell__nav-link">ورود</NuxtLink>
       </nav>
     </header>
