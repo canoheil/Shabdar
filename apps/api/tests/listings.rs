@@ -701,6 +701,53 @@ async fn feed_keyset_cursor_pages_without_gaps() {
 }
 
 #[tokio::test]
+async fn feed_unknown_sort_is_400() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let app = common::spawn_app(common::test_config()).await;
+
+    let (status, body) = send(app, Method::GET, "/api/v1/listings?sort=cheapest", None).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "validation_error");
+    assert_eq!(body["error"]["fields"]["sort"], "unknown_sort");
+}
+
+/// A cursor is only meaningful for the sort that produced it: replaying it
+/// with another sort must be a client error, never a quietly wrong page.
+#[tokio::test]
+async fn feed_cursor_from_another_sort_is_400() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    for title in ["یک", "دو", "سه"] {
+        create_active(&app, &pool, &cookie, &csrf, title).await;
+    }
+
+    let (status, page1) = send(app.clone(), Method::GET, "/api/v1/listings?limit=1", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let cursor = page1["page"]["next_cursor"].as_str().expect("cursor").to_string();
+
+    let (status, body) = send(
+        app,
+        Method::GET,
+        &format!("/api/v1/listings?sort=price_asc&cursor={cursor}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "validation_error");
+    assert_eq!(body["error"]["fields"]["cursor"], "invalid_cursor");
+}
+
+#[tokio::test]
 async fn detail_visibility_rules() {
     let _lock = WRITE_LOCK.lock().await;
     let Some(pool) = common::test_pool().await else {

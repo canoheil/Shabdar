@@ -386,9 +386,9 @@ async fn images_order(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
-/// GET /api/v1/listings — public feed (Phase 3 Task 4). Query: `category`,
-/// `city`, `province` (slugs), `cursor`, `limit`. No auth: only `active`
-/// listings can ever appear (the filter is in SQL, not in memory).
+/// GET /api/v1/listings — public feed (Phase 3 Task 4, Phase 4 Task 1).
+/// Query: `category`, `city`, `province` (slugs), `sort`, `cursor`, `limit`.
+/// No auth: only `active` listings can ever appear (the filter is in SQL).
 async fn feed_listings(
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
@@ -398,6 +398,7 @@ async fn feed_listings(
         params.get("category").map(String::as_str),
         params.get("city").map(String::as_str),
         params.get("province").map(String::as_str),
+        params.get("sort").map(String::as_str),
         params.get("cursor").map(String::as_str),
         params.get("limit").map(String::as_str),
     )
