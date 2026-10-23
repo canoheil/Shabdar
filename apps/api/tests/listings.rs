@@ -555,6 +555,7 @@ async fn create_active(
 
 /// Sort fixtures need a chosen price and rating counters; the reads under
 /// test are HTTP, so the counters are written directly (no ratings domain).
+#[allow(clippy::too_many_arguments)]
 async fn create_active_with(
     app: &axum::Router,
     pool: &sqlx::MySqlPool,
