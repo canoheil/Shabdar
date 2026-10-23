@@ -533,6 +533,33 @@ pub async fn my_listings(
     rows.iter().map(listing_out).collect()
 }
 
+/// GET /me/dashboard/summary — the seller's own counts (API.md §4).
+/// `favorite_count` stays 0 until the favorites domain exists (Phase 4
+/// decision 5): the field is part of the pinned shape, so it ships as a
+/// placeholder rather than being omitted.
+pub async fn summary(pool: &MySqlPool, seller_id: u64) -> Result<serde_json::Value, ApiError> {
+    let row = sqlx::query(
+        "SELECT COUNT(CASE WHEN status = 'active' THEN 1 END) AS active_count, \
+                COUNT(CASE WHEN status = 'sold' THEN 1 END) AS sold_count, \
+                COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending_count \
+         FROM listings WHERE seller_id = ? AND deleted_at IS NULL",
+    )
+    .bind(seller_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|_| ApiError::Internal)?;
+    // COUNT() decodes as a signed BIGINT in sqlx's MySQL driver.
+    let active_count: i64 = row.try_get("active_count").map_err(|_| ApiError::Internal)?;
+    let sold_count: i64 = row.try_get("sold_count").map_err(|_| ApiError::Internal)?;
+    let pending_count: i64 = row.try_get("pending_count").map_err(|_| ApiError::Internal)?;
+    Ok(serde_json::json!({
+        "active_count": active_count,
+        "sold_count": sold_count,
+        "pending_count": pending_count,
+        "favorite_count": 0,
+    }))
+}
+
 // --- Task 4: public reads (feed, detail, sitemap) ----------------------------
 
 /// Opaque keyset cursor: `<published-or-updated-micros>:<id>`. Plain composite
@@ -723,13 +750,59 @@ pub fn decode_feed_cursor(sort: FeedSort, raw: &str) -> Result<[i64; 3], ApiErro
     Ok(keys)
 }
 
+/// Search bounds (API.md §3, Phase 4 decision 4).
+const MAX_QUERY_CHARS: usize = 100;
+const MAX_QUERY_TERMS: usize = 5;
+
+/// Folds the spelling variants users actually type (`ي`/`ی`, `ك`/`ک`, ZWNJ)
+/// and splits the query into at most five terms; every term must match.
+pub fn normalize_query(raw: &str) -> Vec<String> {
+    raw.chars()
+        .filter_map(|c| match c {
+            '\u{064A}' => Some('\u{06CC}'), // Arabic yeh → Persian yeh
+            '\u{0643}' => Some('\u{06A9}'), // Arabic kaf → Persian kaf
+            '\u{200C}' => None,              // ZWNJ is a joiner, not a break
+            _ => Some(c),
+        })
+        .collect::<String>()
+        .split_whitespace()
+        .take(MAX_QUERY_TERMS)
+        .map(str::to_string)
+        .collect()
+}
+
+/// `%term%` with LIKE metacharacters escaped (`ESCAPE '!'`), so a user's `%`
+/// or `_` is literal text and can never widen the result set.
+fn like_pattern(term: &str) -> String {
+    let mut pattern = String::with_capacity(term.len() + 2);
+    pattern.push('%');
+    for ch in term.chars() {
+        if matches!(ch, '!' | '%' | '_') {
+            pattern.push('!');
+        }
+        pattern.push(ch);
+    }
+    pattern.push('%');
+    pattern
+}
+
+/// The column with the same folds as the query, so both sides compare equal.
+/// ponytail: `LIKE '%…%'` scans the feed table (no index can serve a leading
+/// wildcard); fine at Rasht scale — upgrade to FULLTEXT/ngram or a normalized
+/// shadow column once the feed outgrows it.
+fn folded_column(column: &str) -> String {
+    format!("REPLACE(REPLACE(REPLACE({column},'ي','ی'),'ك','ک'), _utf8mb4 0xE2808C, '')")
+}
+
 /// GET /listings — `active` only, keyset on the sort's three keys.
-/// Filters: `category`, `city`, `province` (slugs). Page size caps at 50.
+/// Filters: `category`, `city`, `province` (slugs), `q` (terms). Caps at 50.
+#[allow(clippy::too_many_arguments)]
 pub async fn feed(
     pool: &MySqlPool,
     category: Option<&str>,
     city: Option<&str>,
     province: Option<&str>,
+    q: Option<&str>,
     sort: Option<&str>,
     cursor: Option<&str>,
     limit_raw: Option<&str>,
@@ -737,6 +810,15 @@ pub async fn feed(
     let limit = page_limit(limit_raw);
     let sort = parse_sort(sort)?;
     let keys = sort_keys(sort);
+    let terms: Vec<String> = match q {
+        None => Vec::new(),
+        Some(raw) if raw.chars().count() > MAX_QUERY_CHARS => {
+            let mut fields = BTreeMap::new();
+            fields.insert("q".to_string(), "too_long".to_string());
+            return Err(ApiError::Validation { fields });
+        }
+        Some(raw) => normalize_query(raw),
+    };
     let mut sql = format!(
         "SELECT l.id, l.public_id, l.slug, l.title, l.price_toman, l.price_type, \
          l.rating_sum, l.rating_count, l.published_at, c.name_fa AS city, \
@@ -764,7 +846,18 @@ pub async fn feed(
         filter_id(pool, "provinces", slug, "province", "unknown_province").await?;
         sql.push_str(" AND p.slug = ?");
     }
-    feed_query(pool, &sql, &keys, category, city, province, sort, cursor, limit).await
+    // One AND clause per term: each term may hit title or description.
+    let patterns: Vec<String> = terms.iter().map(|t| like_pattern(t)).collect();
+    let (title_folded, description_folded) = (folded_column("l.title"), folded_column("l.description"));
+    for _ in &patterns {
+        sql.push_str(&format!(
+            " AND (({title_folded}) LIKE ? ESCAPE '!' OR ({description_folded}) LIKE ? ESCAPE '!')"
+        ));
+    }
+    feed_query(
+        pool, &sql, &keys, category, city, province, &patterns, sort, cursor, limit,
+    )
+    .await
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -775,6 +868,7 @@ async fn feed_query(
     category: Option<&str>,
     city: Option<&str>,
     province: Option<&str>,
+    patterns: &[String],
     sort: FeedSort,
     cursor: Option<&str>,
     limit: usize,
@@ -797,6 +891,9 @@ async fn feed_query(
     }
     if let Some(slug) = province {
         q = q.bind(slug);
+    }
+    for pattern in patterns {
+        q = q.bind(pattern).bind(pattern);
     }
     if let Some([k1, k2, k3]) = anchor {
         q = q.bind(k1).bind(k2).bind(k3);

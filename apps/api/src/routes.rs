@@ -35,6 +35,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/auth/logout", post(logout))
         .route("/api/v1/me", get(me).patch(update_me))
         .route("/api/v1/me/listings", get(my_listings))
+        .route(
+            "/api/v1/me/dashboard/summary",
+            get(dashboard_summary),
+        )
         .route("/api/v1/listings", post(create_listing).get(feed_listings))
         // One template for all single-listing methods (axum rejects two
         // registrations of the same shape under different capture names).
@@ -157,6 +161,17 @@ async fn logout(
     Ok((
         two_set_cookies(clear_cookie, clear_csrf),
         Json(serde_json::json!({ "ok": true })),
+    ))
+}
+
+/// GET /api/v1/me/dashboard/summary — the seller's own counts (Phase 4
+/// Task 4). Session required; read-only, so no CSRF header.
+async fn dashboard_summary(
+    State(state): State<AppState>,
+    user: CurrentUser,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(
+        crate::listings::summary(&state.pool, user.user_id).await?,
     ))
 }
 
@@ -386,9 +401,9 @@ async fn images_order(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
-/// GET /api/v1/listings — public feed (Phase 3 Task 4, Phase 4 Task 1).
-/// Query: `category`, `city`, `province` (slugs), `sort`, `cursor`, `limit`.
-/// No auth: only `active` listings can ever appear (the filter is in SQL).
+/// GET /api/v1/listings — public feed (Phase 3 Task 4, Phase 4 Tasks 1–3).
+/// Query: `category`, `city`, `province` (slugs), `q`, `sort`, `cursor`,
+/// `limit`. No auth: only `active` listings can ever appear (SQL filter).
 async fn feed_listings(
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
@@ -398,6 +413,7 @@ async fn feed_listings(
         params.get("category").map(String::as_str),
         params.get("city").map(String::as_str),
         params.get("province").map(String::as_str),
+        params.get("q").map(String::as_str),
         params.get("sort").map(String::as_str),
         params.get("cursor").map(String::as_str),
         params.get("limit").map(String::as_str),
