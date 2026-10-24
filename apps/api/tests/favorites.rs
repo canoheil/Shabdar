@@ -29,6 +29,7 @@ struct TestUser {
 struct ListingFixture {
     id: u64,
     public_id: String,
+    slug: String,
 }
 
 async fn reset_db(pool: &MySqlPool) {
@@ -92,6 +93,7 @@ async fn create_user(pool: &MySqlPool, cfg: &Config, phone: &str) -> TestUser {
 
 async fn create_listing(pool: &MySqlPool, seller_id: u64, status: &str) -> ListingFixture {
     let public_id = ulid::Ulid::new().to_string();
+    let slug = format!("listing-{}", ulid::Ulid::new());
     let result = sqlx::query(
         "INSERT INTO listings (public_id, seller_id, category_id, city_id, title, slug, \
          description, price_toman, price_type, status, published_at, created_at, updated_at) \
@@ -100,7 +102,7 @@ async fn create_listing(pool: &MySqlPool, seller_id: u64, status: &str) -> Listi
     )
     .bind(&public_id)
     .bind(seller_id)
-    .bind(format!("listing-{}", ulid::Ulid::new()))
+    .bind(&slug)
     .bind(status)
     .execute(pool)
     .await
@@ -108,6 +110,7 @@ async fn create_listing(pool: &MySqlPool, seller_id: u64, status: &str) -> Listi
     ListingFixture {
         id: result.last_insert_id(),
         public_id,
+        slug,
     }
 }
 
@@ -568,4 +571,230 @@ async fn favorite_concurrent_mutations_keep_counter_exact() {
     assert_eq!(second.0, StatusCode::OK);
     assert_eq!(favorite_count(&t.pool, listing.id).await, 0);
     assert_counter_matches_rows(&t.pool, listing.id).await;
+}
+
+/// A fixed millisecond-precision timestamp makes cursor ties deterministic.
+fn fixture_saved_at() -> chrono::DateTime<chrono::Utc> {
+    chrono::DateTime::from_timestamp_micros(1_700_000_000_123_000)
+        .expect("valid fixture timestamp")
+}
+
+/// Direct list fixtures preserve the same row/counter invariant as the API.
+async fn insert_favorite(pool: &MySqlPool, user_id: u64, listing_id: u64) {
+    sqlx::query("INSERT INTO favorites (user_id, listing_id, created_at) VALUES (?, ?, ?)")
+        .bind(user_id)
+        .bind(listing_id)
+        .bind(fixture_saved_at())
+        .execute(pool)
+        .await
+        .expect("favorite fixture");
+    sqlx::query("UPDATE listings SET favorite_count = favorite_count + 1 WHERE id = ?")
+        .bind(listing_id)
+        .execute(pool)
+        .await
+        .expect("favorite counter fixture");
+}
+
+fn card_public_ids(body: &serde_json::Value) -> Vec<String> {
+    body["data"]
+        .as_array()
+        .expect("data array")
+        .iter()
+        .map(|card| {
+            card["public_id"]
+                .as_str()
+                .expect("card public_id")
+                .to_string()
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn favorites_list_requires_session() {
+    let Some(t) = setup().await else { return };
+    let (status, _, body) = send(
+        t.app.clone(),
+        Method::GET,
+        "/api/v1/me/favorites",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body["error"]["code"], "unauthorized");
+}
+
+#[tokio::test]
+async fn favorites_list_returns_only_viewers_active_cards() {
+    let Some(t) = setup().await else { return };
+    let seller = create_user(&t.pool, &t.cfg, "+989100000001").await;
+    let viewer = create_user(&t.pool, &t.cfg, "+989100000002").await;
+    let other = create_user(&t.pool, &t.cfg, "+989100000003").await;
+
+    let visible = create_listing(&t.pool, seller.id, "active").await;
+    insert_favorite(&t.pool, viewer.id, visible.id).await;
+    let other_only = create_listing(&t.pool, seller.id, "active").await;
+    insert_favorite(&t.pool, other.id, other_only.id).await;
+    for status in ["sold", "archived", "removed", "pending", "draft", "rejected"] {
+        let hidden = create_listing(&t.pool, seller.id, status).await;
+        insert_favorite(&t.pool, viewer.id, hidden.id).await;
+    }
+    let deleted = create_listing(&t.pool, seller.id, "active").await;
+    insert_favorite(&t.pool, viewer.id, deleted.id).await;
+    sqlx::query("UPDATE listings SET deleted_at = NOW(3) WHERE id = ?")
+        .bind(deleted.id)
+        .execute(&t.pool)
+        .await
+        .expect("soft-delete fixture");
+    sqlx::query(
+        "INSERT INTO listing_images (listing_id, storage_key, sort_order, created_at) \
+         VALUES (?, 'setup/cover.png', 0, NOW(3))",
+    )
+    .bind(visible.id)
+    .execute(&t.pool)
+    .await
+    .expect("cover fixture");
+
+    let (status, _, body) = send(
+        t.app.clone(),
+        Method::GET,
+        "/api/v1/me/favorites",
+        Some(&viewer.cookie),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(card_public_ids(&body), vec![visible.public_id.clone()]);
+    assert_eq!(body["data"][0]["slug"].as_str(), Some(visible.slug.as_str()));
+    assert_eq!(body["data"][0]["cover_image"], "/media/setup/cover.png");
+    assert_eq!(body["data"][0]["city"], "رشت");
+    assert_eq!(body["data"][0]["province"], "گیلان");
+    assert!(body["data"][0]["category"].as_str().is_some());
+    assert_eq!(body["page"]["has_more"], false);
+    assert!(body["page"]["next_cursor"].is_null());
+}
+
+#[tokio::test]
+async fn favorites_list_rejects_bad_cursor() {
+    let Some(t) = setup().await else { return };
+    let viewer = create_user(&t.pool, &t.cfg, "+989100000001").await;
+    let (status, _, body) = send(
+        t.app.clone(),
+        Method::GET,
+        "/api/v1/me/favorites?cursor=not-a-cursor",
+        Some(&viewer.cookie),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "validation_error");
+    assert_eq!(body["error"]["fields"]["cursor"], "invalid_cursor");
+}
+
+#[tokio::test]
+async fn favorites_cursor_walks_equal_timestamps() {
+    let Some(t) = setup().await else { return };
+    let seller = create_user(&t.pool, &t.cfg, "+989100000001").await;
+    let viewer = create_user(&t.pool, &t.cfg, "+989100000002").await;
+    let first = create_listing(&t.pool, seller.id, "active").await;
+    let second = create_listing(&t.pool, seller.id, "active").await;
+    let third = create_listing(&t.pool, seller.id, "active").await;
+    for listing in [&first, &second, &third] {
+        insert_favorite(&t.pool, viewer.id, listing.id).await;
+    }
+
+    let (status, _, first_page) = send(
+        t.app.clone(),
+        Method::GET,
+        "/api/v1/me/favorites?limit=2",
+        Some(&viewer.cookie),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(first_page["page"]["has_more"], true);
+    assert_eq!(
+        card_public_ids(&first_page),
+        vec![third.public_id.clone(), second.public_id.clone()]
+    );
+    let cursor = first_page["page"]["next_cursor"]
+        .as_str()
+        .expect("next cursor")
+        .to_string();
+
+    let (status, _, second_page) = send(
+        t.app.clone(),
+        Method::GET,
+        &format!("/api/v1/me/favorites?limit=2&cursor={cursor}"),
+        Some(&viewer.cookie),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(second_page["page"]["has_more"], false);
+    assert!(second_page["page"]["next_cursor"].is_null());
+    assert_eq!(card_public_ids(&second_page), vec![first.public_id.clone()]);
+
+    let mut walked = card_public_ids(&first_page);
+    walked.extend(card_public_ids(&second_page));
+    assert_eq!(
+        walked,
+        vec![third.public_id.clone(), second.public_id.clone(), first.public_id.clone()],
+        "equal timestamps must not duplicate or skip a card"
+    );
+}
+
+#[tokio::test]
+async fn favorites_cursor_survives_anchor_unsave() {
+    let Some(t) = setup().await else { return };
+    let seller = create_user(&t.pool, &t.cfg, "+989100000001").await;
+    let viewer = create_user(&t.pool, &t.cfg, "+989100000002").await;
+    let first = create_listing(&t.pool, seller.id, "active").await;
+    let second = create_listing(&t.pool, seller.id, "active").await;
+    let third = create_listing(&t.pool, seller.id, "active").await;
+    for listing in [&first, &second, &third] {
+        insert_favorite(&t.pool, viewer.id, listing.id).await;
+    }
+
+    let (status, _, first_page) = send(
+        t.app.clone(),
+        Method::GET,
+        "/api/v1/me/favorites?limit=1",
+        Some(&viewer.cookie),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(card_public_ids(&first_page), vec![third.public_id.clone()]);
+    let cursor = first_page["page"]["next_cursor"]
+        .as_str()
+        .expect("next cursor")
+        .to_string();
+    let anchor = third.public_id.clone();
+    let (status, _, _) = send(
+        t.app.clone(),
+        Method::DELETE,
+        &format!("/api/v1/me/favorites/{anchor}"),
+        Some(&viewer.cookie),
+        Some(&viewer.csrf),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(favorite_count(&t.pool, third.id).await, 0);
+
+    let (status, _, second_page) = send(
+        t.app.clone(),
+        Method::GET,
+        &format!("/api/v1/me/favorites?limit=2&cursor={cursor}"),
+        Some(&viewer.cookie),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(second_page["page"]["has_more"], false);
+    assert_eq!(
+        card_public_ids(&second_page),
+        vec![second.public_id.clone(), first.public_id.clone()]
+    );
+    assert!(!card_public_ids(&second_page).contains(&anchor));
 }
