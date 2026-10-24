@@ -10,14 +10,14 @@
 
     <p v-if="mePending">در حال بارگذاری…</p>
 
-    <template v-else-if="!me">
+    <template v-else-if="authStatus === 'anonymous'">
       <p>برای دیدن داشبورد وارد شوید.</p>
       <NuxtLink to="/login" class="btn">ورود</NuxtLink>
     </template>
 
-    <template v-else>
+    <template v-else-if="authStatus === 'authenticated' && me">
       <p class="dashboard__hello">
-        خوش آمدید، {{ me.user.display_name ?? 'کاربر شبدر' }}
+        خوش آمدید، {{ me.display_name ?? 'کاربر شبدر' }}
       </p>
       <NuxtLink to="/me/favorites" class="btn btn--secondary dashboard__favorites">
         علاقه‌مندی‌های من
@@ -59,14 +59,14 @@
 </template>
 
 <script setup lang="ts">
-import type { ApiDashboardSummary, ApiListingOut, ApiPage, ApiUser } from '~/types'
+import type { ApiDashboardSummary, ApiListingOut, ApiPage } from '~/types'
 
-// Sessions ride SSR requests (ARCHITECTURE.md §3).
+const {
+  user: me,
+  status: authStatus,
+  pending: mePending,
+} = await useAuth()
 const authHeaders = useRequestHeaders(['cookie'])
-
-const { data: me, pending: mePending } = await useFetch<{ user: ApiUser }>('/api/v1/me', {
-  headers: authHeaders,
-})
 
 const { data: summary } = await useFetch<ApiDashboardSummary>('/api/v1/me/dashboard/summary', {
   headers: authHeaders,

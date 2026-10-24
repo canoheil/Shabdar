@@ -9,12 +9,12 @@
 
     <p v-if="mePending">در حال بارگذاری…</p>
 
-    <template v-else-if="!me">
+    <template v-else-if="authStatus === 'anonymous'">
       <p>برای دیدن علاقه‌مندی‌های خود وارد شوید.</p>
       <NuxtLink to="/login" class="btn">ورود</NuxtLink>
     </template>
 
-    <template v-else>
+    <template v-else-if="authStatus === 'authenticated'">
       <NuxtLink to="/me" class="favorites__back">بازگشت به داشبورد</NuxtLink>
 
       <p v-if="favoritesPending">در حال بارگذاری علاقه‌مندی‌ها…</p>
@@ -81,12 +81,13 @@
 </template>
 
 <script setup lang="ts">
-import type { ApiListingCard, ApiPage, ApiUser } from '~/types'
+import type { ApiListingCard, ApiPage } from '~/types'
 
+const {
+  status: authStatus,
+  pending: mePending,
+} = await useAuth()
 const authHeaders = useRequestHeaders(['cookie'])
-const { data: me, pending: mePending } = await useFetch<{ user: ApiUser }>('/api/v1/me', {
-  headers: authHeaders,
-})
 
 const {
   data: favorites,

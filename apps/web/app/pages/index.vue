@@ -10,8 +10,8 @@
     <template v-if="mePending">
       <p>در حال بارگذاری…</p>
     </template>
-    <template v-else-if="me">
-      <p>خوش آمدید، {{ me.user.display_name ?? 'کاربر شبدر' }}</p>
+    <template v-else-if="authStatus === 'authenticated' && me">
+      <p>خوش آمدید، {{ me.display_name ?? 'کاربر شبدر' }}</p>
       <div class="home__actions">
         <NuxtLink to="/post" class="btn">ثبت آگهی</NuxtLink>
         <button type="button" class="btn btn--secondary" :disabled="loggingOut" @click="logout">
@@ -19,7 +19,7 @@
         </button>
       </div>
     </template>
-    <template v-else>
+    <template v-else-if="authStatus === 'anonymous'">
       <p>برای ثبت آگهی وارد شوید.</p>
       <NuxtLink to="/login" class="btn">ورود</NuxtLink>
     </template>
@@ -101,7 +101,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ApiCategory, ApiCity, ApiListingCard, ApiPage, ApiUser } from '~/types'
+import type { ApiCategory, ApiCity, ApiListingCard, ApiPage } from '~/types'
 
 // Filters, search and sort live in the URL (Phase 4 Task 5): a refresh,
 // a shared link and the back button all restore the same feed.
@@ -189,11 +189,12 @@ const {
   watch: [() => route.query],
 })
 
-const { data: me, pending: mePending, refresh: refreshMe } = await useFetch<{ user: ApiUser }>(
-  '/api/v1/me',
-  // The cookie must ride SSR requests (ARCHITECTURE.md §3).
-  { headers: useRequestHeaders(['cookie']) },
-)
+const {
+  user: me,
+  status: authStatus,
+  pending: mePending,
+  refresh: refreshAuth,
+} = await useAuth()
 
 const loggingOut = ref(false)
 
@@ -201,7 +202,7 @@ async function logout() {
   loggingOut.value = true
   try {
     await $fetch('/api/v1/auth/logout', { method: 'POST' })
-    await refreshMe()
+    await refreshAuth()
   } finally {
     loggingOut.value = false
   }

@@ -9,7 +9,7 @@
     <h1>{{ editingId ? 'ویرایش آگهی' : 'ثبت آگهی' }}</h1>
 
     <p v-if="checking">در حال بررسی ورود…</p>
-    <template v-else>
+    <template v-else-if="authStatus === 'authenticated'">
       <p v-if="doneMessage" class="alert-ok" role="status">{{ doneMessage }}</p>
       <p v-if="errorMessage" class="alert-error" role="alert" tabindex="-1">{{ errorMessage }}</p>
 
@@ -84,7 +84,6 @@ import type { ApiCategory, ApiCity, ApiErrorBody, ApiListingOut } from '~/types'
 const route = useRoute()
 const editingId = typeof route.query.edit === 'string' ? route.query.edit : ''
 
-const checking = ref(true)
 const saving = ref(false)
 const submitted = ref(false)
 const savedId = ref(editingId)
@@ -101,16 +100,10 @@ const form = reactive({
   price_toman: null as number | null,
 })
 
-// Login gate (UX redirect only — the API owns auth). A direct useFetch call
-// keeps the Nuxt context (an async IIFE wrapper breaks navigateTo on SSR).
-const { error: meError } = await useFetch('/api/v1/me', {
-  headers: useRequestHeaders(['cookie']),
-})
-if (meError.value) {
-  await navigateTo('/login')
-} else {
-  checking.value = false
-}
+// Only a confirmed 401 redirects. Transport/server failures retain the page
+// and the shell's honest unavailable/retry state.
+const { status: authStatus, pending: checking } = await useAuth()
+if (authStatus.value === 'anonymous') await navigateTo('/login')
 
 const { data: categories } = await useFetch<{ data: ApiCategory[] }>('/api/v1/categories')
 // Cities carry real ids (no index fiction). Launch scope stays Gilan-only:

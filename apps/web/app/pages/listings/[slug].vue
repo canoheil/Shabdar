@@ -32,10 +32,14 @@
       <p class="meta">فروشنده: {{ listing.seller.display_name ?? 'کاربر شبدر' }}</p>
 
       <div v-if="!mePending" class="detail__favorite">
-        <NuxtLink v-if="!me || favoriteAuthExpired" to="/login" class="btn btn--secondary">
+        <NuxtLink
+          v-if="authStatus === 'anonymous' || favoriteAuthExpired"
+          to="/login"
+          class="btn btn--secondary"
+        >
           ورود برای ذخیره
         </NuxtLink>
-        <template v-else>
+        <template v-else-if="authStatus === 'authenticated' && me">
           <button
             v-if="favorited !== undefined"
             type="button"
@@ -66,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ApiListingDetail, ApiUser } from '~/types'
+import type { ApiListingDetail } from '~/types'
 
 const route = useRoute()
 const slug = route.params.slug as string
@@ -75,12 +79,12 @@ const detailUrl = `/api/v1/listings/${encodeURIComponent(slug)}`
 // Keep this original read public: personal state is fetched after hydration.
 const { data: listing, pending, error } = await useFetch<ApiListingDetail>(detailUrl)
 
-// The auth check alone may use the SSR cookie; it never adds favorite state
-// to the public detail payload or its cached HTML.
-const authHeaders = useRequestHeaders(['cookie'])
-const { data: me, pending: mePending } = await useFetch<{ user: ApiUser }>('/api/v1/me', {
-  headers: authHeaders,
-})
+// Shared auth never adds viewer state to the public detail payload.
+const {
+  user: me,
+  status: authStatus,
+  pending: mePending,
+} = await useAuth()
 
 const gone = computed(() => error.value?.statusCode === 410)
 const missing = computed(() => error.value?.statusCode === 404)
@@ -106,7 +110,7 @@ function requestStatus(error: unknown): number | undefined {
 }
 
 async function loadFavoriteState() {
-  if (favoritePending.value || !me.value?.user || !listing.value) return
+  if (favoritePending.value || authStatus.value !== 'authenticated' || !me.value || !listing.value) return
   favoritePending.value = true
   favoriteError.value = ''
   favoriteNotice.value = ''
@@ -166,7 +170,7 @@ async function retryFavorite() {
 }
 
 onMounted(() => {
-  if (me.value?.user && listing.value) void loadFavoriteState()
+  if (authStatus.value === 'authenticated' && me.value && listing.value) void loadFavoriteState()
 })
 
 useHead(() => ({

@@ -114,6 +114,8 @@ import type { ApiErrorBody } from '~/types'
 type Step = 'phone' | 'code'
 type Purpose = 'login' | 'register'
 
+const { refresh: refreshAuth } = await useAuth()
+
 const purpose = ref<Purpose>('login')
 const step = ref<Step>('phone')
 const phone = ref('')
@@ -225,7 +227,8 @@ async function verifyCode() {
       method: 'POST',
       body: { challenge_id: challengeId.value, code: code.value },
     })
-    // Logged in — the session cookie is set; go home (plan Task 7).
+    // Refresh the shared session before any page renders authenticated UI.
+    await refreshAuth()
     await navigateTo('/')
   } catch (err) {
     showError(err)
