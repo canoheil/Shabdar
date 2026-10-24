@@ -67,7 +67,7 @@ not measured yet; record them on the next fresh install and paste them here.
 
 ```sh
 cd apps/web
-npm install          # one-time
+npm ci               # reproducible install from package-lock.json
 npm run dev          # dev server on http://localhost:3000
 ```
 
@@ -75,12 +75,51 @@ npm run dev          # dev server on http://localhost:3000
 Smoke: `curl -s http://localhost:3000/api/v1/health` →
 `{"status":"ok","database":"ok"}` with Axum running.
 
-## TypeScript policy
+## TypeScript and durable browser verification
 
-Everything is TypeScript (`<script setup lang="ts">`). No permanent web
-browser-test harness or typechecker dependency is committed; `vue-tsc` is not
-installed. The available repository gate is the Nuxt production build, with
-real-stack browser checks run separately when needed.
+Everything is TypeScript (`<script setup lang="ts">`). `npm run typecheck` runs
+`nuxi typecheck` with `vue-tsc`; `npm run build` remains the production build
+gate. The Playwright suite uses real Axum + Nuxt + MariaDB, not mocked page
+responses. Its global setup removes dynamic rows only from a localhost
+`*_test` database, registers scratch users through debug OTP, and creates real
+listing fixtures through the API.
+
+Start Axum debug on `127.0.0.1:8081` and Nuxt production on port 3000 with
+these test-only values (expand them into the environment of both processes as
+applicable):
+
+```sh
+export DATABASE_URL='mysql://root:shabdar_test@127.0.0.1:3306/shabdar_test'
+export E2E_DATABASE_URL="$DATABASE_URL"
+export BIND_ADDR='127.0.0.1:8081'
+export NUXT_API_BASE='http://127.0.0.1:8081'
+export E2E_BASE_URL='http://127.0.0.1:3000'
+export E2E_API_LOG='/tmp/shabdar-api.log'
+export MEDIA_DIR='/tmp/shabdar-e2e-media'
+export E2E_MEDIA_DIR="$MEDIA_DIR"
+export OTP_PEPPER='shabdar-e2e-only-pepper'
+export OTP_DEV_MODE=true OTP_RESEND_SECS=2
+export TRUST_PROXY=true COOKIE_SECURE=false
+export OTP_REQUEST_IP_LIMIT=1000 OTP_VERIFY_IP_LIMIT=1000
+export OTP_PHONE_DAILY_LIMIT=1000 OTP_SMS_GLOBAL_LIMIT=1000
+```
+
+The MariaDB CLI must be installed. Run Axum from `apps/api` so it finds the
+migrations and writes its log to `$E2E_API_LOG`, then run:
+
+```sh
+cd apps/web
+npm ci
+npm run typecheck
+npm run build
+npx playwright install chromium
+npm run test:fixtures  # reset and seed, then run the characterization smoke
+npm run test:e2e       # complete durable browser suite
+```
+
+Reports and storage states are ignored. OTP codes, cookies, real phone
+numbers, and non-scratch database URLs must never be committed or printed in
+test output.
 
 ## Rolldown / Android note
 

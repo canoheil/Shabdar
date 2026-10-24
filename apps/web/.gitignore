@@ -2,3 +2,10 @@ node_modules
 .nuxt
 .output
 .env*
+
+# Durable browser/performance verification outputs (not source fixtures).
+test-results/
+playwright-report/
+.lighthouseci/
+lighthouse-report/
+tests/e2e/.artifacts/

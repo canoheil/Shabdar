@@ -1,0 +1,145 @@
+name: Web verification
+
+on:
+  push:
+    branches:
+      - arena/31e5990a-shabdar
+    paths:
+      - apps/web/**
+      - .github/workflows/web-verification.yml
+      - docs/performance/**
+  pull_request:
+    branches:
+      - main
+    paths:
+      - apps/web/**
+      - .github/workflows/web-verification.yml
+      - docs/performance/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: shabdar_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: mysql://root:shabdar_test@127.0.0.1:3306/shabdar_test
+      E2E_DATABASE_URL: mysql://root:shabdar_test@127.0.0.1:3306/shabdar_test
+      BIND_ADDR: 127.0.0.1:8081
+      NUXT_API_BASE: http://127.0.0.1:8081
+      E2E_BASE_URL: http://127.0.0.1:3000
+      E2E_API_LOG: /tmp/shabdar-api.log
+      MEDIA_DIR: /tmp/shabdar-e2e-media
+      E2E_MEDIA_DIR: /tmp/shabdar-e2e-media
+      OTP_PEPPER: shabdar-e2e-only-pepper
+      OTP_DEV_MODE: 'true'
+      OTP_RESEND_SECS: '2'
+      TRUST_PROXY: 'true'
+      COOKIE_SECURE: 'false'
+      OTP_REQUEST_IP_LIMIT: '1000'
+      OTP_VERIFY_IP_LIMIT: '1000'
+      OTP_PHONE_DAILY_LIMIT: '1000'
+      OTP_SMS_GLOBAL_LIMIT: '1000'
+      PORT: '3000'
+      HOST: 127.0.0.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install MariaDB client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends mariadb-client
+
+      - name: Create scratch test database
+        run: |
+          mariadb --host=127.0.0.1 --user=root --password=shabdar_test \
+            --execute="CREATE DATABASE IF NOT EXISTS shabdar_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+
+      - name: Install locked web dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Build Axum debug binary
+        working-directory: apps/api
+        run: cargo build
+
+      - name: Typecheck web
+        working-directory: apps/web
+        run: npm run typecheck
+
+      - name: Build Nuxt production
+        working-directory: apps/web
+        run: npm run build
+
+      - name: Start Axum with scratch configuration
+        working-directory: apps/api
+        run: |
+          cargo run > "$E2E_API_LOG" 2>&1 &
+          echo $! > /tmp/shabdar-api.pid
+
+      - name: Start Nuxt production
+        working-directory: apps/web
+        run: |
+          node .output/server/index.mjs > /tmp/shabdar-web.log 2>&1 &
+          echo $! > /tmp/shabdar-web.pid
+
+      - name: Wait for the real stack through Nuxt
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent "$E2E_BASE_URL/api/v1/health"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/shabdar-web.log
+          cat "$E2E_API_LOG"
+          exit 1
+
+      - name: Install Chromium
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run real-stack Playwright
+        working-directory: apps/web
+        run: npm run test:e2e
+
+      - name: Show Nuxt log on failure
+        if: failure()
+        run: tail -n 100 /tmp/shabdar-web.log
+
+      - name: Upload browser failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-browser-failure-${{ github.run_id }}
+          path: |
+            apps/web/test-results/
+            apps/web/playwright-report/
+          if-no-files-found: ignore

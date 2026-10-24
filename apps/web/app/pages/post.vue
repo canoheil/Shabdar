@@ -147,7 +147,8 @@ function showError(err: unknown) {
   const body = (err as { data?: ApiErrorBody }).data
   const fields = body?.error?.fields
   if (fields && Object.keys(fields).length > 0) {
-    const first = Object.entries(fields)[0]
+    // The non-empty Object.keys check above proves this tuple exists.
+    const first = Object.entries(fields)[0]!
     errorMessage.value = `خطا در ${first[0]}: ${first[1]}`
   } else {
     errorMessage.value = 'خطایی رخ داد؛ دوباره تلاش کنید.'
