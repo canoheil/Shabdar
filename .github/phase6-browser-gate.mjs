@@ -262,10 +262,8 @@ try {
     }
   })
   await favoritesPage.goto(base + '/me')
-  let failInitial = true
   await favoritesPage.route('**/api/v1/me/favorites*', async (route) => {
-    if (failInitial && route.request().method() === 'GET') {
-      failInitial = false
+    if (route.request().method() === 'GET') {
       await route.fulfill({
         status: 500,
         contentType: 'application/json',
