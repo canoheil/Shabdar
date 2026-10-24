@@ -234,19 +234,19 @@ git commit -m "test(web): record phase 7 performance baseline"
 - `AppThemeToggle` exposes no custom API: a labelled native select with values `system|light|dark` and Persian labels «خودکار»/«روشن»/«تیره».
 - `expectNoSeriousA11y(page)`, `expectNoOverflow(page)`, and `expectTouchTargets(page)` are reusable async Playwright helpers.
 
-- [ ] **Step 1: Write failing theme/foundation browser tests**
+- [x] **Step 1: Write failing theme/foundation browser tests**
 
 Assert the theme select, exact light/dark semantic values, Vazirmatn loaded from same origin, stored-dark SSR without a light-class flash, system dark resolution, no serious/critical axe violation, 44px targets, and no horizontal overflow. Run `@theme`; expected FAIL because tokens/select/font are absent.
 
-- [ ] **Step 2: Implement tokens, font, color mode, and base styles**
+- [x] **Step 2: Implement tokens, font, color mode, and base styles**
 
 Copy every approved token/value from MASTER, including status pairs and the 4/8px spacing/radius scale. Import only `wght.css`; set `font-display: swap`, Vazirmatn body typography, logical properties, 2px focus outline with 3px offset, 16px inputs, and stable card/media dimensions. Under reduced motion, disable smooth scrolling and force animation/transition duration to 0.01ms with one iteration. Replace old hard-coded blue/gray control colors with semantic tokens without redesigning pages yet.
 
-- [ ] **Step 3: Add the native theme control to the existing header**
+- [x] **Step 3: Add the native theme control to the existing header**
 
 Bind `useColorMode().preference` to the select and preserve SSR/module storage. Do not write a cookie, theme script, dropdown, or icon package wrapper.
 
-- [ ] **Step 4: Run GREEN and budget checks**
+- [x] **Step 4: Run GREEN and budget checks**
 
 ```bash
 cd apps/web
@@ -257,7 +257,7 @@ npm run measure:client && npm run test:client-budget
 
 Expected: both themes/axe/no-flash checks PASS and each route remains within +25,600 bytes.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web
