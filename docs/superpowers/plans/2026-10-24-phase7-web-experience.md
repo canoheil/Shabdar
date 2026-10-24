@@ -177,7 +177,7 @@ git commit -m "test(web): add reproducible real-stack browser harness"
 - `"test:client-budget": "node --test scripts/compare-client-js.test.mjs && node scripts/compare-client-js.mjs ../../docs/performance/phase7-client-baseline.json test-results/client-js.json"` enforces 25,600 bytes per route.
 - `"measure:lighthouse": "npm run test:fixtures && lhci collect --config=./lighthouserc.cjs"` collects three runs without asserting the old UI; `"test:lighthouse": "npm run test:fixtures && lhci autorun --config=./lighthouserc.cjs"` collects and asserts for final gates.
 
-- [ ] **Step 1: Write failing budget-comparator unit tests**
+- [x] **Step 1: Write failing budget-comparator unit tests**
 
 Use `node:test` for exactly 25,600 bytes (pass), 25,601 (fail), independent Home/Detail deltas, missing routes, and malformed negative sizes. Expected initial run: FAIL because `compare-client-js.mjs` does not exist.
 
@@ -185,11 +185,11 @@ Use `node:test` for exactly 25,600 bytes (pass), 25,601 (fail), independent Home
 cd apps/web && node --test scripts/compare-client-js.test.mjs
 ```
 
-- [ ] **Step 2: Implement measurement, comparison, and Lighthouse config**
+- [x] **Step 2: Implement measurement, comparison, and Lighthouse config**
 
 Install the remaining dev-only tool with `npm install --save-exact --save-dev @lhci/cli@0.15.1`. Capture scripts from `page.goto(..., waitUntil: 'networkidle')` on anonymous production Home/Detail, deduplicate URL, and gzip each decoded response body with `gzipSync(body, { level: 9 })`. Capture same-origin font response byte lengths in `fonts`. Fail on cross-origin scripts/fonts, missing responses, or absent fixture metadata. Configure LHCI for the two encoded URLs, `numberOfRuns: 3`, mobile defaults, filesystem reports, and median assertions for the four Global Constraint budgets.
 
-- [ ] **Step 3: Run comparator GREEN and record the untouched-UI baseline**
+- [x] **Step 3: Run comparator GREEN and record the untouched-UI baseline**
 
 ```bash
 cd apps/web
@@ -200,7 +200,7 @@ npm run measure:lighthouse
 
 Expected: comparator tests PASS; reports contain actual Home/Detail byte totals and three Lighthouse results per route. Write observed medians/environment to `docs/PHASE7_PERFORMANCE.md`; do not invent target values as measurements.
 
-- [ ] **Step 4: Add the continuing bundle gate**
+- [x] **Step 4: Add the continuing bundle gate**
 
 Generate `test-results/client-js.json`, compare it to baseline, and add those commands to CI after e2e. Keep Lighthouse assertion out of the required workflow until Task 13 so known old-UI accessibility work is not misreported as a tooling failure.
 
@@ -211,7 +211,7 @@ npm run test:client-budget
 
 Expected: zero delta at baseline and comparator unit tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web .github/workflows/web-verification.yml docs/performance/phase7-client-baseline.json docs/PHASE7_PERFORMANCE.md
