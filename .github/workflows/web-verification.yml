@@ -130,7 +130,13 @@ jobs:
         working-directory: apps/web
         run: npm run test:e2e
 
-      - name: Measure production route client JS
+      - name: Collect three-run Lighthouse reports without legacy-UI assertions
+        working-directory: apps/web
+        run: |
+          export CHROME_PATH="$(node --input-type=module -e "import { chromium } from '@playwright/test'; process.stdout.write(chromium.executablePath())")"
+          npm run measure:lighthouse
+
+      - name: Measure production route client JS after the final Playwright fixture reset
         working-directory: apps/web
         run: npm run measure:client
 
@@ -143,20 +149,12 @@ jobs:
             echo "Baseline bootstrap: upload the measured report, then commit it before the next run."
           fi
 
-      - name: Collect three-run Lighthouse reports without legacy-UI assertions
-        working-directory: apps/web
-        run: |
-          export CHROME_PATH="$(node --input-type=module -e "import { chromium } from '@playwright/test'; process.stdout.write(chromium.executablePath())")"
-          npm run measure:lighthouse
-
       - name: Verify and publish performance report summary
         working-directory: apps/web
         run: |
           node --input-type=module <<'EOF'
-          import { existsSync, readFileSync, readdirSync } from 'node:fs'
-          try {
+          import { readFileSync } from 'node:fs'
           const client = JSON.parse(readFileSync('test-results/client-js.json', 'utf8'))
-          console.log(`::notice title=Phase 7 client JSON (base64)::${Buffer.from(JSON.stringify(client)).toString('base64')}`)
           const fixtures = JSON.parse(readFileSync('tests/e2e/.artifacts/fixtures.json', 'utf8'))
           const detailPath = new URL(fixtures.detailPath, client.baseURL).pathname
           const manifest = JSON.parse(readFileSync('lighthouse-report/manifest.json', 'utf8'))
@@ -191,19 +189,6 @@ jobs:
           console.log(`::notice title=Phase 7 performance JSON (base64)::${encoded}`)
           if (runs.length !== 6) throw new Error(`Expected six Lighthouse reports, got ${runs.length}`)
           if (summary.lighthouse.home.runs.length !== 3 || summary.lighthouse.detail.runs.length !== 3) throw new Error('Expected three reports for each route')
-          } catch (error) {
-          const diagnostic = {
-            error: String(error),
-            stack: error instanceof Error ? error.stack : undefined,
-            cwd: process.cwd(),
-            clientExists: existsSync('test-results/client-js.json'),
-            manifestExists: existsSync('lighthouse-report/manifest.json'),
-            testResults: existsSync('test-results') ? readdirSync('test-results') : [],
-            lighthouseReport: existsSync('lighthouse-report') ? readdirSync('lighthouse-report') : [],
-          }
-          console.log(`::notice title=Phase 7 performance diagnostic (base64)::${Buffer.from(JSON.stringify(diagnostic)).toString('base64')}`)
-          throw error
-          }
           EOF
 
       - name: Upload performance reports
