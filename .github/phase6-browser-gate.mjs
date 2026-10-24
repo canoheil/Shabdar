@@ -289,10 +289,8 @@ try {
   const more = favoritesPage.getByRole('button', { name: 'نمایش موارد بیشتر', exact: true })
   await more.waitFor()
   await assertTarget44(more)
-  let failMore = true
   await favoritesPage.route('**/api/v1/me/favorites*', async (route) => {
-    if (failMore && route.request().method() === 'GET' && route.request().url().includes('cursor=')) {
-      failMore = false
+    if (route.request().method() === 'GET' && route.request().url().includes('cursor=')) {
       await route.fulfill({
         status: 500,
         contentType: 'application/json',
