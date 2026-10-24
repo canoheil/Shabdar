@@ -41,7 +41,6 @@ test('@auth authenticated SSR has Account without Login and zero hydration /me r
 })
 
 test('@auth shell and page share one /me request on client navigation', async ({ page }) => {
-  await applyStorage(page, readFixtures().sellerStorage)
   await page.goto('/login')
   const meRequests: string[] = []
   page.on('request', (request) => {
