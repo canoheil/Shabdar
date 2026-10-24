@@ -384,19 +384,19 @@ git commit -m "feat(web): add responsive application navigation"
 - `AppEmptyState`: `title: string`, `description?: string`, `mascot?: 'none'|'full'|'search'` (default `none`), actions slot. `AppSkeleton`: `variant: 'card'|'text'|'detail'`, `count?: number` (default `1`), `label?: string` (default «در حال بارگذاری…») with a screen-reader loading label.
 - `ListingCard`: `listing: ApiListingCard`, `imagePriority?: boolean` (default `false`), actions slot; no favorite behavior. Card media is 480×360, 4:3, with a neutral failure/no-cover placeholder.
 
-- [ ] **Step 1: Write failing discovery tests**
+- [x] **Step 1: Write failing discovery tests**
 
 Cover search-led hierarchy, visible category controls, URL/debounce/Back behavior, mobile dialog Apply/Cancel/Escape/focus return, loading skeleton, filtered empty state with search-pose mascot, long titles, no-cover/broken-image fallback, and exactly one high-priority cover (the first card that actually has an image). Run `@home`; expected FAIL against the old feed.
 
-- [ ] **Step 2: Implement the primitives and shared card**
+- [x] **Step 2: Implement the primitives and shared card**
 
 Keep components limited to the interfaces above. Use semantic tokens and selective icons; reserve image geometry and update loading/fetch priority from `imagePriority`. On `public_id` change reset image failure; never loop fallback `src` replacement.
 
-- [ ] **Step 3: Redesign Home without changing feed state**
+- [x] **Step 3: Redesign Home without changing feed state**
 
 Preserve `feedQuery`, 400ms debounce, computed query getter, and route watcher. Keep search outside the dialog. Mobile dialog edits a secondary-filter draft initialized on open; Apply copies then navigates once, Cancel/Escape discards, and Close returns focus to the filter button. Desktop selects remain inline. Categories are visible native pressed buttons. Keep the existing auth/logout block as a compact secondary region.
 
-- [ ] **Step 4: Run GREEN, accessibility, and budgets**
+- [x] **Step 4: Run GREEN, accessibility, and budgets**
 
 ```bash
 cd apps/web
@@ -407,7 +407,7 @@ npm run measure:client && npm run test:client-budget
 
 Expected: all discovery states, keyboard/focus behavior, axe, and route budgets PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/app/components apps/web/app/pages/index.vue apps/web/app/assets/css/main.css apps/web/tests/e2e/home.spec.ts

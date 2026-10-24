@@ -140,7 +140,11 @@ test('@home long titles, neutral no-cover media and one real high-priority cover
   await expect(highPriority).toHaveAttribute('loading', 'eager')
   await expect(highPriority).toHaveAttribute('width', '480')
   await expect(highPriority).toHaveAttribute('height', '360')
-  expect(await highPriority.evaluate((image) => image.closest('article')?.textContent)).toContain('آگهی آزمون شبدر')
+  expect(await highPriority.evaluate((image) => {
+    const cards = [...document.querySelectorAll('.listing-card')]
+    const firstWithImage = cards.find((card) => card.querySelector('img'))
+    return image.closest('article') === firstWithImage
+  })).toBe(true)
   await expectNoOverflow(page)
 })
 
