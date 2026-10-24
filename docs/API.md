@@ -9,7 +9,7 @@
 - Public identifiers only. Listings use `slug` in public read URLs and `public_id` in write paths. Users, comments, reports, and conversations use `public_id`.
 - Dates are ISO-8601 UTC. Prices are integer `price_toman`.
 - Lists return `{ "data": [...], "page": { "next_cursor": "…", "has_more": true } }`. Page size is capped at 50. Cursors are opaque.
-- Errors: `{ "error": { "code": "…", "message": "…", "fields": { … } }, "request_id": "…" }`.
+- Errors: `{ "error": { "code": "…", "message": "…", "fields": { … } }, "request_id": "…" }` — including bodies the server cannot parse (Phase 5, §2) — so a client never has to parse plain text.
 - Responses that depend on the caller (favorite, own rating, own report) are never cached publicly.
 
 ### Health check
@@ -30,6 +30,29 @@
 
 Server rules: the client never decides whether an account is created. `purpose` is checked against the stored challenge. Phone changes are not in v1.
 
+Abuse limits (Phase 5, decided 2026-10-24). Every limit answers `429 rate_limited` with a `Retry-After` header in whole seconds; the body shape is unchanged.
+
+| Endpoint | Key | Default | Env override |
+|---|---|---|---|
+| `POST /auth/otp/request` | client IP | 5 per 600 s | `OTP_REQUEST_IP_LIMIT`, `OTP_REQUEST_IP_WINDOW_SECS` |
+| `POST /auth/otp/request` | phone number (any purpose) | 10 per 86 400 s | `OTP_PHONE_DAILY_LIMIT`, `OTP_PHONE_DAILY_WINDOW_SECS` |
+| `POST /auth/otp/request` | all clients (SMS budget) | 200 per 3600 s | `OTP_SMS_GLOBAL_LIMIT`, `OTP_SMS_GLOBAL_WINDOW_SECS` |
+| `POST /auth/otp/verify` | client IP | 20 per 600 s | `OTP_VERIFY_IP_LIMIT`, `OTP_VERIFY_IP_WINDOW_SECS` |
+
+Check order in `otp/request`: body fields → client-IP window → phone normalization → per-phone daily cap → resend cooldown → global SMS budget → insert. A request rejected before the last step never spends an SMS slot; a request rejected after the IP step still counts against that client's window.
+
+Client identity: `X-Forwarded-For` is honoured **only** when `TRUST_PROXY=true`, and then its last entry is used (the Nuxt proxy replaces the header with the real client IP). With the flag off the socket peer address is used, so a spoofed header buys nothing. Counters are process-local and reset on restart; the per-phone cap is read from `otp_challenges`, so it survives restarts. Raise a limit with the env var rather than a code change.
+
+Request bodies that axum cannot hand to a handler also use the envelope:
+
+| Status | `code` | `fields.body` | When |
+|---|---|---|---|
+| 400 | `invalid_request` | `unsupported_content_type` | `Content-Type` is not `application/json` (or absent) |
+| 400 | `invalid_request` | `malformed_json` | The body is not syntactically valid JSON |
+| 400 | `invalid_request` | `invalid_json` | Valid JSON of the wrong shape (`{"phone":5}`) |
+| 400 | `invalid_request` | `unreadable_body` | The body could not be read |
+| 413 | `payload_too_large` | — | The body exceeds the 2 MiB limit |
+
 Error codes used by the auth and session endpoints:
 
 | HTTP | code | When |
@@ -37,7 +60,7 @@ Error codes used by the auth and session endpoints:
 | 400 | `validation_error` | Missing body fields (`fields` object present) |
 | 400 | `invalid_phone` | Phone is not a normalizable Iranian mobile |
 | 400 | `invalid_purpose` | `purpose` is not `login` or `register` |
-| 429 | `rate_limited` | Resend cooldown hit |
+| 429 | `rate_limited` | Resend cooldown or a Phase 5 abuse limit hit; `Retry-After` says how many seconds |
 | 401 | `invalid_code` | Wrong code, replayed or unknown `challenge_id` (generic — no probing) |
 | 401 | `challenge_expired` | Past the challenge's `expires_at` |
 | 401 | `challenge_locked` | Wrong-code limit (`OTP_MAX_ATTEMPTS`) reached |
@@ -47,6 +70,8 @@ Error codes used by the auth and session endpoints:
 | 403 | `forbidden` | Not the owner (seller routes) or not an admin (admin routes); decided 2026-10-11 (Phase 3) |
 | 404 | `not_found` | Unknown path (fallback), unknown slug, or non-`active` listing read publicly (no existence signal) |
 | 410 | `gone` | `removed` or soft-deleted listing read publicly; decided 2026-10-11 (Phase 3) |
+| 400 | `invalid_request` | The request body could not be parsed (Phase 5); `fields.body` says why |
+| 413 | `payload_too_large` | The request body is over the 2 MiB limit (Phase 5) |
 | 500 | `internal_error` | Anything else; never leaks SQL details |
 
 ## 3. Public discovery
@@ -196,7 +221,8 @@ All endpoints are under `/api/v1/admin`. Each requires `is_admin = true`. Each m
 ## 14. Open API decisions
 
 - Session model and CSRF token delivery: **decided 2026-10-10** — `sessions` table with SHA-256 token hashes (30-day TTL); CSRF = double-submit `shabdar_csrf` cookie + `X-CSRF-Token` header (WP 3).
-- OTP provider, resend limits, and attempt limits.
+- OTP SMS provider (Hashline or other) — the only open piece of the auth surface;
+  resend cooldown, attempt limit and the Phase 5 abuse limits are decided.
 - Whether editing an `active` listing is allowed (v1 says no).
 - Keyword search behavior and sort tie-breakers.
 - Whether `comments` on `archived` listings are visible to the public.

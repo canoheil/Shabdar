@@ -68,8 +68,9 @@ Unchanged and still enforced: `OTP_RESEND_SECS` cooldown per phone+purpose (`429
 | `MissingJsonContentType` | 400 | `invalid_request` | `{"body": "unsupported_content_type"}` |
 | `JsonSyntaxError` | 400 | `invalid_request` | `{"body": "malformed_json"}` |
 | `JsonDataError` (wrong type, e.g. `{"phone":5}`) | 400 | `invalid_request` | `{"body": "invalid_json"}` |
-| `BytesRejection` / length limit | 413 | `payload_too_large` | — |
-| anything else | 400 | `invalid_request` | `{"body": "invalid_json"}` |
+| `BytesRejection` whose status is 413 | 413 | `payload_too_large` | — |
+| `BytesRejection`, other | 400 | `invalid_request` | `{"body": "unreadable_body"}` |
+| anything else (non-exhaustive enum) | 400 | `invalid_request` | `{"body": "invalid_json"}` |
 
 `message` for `invalid_request`: `"Request body is not valid JSON"`; for `payload_too_large`: `"Request body is too large"`.
 
@@ -115,7 +116,10 @@ No `migrations/0007_*.sql`. No `Cargo.toml` change. No web change.
 - Produces:
   - `pub struct RateLimiter` (cheap `Clone`), `pub fn hit(&self, key: &str, limit: u32, window: Duration) -> LimitOutcome`
   - `pub enum LimitOutcome { Allowed, Limited { retry_after_secs: u64 } }`
-  - `pub fn client_ip(cfg: &Config, peer: Option<SocketAddr>, headers: &HeaderMap) -> String`
+  - `pub fn client_ip(trust_proxy: bool, peer: Option<SocketAddr>, headers: &HeaderMap) -> String`
+  - `pub struct PeerAddr(pub Option<SocketAddr>)` — a `FromRequestParts` wrapper that yields
+    `None` instead of rejecting: axum 0.8 has no `OptionalFromRequestParts` for `ConnectInfo`,
+    and oneshot tests carry no peer address.
   - `Config` gains `trust_proxy`, `otp_request_ip_limit`, `otp_request_ip_window_secs`, `otp_verify_ip_limit`, `otp_verify_ip_window_secs`, `otp_phone_daily_limit`, `otp_phone_daily_window_secs`, `otp_sms_global_limit`, `otp_sms_global_window_secs`.
 - Consumes: nothing new.
 
@@ -174,7 +178,7 @@ git commit -m "feat(api): fixed-window limiter, client ip and rate-limit config"
 - Test: `apps/api/src/error.rs` unit tests
 
 **Interfaces:**
-- Changes: `ApiError::RateLimited { retry_after_secs: Option<u64> }`; `IntoResponse` sets `retry-after` (decimal seconds) when `Some`.
+- Changes: `ApiError::RateLimited { retry_after_secs: Option<u64> }`; `IntoResponse` sets `retry-after` (decimal seconds) when `Some`; `LimitOutcome::into_result() -> Result<(), ApiError>` so handlers call one `?` per limit.
 - Consumes: Task 1's `LimitOutcome`.
 
 - [ ] **Step 1: Write the failing test**
@@ -212,8 +216,12 @@ fn rate_limited_without_seconds_has_no_header() { /* None → header absent */ }
 
 **Interfaces:**
 - Produces:
-  - `otp_service::count_recent_challenges(pool, phone_e164, window: Duration) -> Result<u32, ApiError>`
-  - `otp_request(State, Option<ConnectInfo<SocketAddr>>, HeaderMap, ApiJson<OtpRequestBody>)` — body extractor last, per axum rules.
+  - `otp_service::validate_request(pool, cfg, phone_raw, purpose) -> Result<ValidatedRequest, ApiError>`
+    (normalize + purpose + per-phone daily cap + resend cooldown) and
+    `otp_service::insert_challenge(pool, cfg, &ValidatedRequest, code)` — the split is what lets
+    the handler reserve the global SMS slot only after the request is known to be legitimate.
+  - `otp_request(State, PeerAddr, HeaderMap, ApiJson<OtpRequestBody>)` — body extractor last,
+    per axum rules.
 - Consumes: Task 1's limiter/`client_ip`, Task 2's `RateLimited`.
 
 - [ ] **Step 1: Write the failing tests**
