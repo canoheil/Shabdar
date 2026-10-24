@@ -16,7 +16,19 @@ export default defineNuxtConfig({
     apiBase: 'http://127.0.0.1:8080',
   },
 
-  css: ['~/assets/css/main.css'],
+  modules: ['@nuxtjs/color-mode'],
+
+  colorMode: {
+    preference: 'system',
+    fallback: 'light',
+    classSuffix: '',
+  },
+
+  css: [
+    '@fontsource-variable/vazirmatn/wght.css',
+    '~/assets/css/tokens.css',
+    '~/assets/css/main.css',
+  ],
 
   compatibilityDate: '2026-10-10',
 })

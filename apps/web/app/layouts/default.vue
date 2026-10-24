@@ -7,6 +7,7 @@
         <NuxtLink to="/me" class="shell__nav-link">داشبورد</NuxtLink>
         <NuxtLink to="/login" class="shell__nav-link">ورود</NuxtLink>
       </nav>
+      <AppThemeToggle />
     </header>
     <main class="shell__main">
       <slot />
