@@ -541,7 +541,7 @@ pub async fn summary(pool: &MySqlPool, seller_id: u64) -> Result<serde_json::Val
         "SELECT COUNT(CASE WHEN status = 'active' THEN 1 END) AS active_count, \
                 COUNT(CASE WHEN status = 'sold' THEN 1 END) AS sold_count, \
                 COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending_count, \
-                COALESCE(SUM(favorite_count), 0) AS favorite_count \
+                CAST(COALESCE(SUM(favorite_count), 0) AS SIGNED) AS favorite_count \
          FROM listings WHERE seller_id = ? AND deleted_at IS NULL",
     )
     .bind(seller_id)
