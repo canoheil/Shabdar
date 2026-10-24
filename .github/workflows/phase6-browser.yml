@@ -1,0 +1,148 @@
+name: Phase 6 temporary browser gate
+
+on:
+  push:
+    branches:
+      - arena/8d80fa18-shabdar
+    paths:
+      - apps/api/**
+      - apps/web/**
+      - .github/phase6-browser-gate.mjs
+      - .github/workflows/phase6-browser.yml
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: shabdar_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.3
+
+      - name: Install MariaDB client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends mariadb-client
+
+      - name: Create browser-test database
+        run: |
+          mariadb --host=127.0.0.1 --user=root --password=shabdar_test \
+            --execute="CREATE DATABASE IF NOT EXISTS shabdar_browser_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+
+      - name: Build Axum
+        working-directory: apps/api
+        run: cargo build --locked
+
+      - name: Install and build Nuxt
+        working-directory: apps/web
+        run: |
+          npm install
+          npm run build
+
+      - name: Start Axum
+        working-directory: apps/api
+        env:
+          DATABASE_URL: mysql://root:shabdar_test@127.0.0.1:3306/shabdar_browser_test
+          OTP_PEPPER: phase6-browser-only-pepper
+          OTP_DEV_MODE: "true"
+          BIND_ADDR: 127.0.0.1:8081
+          TRUST_PROXY: "true"
+          MEDIA_DIR: /tmp/shabdar-phase6-media
+        run: |
+          ./target/debug/shabdar-api > "$RUNNER_TEMP/phase6-api.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/phase6-api.pid"
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8081/api/v1/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/phase6-api.log"
+          exit 1
+
+      - name: Start Nuxt
+        working-directory: apps/web
+        env:
+          NUXT_API_BASE: http://127.0.0.1:8081
+          HOST: 127.0.0.1
+          PORT: 8080
+        run: |
+          node .output/server/index.mjs > "$RUNNER_TEMP/phase6-web.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/phase6-web.pid"
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8080/api/v1/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/phase6-web.log"
+          exit 1
+
+      - name: Seed browser fixtures
+        run: |
+          mariadb --host=127.0.0.1 --user=root --password=shabdar_test shabdar_browser_test <<'SQL'
+          INSERT INTO users (public_id, phone_e164, display_name, created_at, updated_at)
+          VALUES ('01ARZ3NDEKTSV4RRFFQ69G5FAV', '+989100000101', 'بینندهٔ آزمون', NOW(3), NOW(3));
+          SET @viewer_id = LAST_INSERT_ID();
+          INSERT INTO users (public_id, phone_e164, display_name, created_at, updated_at)
+          VALUES ('01ARZ3NDEKTSV4RRFFQ69G5FAW', '+989100000102', 'فروشندهٔ آزمون', NOW(3), NOW(3));
+          SET @seller_id = LAST_INSERT_ID();
+          INSERT INTO listings (public_id, seller_id, category_id, city_id, title, slug, description,
+            price_toman, price_type, status, published_at, created_at, updated_at)
+          VALUES ('01ARZ3NDEKTSV4RRFFQ69G5FAX', @seller_id, 1, 1, 'آگهی آزمون علاقه‌مندی',
+            'favorite-browser', 'شرح آگهی برای آزمون مرورگر', 125000, 'fixed', 'active', NOW(3), NOW(3), NOW(3));
+          INSERT INTO sessions (user_id, token_hash, expires_at, created_at)
+          VALUES (@viewer_id, UNHEX(SHA2('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 256)),
+            DATE_ADD(NOW(3), INTERVAL 1 HOUR), NOW(3));
+          SQL
+
+      - name: Install temporary Playwright runtime
+        run: |
+          mkdir -p "$RUNNER_TEMP/phase6-browser"
+          cd "$RUNNER_TEMP/phase6-browser"
+          npm init -y
+          npm install playwright
+          npx playwright install --with-deps chromium
+
+      - name: Run real-stack browser gate
+        run: |
+          cp .github/phase6-browser-gate.mjs "$RUNNER_TEMP/phase6-browser/gate.mjs"
+          cd "$RUNNER_TEMP/phase6-browser"
+          node gate.mjs
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6-browser-diagnostics
+          path: |
+            /tmp/shabdar-phase6-*.png
+            ${{ runner.temp }}/phase6-api.log
+            ${{ runner.temp }}/phase6-web.log
+          if-no-files-found: ignore
+
+      - name: Stop browser-gate servers
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/phase6-web.pid" ]; then kill "$(cat "$RUNNER_TEMP/phase6-web.pid")" || true; fi
+          if [ -f "$RUNNER_TEMP/phase6-api.pid" ]; then kill "$(cat "$RUNNER_TEMP/phase6-api.pid")" || true; fi
