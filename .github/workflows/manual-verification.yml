@@ -1,12 +1,12 @@
-name: Manual verification
+name: API verification
 
 on:
-  workflow_dispatch:
-    inputs:
-      patch:
-        description: "Optional gzip+base64 git diff to apply before verification"
-        required: false
-        type: string
+  push:
+    branches:
+      - arena/8d80fa18-shabdar
+    paths:
+      - apps/api/**
+      - .github/workflows/manual-verification.yml
 
 permissions:
   contents: read
@@ -34,13 +34,6 @@ jobs:
           components: clippy
 
       - uses: Swatinem/rust-cache@v2
-
-      - name: Apply local verification patch
-        if: inputs.patch != ''
-        env:
-          PATCH_GZ_BASE64: ${{ inputs.patch }}
-        run: |
-          printf '%s' "$PATCH_GZ_BASE64" | base64 -d | gzip -d | git apply --whitespace=error -
 
       - name: Install MariaDB client
         run: |
