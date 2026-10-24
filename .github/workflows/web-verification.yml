@@ -164,7 +164,6 @@ jobs:
               url: report.requestedUrl,
               fetchTime: report.fetchTime,
               lighthouseVersion: report.lighthouseVersion,
-              settings: report.configSettings,
               lcp: report.audits['largest-contentful-paint'].numericValue,
               cls: report.audits['cumulative-layout-shift'].numericValue,
               tbt: report.audits['total-blocking-time'].numericValue,
@@ -184,11 +183,27 @@ jobs:
               },
             }
           }
-          const summary = { reportCount: runs.length, client, lighthouse: { home: summarize('/'), detail: summarize(detailPath) } }
-          const encoded = Buffer.from(JSON.stringify(summary)).toString('base64')
-          console.log(`::notice title=Phase 7 performance JSON (base64)::${encoded}`)
+          const firstSettings = manifest.length ? JSON.parse(readFileSync(manifest[0].jsonPath, 'utf8')).configSettings : {}
+          const lighthouse = {
+            reportCount: runs.length,
+            settings: {
+              formFactor: firstSettings.formFactor,
+              throttlingMethod: firstSettings.throttlingMethod,
+              screenEmulation: firstSettings.screenEmulation,
+              onlyCategories: firstSettings.onlyCategories,
+            },
+            home: summarize('/'),
+            detail: summarize(detailPath),
+          }
+          const publish = (label, value) => {
+            const encoded = Buffer.from(JSON.stringify(value)).toString('base64')
+            if (encoded.length > 3500) throw new Error(`${label} annotation is too large: ${encoded.length}`)
+            console.log(`::notice title=Phase 7 ${label} JSON (base64)::${encoded}`)
+          }
           if (runs.length !== 6) throw new Error(`Expected six Lighthouse reports, got ${runs.length}`)
-          if (summary.lighthouse.home.runs.length !== 3 || summary.lighthouse.detail.runs.length !== 3) throw new Error('Expected three reports for each route')
+          if (lighthouse.home.runs.length !== 3 || lighthouse.detail.runs.length !== 3) throw new Error('Expected three reports for each route')
+          publish('client', client)
+          publish('Lighthouse', lighthouse)
           EOF
 
       - name: Upload performance reports
