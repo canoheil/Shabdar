@@ -1,7 +1,10 @@
 <template>
   <div class="shell">
     <header class="shell__header">
-      <NuxtLink to="/" class="shell__brand">شبدر</NuxtLink>
+      <NuxtLink to="/" class="shell__brand">
+        <BrandMascot />
+        <span>شبدر</span>
+      </NuxtLink>
       <nav class="shell__nav" aria-label="ناوبری اصلی">
         <NuxtLink to="/post" class="shell__nav-link">ثبت آگهی</NuxtLink>
         <NuxtLink to="/me" class="shell__nav-link">داشبورد</NuxtLink>
@@ -19,6 +22,15 @@
 </template>
 
 <style scoped>
+.shell__brand {
+  gap: var(--space-2);
+}
+
+.shell__brand .brand-mascot {
+  inline-size: 32px;
+  block-size: 32px;
+}
+
 .shell__nav-link {
   display: inline-flex;
   align-items: center;

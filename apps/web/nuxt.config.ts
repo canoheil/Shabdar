@@ -8,6 +8,9 @@ export default defineNuxtConfig({
       // Persian RTL on every page (ARCHITECTURE.md §8).
       htmlAttrs: { lang: 'fa', dir: 'rtl' },
       title: 'شبدر',
+      link: [
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+      ],
     },
   },
 
