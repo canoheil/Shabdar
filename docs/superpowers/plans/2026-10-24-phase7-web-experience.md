@@ -340,15 +340,15 @@ git commit -m "refactor(web): share truthful authentication state"
 - Home owns `id="listing-search"` and focuses it for `#search` on mount/hash change. Home's current state is path-based so `/#search` still has exactly one `aria-current="page"` item; Search is an action and never current.
 - Account targets `/me` when authenticated, `/login` when anonymous, and `/me` with the generic «حساب» label while pending/unavailable. Admin navigation consumes `user.value?.is_admin` from Task 5.
 
-- [ ] **Step 1: Write failing navigation tests**
+- [x] **Step 1: Write failing navigation tests**
 
 At 375px assert five bottom actions and safe content inset; at 768px assert a two-row header without horizontal scrolling; at 1024/1440px assert the right RTL sidebar and admin-only Queue. Assert `aria-current`, no Messages item, and 44px targets. Count feed requests for same-Home Search (zero) and cross-page Search (one normal navigation fetch), then assert focus and unchanged filters.
 
-- [ ] **Step 2: Implement the single responsive header/nav structure**
+- [x] **Step 2: Implement the single responsive header/nav structure**
 
 Use selective `PhHouse`, `PhMagnifyingGlass`, `PhPlusCircle`, `PhHeart`, `PhUserCircle`, and `PhShieldCheck` imports. Mobile fixes the nav below content with safe-area/main/footer insets; tablet flows it as header row two; desktop fixes the header as a 17rem inline-end sidebar and offsets content. Main content uses `max-inline-size: 75rem`. Account target follows auth state; Queue renders only for authenticated admins at desktop. Add the Home hash/focus consumer.
 
-- [ ] **Step 3: Run GREEN at all shell breakpoints**
+- [x] **Step 3: Run GREEN at all shell breakpoints**
 
 ```bash
 cd apps/web
@@ -359,7 +359,7 @@ npm run measure:client && npm run test:client-budget
 
 Expected: all navigation/focus/request-count checks PASS with no obscured focus or overflow.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/app/layouts/default.vue apps/web/app/pages/index.vue apps/web/app/assets/css/main.css apps/web/tests/e2e/navigation.spec.ts
