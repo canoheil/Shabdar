@@ -94,3 +94,68 @@ pub async fn unsave(
     }
     tx.commit().await.map_err(|_| ApiError::Internal)
 }
+
+/// Return the viewer's active saved cards using the same shape and keyset
+/// conventions as the public feed. Cursor values are bound directly, so an
+/// anchor remains valid even after its favorite row is removed.
+pub async fn list(
+    pool: &MySqlPool,
+    user_id: u64,
+    cursor: Option<&str>,
+    limit_raw: Option<&str>,
+) -> Result<serde_json::Value, ApiError> {
+    let limit = crate::listings::page_limit(limit_raw);
+    let anchor = cursor.map(crate::listings::decode_cursor).transpose()?;
+    let mut sql = String::from(
+        "SELECT l.id, l.public_id, l.slug, l.title, l.price_toman, l.price_type, \
+         l.rating_sum, l.rating_count, l.published_at, c.name_fa AS city, \
+         p.name_fa AS province, cat.name_fa AS category, \
+         (SELECT storage_key FROM listing_images WHERE listing_id = l.id \
+          ORDER BY sort_order LIMIT 1) AS cover, \
+         f.created_at AS saved_at, f.listing_id AS favorite_listing_id \
+         FROM favorites f JOIN listings l ON l.id = f.listing_id \
+         JOIN cities c ON c.id = l.city_id \
+         JOIN provinces p ON p.id = c.province_id \
+         JOIN categories cat ON cat.id = l.category_id \
+         WHERE f.user_id = ? AND l.status = 'active' AND l.deleted_at IS NULL",
+    );
+    if anchor.is_some() {
+        sql.push_str(" AND (f.created_at, f.listing_id) < (?, ?)");
+    }
+    sql.push_str(" ORDER BY f.created_at DESC, f.listing_id DESC LIMIT ?");
+
+    let mut query = sqlx::query(&sql).bind(user_id);
+    if let Some((saved_at, listing_id)) = anchor {
+        query = query.bind(saved_at).bind(listing_id);
+    }
+    query = query.bind((limit + 1) as i64);
+    let mut rows = query
+        .fetch_all(pool)
+        .await
+        .map_err(|_| ApiError::Internal)?;
+    let has_more = rows.len() > limit;
+    rows.truncate(limit);
+
+    let next_cursor = if has_more {
+        rows.last()
+            .map(|row| {
+                let saved_at: chrono::DateTime<Utc> =
+                    row.try_get("saved_at").map_err(|_| ApiError::Internal)?;
+                let listing_id: u64 = row
+                    .try_get("favorite_listing_id")
+                    .map_err(|_| ApiError::Internal)?;
+                Ok(crate::listings::encode_cursor(&saved_at, listing_id))
+            })
+            .transpose()?
+    } else {
+        None
+    };
+    let data = rows
+        .iter()
+        .map(crate::listings::card_from_row)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(serde_json::json!({
+        "data": data,
+        "page": { "next_cursor": next_cursor, "has_more": has_more },
+    }))
+}

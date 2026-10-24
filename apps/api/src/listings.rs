@@ -622,7 +622,7 @@ async fn filter_id(
     }
 }
 
-fn card_from_row(row: &sqlx::mysql::MySqlRow) -> Result<serde_json::Value, ApiError> {
+pub(crate) fn card_from_row(row: &sqlx::mysql::MySqlRow) -> Result<serde_json::Value, ApiError> {
     let sum: u32 = row.try_get("rating_sum").map_err(|_| ApiError::Internal)?;
     let count: u32 = row.try_get("rating_count").map_err(|_| ApiError::Internal)?;
     let average = if count == 0 {

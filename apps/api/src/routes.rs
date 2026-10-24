@@ -36,6 +36,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/auth/otp/verify", post(otp_verify))
         .route("/api/v1/auth/logout", post(logout))
         .route("/api/v1/me", get(me).patch(update_me))
+        .route("/api/v1/me/favorites", get(my_favorites))
         .route(
             "/api/v1/me/favorites/{public_id}",
             put(save_favorite).delete(unsave_favorite),
@@ -178,6 +179,23 @@ async fn dashboard_summary(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     Ok(Json(
         crate::listings::summary(&state.pool, user.user_id).await?,
+    ))
+}
+
+/// GET /api/v1/me/favorites — current viewer's active saved cards.
+async fn my_favorites(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(
+        crate::favorites::list(
+            &state.pool,
+            user.user_id,
+            params.get("cursor").map(String::as_str),
+            params.get("limit").map(String::as_str),
+        )
+        .await?,
     ))
 }
 
