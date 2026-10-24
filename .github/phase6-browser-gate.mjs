@@ -172,6 +172,174 @@ try {
 
   await context.close()
   console.log('TASK 6 REAL-STACK BROWSER GATE PASSED')
+
+  const assertTask7Layout = async (targetPage) => {
+    const dimensions = await targetPage.evaluate(() => ({
+      dir: document.documentElement.dir,
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth,
+    }))
+    assert.equal(dimensions.dir, 'rtl')
+    assert.ok(dimensions.scrollWidth <= dimensions.innerWidth, JSON.stringify(dimensions))
+  }
+  const assertTarget44 = async (locator) => {
+    const box = await locator.boundingBox()
+    assert.ok(box && box.height >= 44, `target is not 44px: ${JSON.stringify(box)}`)
+  }
+
+  const emptyContext = await browser.newContext({ viewport: { width: 375, height: 812 } })
+  await addSession(emptyContext, 'b'.repeat(64))
+  const emptyPage = await emptyContext.newPage()
+  activePage = emptyPage
+  emptyPage.setDefaultTimeout(10_000)
+  const emptyConsoleErrors = []
+  const emptyPageErrors = []
+  emptyPage.on('console', (message) => {
+    if (message.type() === 'error') emptyConsoleErrors.push(message.text())
+  })
+  emptyPage.on('pageerror', (error) => emptyPageErrors.push(error.message))
+  await emptyPage.goto(base + '/me/favorites')
+  await emptyPage.getByText('هنوز آگهی‌ای ذخیره نکرده‌اید.', { exact: true }).waitFor()
+  assert.equal(await emptyPage.locator('.cards .card').count(), 0)
+  await assertTask7Layout(emptyPage)
+  console.log('PASS personal favorites empty state')
+
+  const emptySave = await emptyContext.request.put(
+    `${base}/api/v1/me/favorites/01ARZ3NDEKTSV4RRFFQ69G5FAX`,
+  )
+  assert.equal(emptySave.status(), 200)
+  await emptyPage.reload()
+  await emptyPage.locator('.cards .card').first().waitFor()
+  assert.equal(await emptyPage.locator('.cards .card').count(), 1)
+  assert.equal(await emptyPage.getByRole('button', { name: 'نمایش موارد بیشتر', exact: true }).count(), 0)
+  await emptyPage.getByRole('button', { name: removeLabel, exact: true }).click()
+  await emptyPage.getByText('هنوز آگهی‌ای ذخیره نکرده‌اید.', { exact: true }).waitFor()
+  assert.equal(await emptyPage.locator('.cards .card').count(), 0)
+  assert.deepEqual(emptyConsoleErrors, [])
+  assert.deepEqual(emptyPageErrors, [])
+  await emptyContext.close()
+  console.log('PASS one-page save/refresh/remove through the Nuxt CSRF proxy')
+
+  const sellerContext = await browser.newContext({ viewport: { width: 375, height: 812 } })
+  await addSession(sellerContext, 'c'.repeat(64))
+  const sellerPage = await sellerContext.newPage()
+  activePage = sellerPage
+  sellerPage.setDefaultTimeout(10_000)
+  const sellerConsoleErrors = []
+  const sellerPageErrors = []
+  sellerPage.on('console', (message) => {
+    if (message.type() === 'error') sellerConsoleErrors.push(message.text())
+  })
+  sellerPage.on('pageerror', (error) => sellerPageErrors.push(error.message))
+  await sellerPage.goto(base + '/me')
+  const favoritesLink = sellerPage.getByRole('link', { name: 'علاقه‌مندی‌های من', exact: true })
+  await favoritesLink.waitFor()
+  assert.equal(await favoritesLink.getAttribute('href'), '/me/favorites')
+  await assertTarget44(favoritesLink)
+  const receivedTile = sellerPage.locator('.stat').filter({ hasText: 'ذخیرهٔ آگهی‌های من' })
+  assert.equal(await receivedTile.count(), 1)
+  assert.equal((await receivedTile.locator('.stat__value').textContent())?.trim(), '22')
+  await assertTask7Layout(sellerPage)
+  assert.deepEqual(sellerConsoleErrors, [])
+  assert.deepEqual(sellerPageErrors, [])
+  await sellerContext.close()
+  console.log('PASS dashboard link and received count 22, distinct from viewer personal count 23')
+
+  const favoritesContext = await browser.newContext({ viewport: { width: 375, height: 812 } })
+  await addSession(favoritesContext)
+  const favoritesPage = await favoritesContext.newPage()
+  activePage = favoritesPage
+  favoritesPage.setDefaultTimeout(10_000)
+  const favoritesConsoleErrors = []
+  const favoritesPageErrors = []
+  favoritesPage.on('console', (message) => {
+    if (message.type() === 'error') favoritesConsoleErrors.push(message.text())
+  })
+  favoritesPage.on('pageerror', (error) => favoritesPageErrors.push(error.message))
+  await favoritesPage.goto(base + '/me')
+  let failInitial = true
+  await favoritesPage.route('**/api/v1/me/favorites*', async (route) => {
+    if (failInitial && route.request().method() === 'GET') {
+      failInitial = false
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'internal_error', message: 'induced' }, request_id: 'gate' }),
+      })
+      return
+    }
+    await route.continue()
+  })
+  await favoritesPage.getByRole('link', { name: 'علاقه‌مندی‌های من', exact: true }).click()
+  await favoritesPage
+    .getByText('خواندن علاقه‌مندی‌ها ممکن نشد؛ دوباره تلاش کنید.', { exact: true })
+    .waitFor()
+  await favoritesPage.unroute('**/api/v1/me/favorites*')
+  await favoritesPage.getByRole('button', { name: 'تلاش دوباره', exact: true }).click()
+  await favoritesPage.locator('.cards .card').first().waitFor()
+  assert.equal(await favoritesPage.locator('.cards .card').count(), 20)
+  await favoritesPage.getByRole('heading', { name: 'علاقه‌مندی‌های من', exact: true }).waitFor()
+  await assertTask7Layout(favoritesPage)
+  favoritesConsoleErrors.length = 0
+  console.log('PASS initial error retry and first page of 20 at 375px')
+
+  const more = favoritesPage.getByRole('button', { name: 'نمایش موارد بیشتر', exact: true })
+  await more.waitFor()
+  await assertTarget44(more)
+  let failMore = true
+  await favoritesPage.route('**/api/v1/me/favorites*', async (route) => {
+    if (failMore && route.request().method() === 'GET' && route.request().url().includes('cursor=')) {
+      failMore = false
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'internal_error', message: 'induced' }, request_id: 'gate' }),
+      })
+      return
+    }
+    await route.continue()
+  })
+  await more.click()
+  await favoritesPage
+    .getByText('خواندن موارد بیشتر ممکن نشد؛ دوباره تلاش کنید.', { exact: true })
+    .waitFor()
+  assert.equal(await favoritesPage.locator('.cards .card').count(), 20)
+  await favoritesPage.getByRole('button', { name: 'نمایش موارد بیشتر', exact: true }).waitFor()
+  await favoritesPage.unroute('**/api/v1/me/favorites*')
+  favoritesConsoleErrors.length = 0
+  console.log('PASS load-more failure preserves all 20 cards and retry control')
+
+  const cards = favoritesPage.locator('.cards .card')
+  const anchor = cards.last()
+  const anchorTitle = (await anchor.locator('.card__title').textContent())?.trim()
+  assert.ok(anchorTitle)
+  await anchor.getByRole('button', { name: removeLabel, exact: true }).click()
+  await favoritesPage.waitForFunction(() => document.querySelectorAll('.cards .card').length === 19)
+  await favoritesPage.getByText('از علاقه‌مندی‌ها حذف شد.', { exact: true }).waitFor()
+  await favoritesPage.getByRole('button', { name: 'نمایش موارد بیشتر', exact: true }).click()
+  await favoritesPage.waitForFunction(() => document.querySelectorAll('.cards .card').length === 22)
+  const hrefs = await favoritesPage.locator('.cards .card__title a').evaluateAll((links) =>
+    links.map((link) => link.getAttribute('href')),
+  )
+  assert.equal(new Set(hrefs).size, 22)
+  const titles = await favoritesPage.locator('.cards .card__title').allTextContents()
+  assert.ok(!titles.includes(anchorTitle), 'removed cursor anchor reappeared')
+  console.log('PASS remove cursor anchor then retry load-more: 22 unique cards, no gap/duplicate')
+
+  await favoritesPage.reload()
+  await favoritesPage.locator('.cards .card').first().waitFor()
+  assert.equal(await favoritesPage.locator('.cards .card').count(), 20)
+  const refreshedTitles = await favoritesPage.locator('.cards .card__title').allTextContents()
+  assert.ok(!refreshedTitles.includes(anchorTitle), 'remove did not persist after refresh')
+  await favoritesPage.getByRole('button', { name: 'نمایش موارد بیشتر', exact: true }).waitFor()
+  await favoritesPage.setViewportSize({ width: 1280, height: 800 })
+  await assertTask7Layout(favoritesPage)
+  await assertTarget44(favoritesPage.locator('.cards .card .btn').first())
+  assert.deepEqual(favoritesConsoleErrors, [])
+  assert.deepEqual(favoritesPageErrors, [])
+  await favoritesContext.close()
+  console.log('PASS remove persistence, 1280px layout, 44px targets and no console errors')
+  console.log('TASK 7 REAL-STACK BROWSER GATE PASSED')
 } catch (error) {
   if (activePage) {
     await activePage.screenshot({ path: '/tmp/shabdar-phase6-failure.png', fullPage: true }).catch(() => {})

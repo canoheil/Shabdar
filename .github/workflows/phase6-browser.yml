@@ -100,13 +100,20 @@ jobs:
 
       - name: Seed browser fixtures
         run: |
-          mariadb --host=127.0.0.1 --user=root --password=shabdar_test shabdar_browser_test <<'SQL'
+          {
+          cat <<'SQL'
           INSERT INTO users (public_id, phone_e164, display_name, created_at, updated_at)
           VALUES ('01ARZ3NDEKTSV4RRFFQ69G5FAV', '+989100000101', 'بینندهٔ آزمون', NOW(3), NOW(3));
           SET @viewer_id = LAST_INSERT_ID();
           INSERT INTO users (public_id, phone_e164, display_name, created_at, updated_at)
           VALUES ('01ARZ3NDEKTSV4RRFFQ69G5FAW', '+989100000102', 'فروشندهٔ آزمون', NOW(3), NOW(3));
           SET @seller_id = LAST_INSERT_ID();
+          INSERT INTO users (public_id, phone_e164, display_name, created_at, updated_at)
+          VALUES ('01ARZ3NDEKTSV4RRFFQ69G5FAT', '+989100000103', 'کاربر بدون علاقه‌مندی', NOW(3), NOW(3));
+          SET @empty_user_id = LAST_INSERT_ID();
+          INSERT INTO users (public_id, phone_e164, display_name, created_at, updated_at)
+          VALUES ('01ARZ3NDEKTSV4RRFFQ69G5FAY', '+989100000104', 'فروشندهٔ دیگر', NOW(3), NOW(3));
+          SET @other_seller_id = LAST_INSERT_ID();
           INSERT INTO listings (public_id, seller_id, category_id, city_id, title, slug, description,
             price_toman, price_type, status, published_at, created_at, updated_at)
           VALUES ('01ARZ3NDEKTSV4RRFFQ69G5FAX', @seller_id, 1, 1, 'آگهی آزمون علاقه‌مندی',
@@ -114,7 +121,38 @@ jobs:
           INSERT INTO sessions (user_id, token_hash, expires_at, created_at)
           VALUES (@viewer_id, UNHEX(SHA2('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 256)),
             DATE_ADD(NOW(3), INTERVAL 1 HOUR), NOW(3));
+          INSERT INTO sessions (user_id, token_hash, expires_at, created_at)
+          VALUES (@empty_user_id, UNHEX(SHA2('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 256)),
+            DATE_ADD(NOW(3), INTERVAL 1 HOUR), NOW(3));
+          INSERT INTO sessions (user_id, token_hash, expires_at, created_at)
+          VALUES (@seller_id, UNHEX(SHA2('cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', 256)),
+            DATE_ADD(NOW(3), INTERVAL 1 HOUR), NOW(3));
           SQL
+          for n in $(seq 1 21); do
+            public_id=$(printf 'P6%024d' "$n")
+            cat <<SQL
+          INSERT INTO listings (public_id, seller_id, category_id, city_id, title, slug, description,
+            price_toman, price_type, status, published_at, created_at, updated_at)
+          VALUES ('$public_id', @seller_id, 1, 1, 'آگهی صفحه‌بندی $n', 'favorite-page-$n',
+            'شرح آگهی صفحه‌بندی', 125000, 'fixed', 'active', DATE_SUB(NOW(3), INTERVAL (2000 - $n) SECOND),
+            DATE_SUB(NOW(3), INTERVAL (2000 - $n) SECOND), DATE_SUB(NOW(3), INTERVAL (2000 - $n) SECOND));
+          SET @listing_id = LAST_INSERT_ID();
+          INSERT INTO favorites (user_id, listing_id, created_at)
+          VALUES (@viewer_id, @listing_id, DATE_SUB(NOW(3), INTERVAL (1000 - $n) SECOND));
+          UPDATE listings SET favorite_count = 1 WHERE id = @listing_id;
+          SQL
+          done
+          cat <<'SQL'
+          INSERT INTO listings (public_id, seller_id, category_id, city_id, title, slug, description,
+            price_toman, price_type, status, published_at, created_at, updated_at)
+          VALUES ('01ARZ3NDEKTSV4RRFFQ69G5FAZ', @other_seller_id, 1, 1, 'آگهی فروشندهٔ دیگر',
+            'other-seller-favorite', 'شرح آگهی دیگر', 130000, 'fixed', 'active', NOW(3), NOW(3), NOW(3));
+          SET @other_listing_id = LAST_INSERT_ID();
+          INSERT INTO favorites (user_id, listing_id, created_at)
+          VALUES (@viewer_id, @other_listing_id, DATE_SUB(NOW(3), INTERVAL 100 SECOND));
+          UPDATE listings SET favorite_count = 1 WHERE id = @other_listing_id;
+          SQL
+          } | mariadb --host=127.0.0.1 --user=root --password=shabdar_test shabdar_browser_test
 
       - name: Install temporary Playwright runtime
         run: |
