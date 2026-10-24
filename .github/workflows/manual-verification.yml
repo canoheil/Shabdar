@@ -1,0 +1,63 @@
+name: Manual verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      patch:
+        description: "Optional gzip+base64 git diff to apply before verification"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: shabdar_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Apply local verification patch
+        if: inputs.patch != ''
+        env:
+          PATCH_GZ_BASE64: ${{ inputs.patch }}
+        run: |
+          printf '%s' "$PATCH_GZ_BASE64" | base64 -d | gzip -d | git apply --whitespace=error -
+
+      - name: Install MariaDB client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends mariadb-client
+
+      - name: Create scratch test database
+        run: |
+          mariadb --host=127.0.0.1 --user=root --password=shabdar_test \
+            --execute="CREATE DATABASE IF NOT EXISTS shabdar_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+
+      - name: Run full API suite
+        working-directory: apps/api
+        env:
+          TEST_DATABASE_URL: mysql://root:shabdar_test@127.0.0.1:3306/shabdar_test
+        run: cargo test
+
+      - name: Run Clippy
+        working-directory: apps/api
+        run: cargo clippy --all-targets -- -D warnings
