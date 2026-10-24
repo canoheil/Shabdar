@@ -5,16 +5,49 @@
         <BrandMascot />
         <span>شبدر</span>
       </NuxtLink>
+      <div class="shell__theme">
+        <AppThemeToggle />
+      </div>
       <nav class="shell__nav" aria-label="ناوبری اصلی">
-        <NuxtLink to="/post" class="shell__nav-link">ثبت آگهی</NuxtLink>
-        <NuxtLink
-          :to="authStatus === 'anonymous' ? '/login' : '/me'"
-          class="shell__nav-link"
-        >
-          {{ authStatus === 'authenticated' ? 'داشبورد' : authStatus === 'anonymous' ? 'ورود' : 'حساب' }}
-        </NuxtLink>
+        <ul class="shell__nav-list">
+          <li class="shell__nav-item">
+            <NuxtLink to="/" class="shell__nav-action">
+              <PhHouse :size="22" aria-hidden="true" />
+              <span>خانه</span>
+            </NuxtLink>
+          </li>
+          <li class="shell__nav-item">
+            <button type="button" class="shell__nav-action" @click="focusHomeSearch">
+              <PhMagnifyingGlass :size="22" aria-hidden="true" />
+              <span>جستجو</span>
+            </button>
+          </li>
+          <li class="shell__nav-item">
+            <NuxtLink to="/post" class="shell__nav-action">
+              <PhPlusCircle :size="22" aria-hidden="true" />
+              <span>ثبت آگهی</span>
+            </NuxtLink>
+          </li>
+          <li class="shell__nav-item">
+            <NuxtLink to="/me/favorites" class="shell__nav-action">
+              <PhHeart :size="22" aria-hidden="true" />
+              <span>علاقه‌مندی‌ها</span>
+            </NuxtLink>
+          </li>
+          <li class="shell__nav-item">
+            <NuxtLink :to="accountTarget" class="shell__nav-action">
+              <PhUserCircle :size="22" aria-hidden="true" />
+              <span>{{ accountLabel }}</span>
+            </NuxtLink>
+          </li>
+          <li v-if="user?.is_admin" class="shell__nav-item shell__nav-item--admin">
+            <NuxtLink to="/admin/queue" class="shell__nav-action">
+              <PhShieldCheck :size="22" aria-hidden="true" />
+              <span>صف بررسی</span>
+            </NuxtLink>
+          </li>
+        </ul>
       </nav>
-      <AppThemeToggle />
     </header>
     <div v-if="authStatus === 'unavailable'" class="shell__auth-state" role="alert">
       <span>وضعیت ورود مشخص نیست؛ دوباره تلاش کنید.</span>
@@ -32,49 +65,43 @@
 </template>
 
 <script setup lang="ts">
-const { status: authStatus, refresh: refreshAuth } = await useAuth()
+import {
+  PhHeart,
+  PhHouse,
+  PhMagnifyingGlass,
+  PhPlusCircle,
+  PhShieldCheck,
+  PhUserCircle,
+} from '@phosphor-icons/vue'
+
+const route = useRoute()
+const { user, status: authStatus, refresh: refreshAuth } = await useAuth()
+
+const accountTarget = computed(() => authStatus.value === 'anonymous' ? '/login' : '/me')
+const accountLabel = computed(() => {
+  if (authStatus.value === 'authenticated') return 'داشبورد'
+  if (authStatus.value === 'anonymous') return 'ورود'
+  return 'حساب'
+})
+
+async function focusHomeSearch(): Promise<void> {
+  if (route.path !== '/') {
+    await navigateTo({ path: '/', hash: '#search' })
+    return
+  }
+  await nextTick()
+  document.getElementById('listing-search')?.focus()
+}
 </script>
 
 <style scoped>
-.shell__brand {
-  gap: var(--space-2);
-}
-
 .shell__brand .brand-mascot {
-  inline-size: 32px;
-  block-size: 32px;
+  inline-size: 36px;
+  block-size: 36px;
+  flex: 0 0 auto;
 }
 
-.shell__auth-state {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  color: var(--color-info);
-  background: var(--color-info-bg);
-  border-block-end: 1px solid var(--color-info);
-}
-
-.shell__auth-retry {
-  min-block-size: 44px;
-  padding-inline: var(--space-3);
-  font: inherit;
-  font-weight: 600;
-  color: inherit;
-  background: transparent;
-  border: 1px solid currentColor;
-  border-radius: var(--radius-control);
-  cursor: pointer;
-}
-
-.shell__nav-link {
-  display: inline-flex;
-  align-items: center;
-  min-block-size: 44px; /* touch target (ui-ux-pro-max) */
-  padding-inline: 0.75rem;
-  font-weight: 600;
-  text-decoration: none;
+.shell__nav-action svg {
+  flex: 0 0 auto;
 }
 </style>

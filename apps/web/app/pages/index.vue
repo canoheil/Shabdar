@@ -30,6 +30,7 @@
       <label class="field field--wide">
         <span>جستجو</span>
         <input
+          id="listing-search"
           v-model="q"
           class="field__input"
           type="search"
@@ -119,6 +120,20 @@ function queryString(value: unknown): string {
 }
 
 const route = useRoute()
+
+async function focusSearchFromHash(): Promise<void> {
+  if (!import.meta.client || route.hash !== '#search') return
+  await nextTick()
+  document.getElementById('listing-search')?.focus()
+}
+
+onMounted(() => {
+  void focusSearchFromHash()
+})
+watch(() => route.hash, () => {
+  void focusSearchFromHash()
+})
+
 const q = ref(queryString(route.query.q))
 const category = ref(queryString(route.query.category))
 const city = ref(queryString(route.query.city))
