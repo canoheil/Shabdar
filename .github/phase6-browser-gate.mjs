@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { chromium } from 'playwright'
+import { readFileSync } from 'node:fs'
+import { chromium, request } from 'playwright'
 
 const base = 'http://127.0.0.1:8080'
 const detailPath = '/listings/favorite-browser'
@@ -341,6 +342,82 @@ try {
   await favoritesContext.close()
   console.log('PASS remove persistence, 1280px layout, 44px targets and no console errors')
   console.log('TASK 7 REAL-STACK BROWSER GATE PASSED')
+
+  const smoke = await request.newContext({ baseURL: base })
+  const sellerSmoke = await request.newContext({
+    baseURL: base,
+    extraHTTPHeaders: { cookie: `shabdar_session=${'c'.repeat(64)}` },
+  })
+  try {
+    const otpRequest = await smoke.post('/api/v1/auth/otp/request', {
+      data: { phone: '+989120000099', purpose: 'register' },
+    })
+    assert.equal(otpRequest.status(), 200)
+    const challenge = await otpRequest.json()
+    const apiLog = readFileSync(`${process.env.RUNNER_TEMP}/phase6-api.log`, 'utf8')
+    const codes = [...apiLog.matchAll(/DEV OTP for \*\*\*0099: (\d{6})/g)]
+    assert.ok(codes.length > 0, 'dev OTP was not written to the API log')
+    const verify = await smoke.post('/api/v1/auth/otp/verify', {
+      data: { challenge_id: challenge.challenge_id, code: codes.at(-1)[1] },
+    })
+    assert.equal(verify.status(), 200)
+    const smokeCookies = await smoke.storageState()
+    assert.ok(smokeCookies.cookies.some((cookie) => cookie.name === 'shabdar_session'))
+    assert.ok(smokeCookies.cookies.some((cookie) => cookie.name === 'shabdar_csrf'))
+    assert.equal((await smoke.get('/api/v1/me')).status(), 200)
+    console.log('PASS OTP register/login through the Nuxt proxy')
+
+    const feedResponse = await smoke.get('/api/v1/listings?limit=50')
+    assert.equal(feedResponse.status(), 200)
+    const feed = await feedResponse.json()
+    const target = feed.data.find((card) => card.title === 'آگهی صفحه‌بندی 1')
+    assert.ok(target, 'seller fixture for final smoke was not found')
+    const detailUrl = `/api/v1/listings/${target.slug}`
+    const favoriteUrl = `/api/v1/me/favorites/${target.public_id}`
+    const summaryUrl = '/api/v1/me/dashboard/summary'
+    const summaryBeforeResponse = await sellerSmoke.get(summaryUrl)
+    assert.equal(summaryBeforeResponse.status(), 200)
+    const summaryBefore = await summaryBeforeResponse.json()
+
+    const detailFalseResponse = await smoke.get(detailUrl)
+    assert.equal(detailFalseResponse.status(), 200)
+    const detailFalse = await detailFalseResponse.json()
+    assert.equal(detailFalse.favorited, false)
+    assert.match(detailFalseResponse.headers()['cache-control'] || '', /no-store/)
+    const firstSave = await smoke.put(favoriteUrl)
+    assert.equal(firstSave.status(), 200)
+    assert.deepEqual(await firstSave.json(), { favorited: true })
+    const detailTrue = await (await smoke.get(detailUrl)).json()
+    assert.equal(detailTrue.favorited, true)
+    const summaryAfterSave = await (await sellerSmoke.get(summaryUrl)).json()
+    assert.deepEqual(summaryAfterSave, {
+      ...summaryBefore,
+      favorite_count: summaryBefore.favorite_count + 1,
+    })
+
+    const duplicateSave = await smoke.put(favoriteUrl)
+    assert.equal(duplicateSave.status(), 200)
+    assert.deepEqual(await duplicateSave.json(), { favorited: true })
+    assert.deepEqual(await (await sellerSmoke.get(summaryUrl)).json(), summaryAfterSave)
+    const personal = await (await smoke.get('/api/v1/me/favorites')).json()
+    assert.deepEqual(personal.data.map((card) => card.public_id), [target.public_id])
+    assert.deepEqual(personal.page, { next_cursor: null, has_more: false })
+
+    const unsave = await smoke.delete(favoriteUrl)
+    assert.equal(unsave.status(), 200)
+    assert.deepEqual(await unsave.json(), { favorited: false })
+    assert.equal((await (await smoke.get(detailUrl)).json()).favorited, false)
+    assert.deepEqual(await (await smoke.get('/api/v1/me/favorites')).json(), {
+      data: [],
+      page: { next_cursor: null, has_more: false },
+    })
+    assert.deepEqual(await (await sellerSmoke.get(summaryUrl)).json(), summaryBefore)
+    console.log('PASS proxy CSRF injection, duplicate-save exact counter, both detail states, unsave and personal list')
+  } finally {
+    await smoke.dispose()
+    await sellerSmoke.dispose()
+  }
+  console.log('TASK 8 REAL-STACK OTP/API SMOKE PASSED')
 } catch (error) {
   if (activePage) {
     console.error(`DIAGNOSTIC page URL: ${activePage.url()}`)

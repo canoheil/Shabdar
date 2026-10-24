@@ -1,7 +1,8 @@
 # Shabdar web (`apps/web`)
 
 Nuxt 4 SSR frontend for the Shabdar marketplace (docs/PHASE2_PLAN.md, WP 2;
-listings pages in docs/PHASE3_PLAN.md, Task 7).
+listings pages in docs/PHASE3_PLAN.md, Task 7; favorites in
+docs/PHASE6_PLAN.md).
 Persian RTL (`<html lang="fa" dir="rtl">`); the browser only ever talks to
 this dev server (:3000) — its Nitro `/api/**` catch-all proxies to the Axum
 API (:8080), forwarding cookies and `X-Forwarded-For` (ARCHITECTURE.md §3).
@@ -15,8 +16,8 @@ Pages: `/` (active feed + search/category/city/sort + auth block), `/login`
 no `AggregateRating` until the ratings phase), `/post` (create/edit/submit
 with photo uploads; login-gated), `/me` (seller dashboard: four counts and the
 seller's own listings, login-gated, responsive one-to-four column stat grid),
-`/admin/queue` (pending queue + approve/reject-with-reason; the API enforces
-`is_admin`).
+`/me/favorites` (the current user's saved active listings), and `/admin/queue`
+(pending queue + approve/reject-with-reason; the API enforces `is_admin`).
 
 ### Feed state (Phase 4)
 
@@ -27,6 +28,25 @@ selects navigate immediately. An empty result shows «آگهی‌ای با ای�
 پیدا نشد» with a «پاک کردن فیلترها» button that resets the URL. The feed's
 `useFetch` passes its query as a getter, not a snapshot, so the refetch after a
 URL change carries the new values.
+
+### Favorites (Phase 6)
+
+Listing detail remains publicly rendered during SSR without forwarding the
+session or embedding viewer favorite state. After hydration, a logged-in
+viewer makes one browser detail request to obtain `favorited`; anonymous and
+stale sessions get a login link instead. Save/unsave waits for the API before
+changing the button, disables duplicate submissions, and announces success or
+failure in an `aria-live` region. The Nuxt proxy supplies the CSRF header.
+
+`/me/favorites` follows the dashboard's private SSR/login-gate pattern. It has
+loading, error-with-retry, and empty states, cards linking to
+`/listings/{slug}`, successful-response-only removal, and forward-only load
+more. A failed removal leaves its card in place; a failed later page preserves
+loaded cards and the cursor so retry cannot create a gap or duplicate.
+
+The dashboard link to `/me/favorites` means listings saved by the current
+user. Its separate «ذخیرهٔ آگهی‌های من» tile is the sum of favorites
+**received on the seller's own listings**, not that personal saved-list count.
 
 ## Node toolchain (Termux)
 
@@ -57,9 +77,10 @@ Smoke: `curl -s http://localhost:3000/api/v1/health` →
 
 ## TypeScript policy
 
-Everything is TypeScript (`<script setup lang="ts">`). The Termux gate runs
-**no typecheck** (`vue-tsc` is not installed on the phone): run
-`nuxi typecheck` in a Codespace/PC before big merges.
+Everything is TypeScript (`<script setup lang="ts">`). No permanent web
+browser-test harness or typechecker dependency is committed; `vue-tsc` is not
+installed. The available repository gate is the Nuxt production build, with
+real-stack browser checks run separately when needed.
 
 ## Rolldown / Android note
 
