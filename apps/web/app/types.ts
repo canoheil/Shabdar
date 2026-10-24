@@ -108,3 +108,12 @@ export interface ApiQueueItem {
   submitted_at: string | null
   seller: { public_id: string; display_name: string | null }
 }
+
+// Phase 4 §4 contract: the seller's own counts. `favorite_count` is 0 until
+// the favorites domain ships (documented placeholder, not a missing field).
+export interface ApiDashboardSummary {
+  active_count: number
+  sold_count: number
+  pending_count: number
+  favorite_count: number
+}

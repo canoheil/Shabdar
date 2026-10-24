@@ -533,6 +533,33 @@ pub async fn my_listings(
     rows.iter().map(listing_out).collect()
 }
 
+/// GET /me/dashboard/summary — the seller's own counts (API.md §4).
+/// `favorite_count` stays 0 until the favorites domain exists (Phase 4
+/// decision 5): the field is part of the pinned shape, so it ships as a
+/// placeholder rather than being omitted.
+pub async fn summary(pool: &MySqlPool, seller_id: u64) -> Result<serde_json::Value, ApiError> {
+    let row = sqlx::query(
+        "SELECT COUNT(CASE WHEN status = 'active' THEN 1 END) AS active_count, \
+                COUNT(CASE WHEN status = 'sold' THEN 1 END) AS sold_count, \
+                COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending_count \
+         FROM listings WHERE seller_id = ? AND deleted_at IS NULL",
+    )
+    .bind(seller_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|_| ApiError::Internal)?;
+    // COUNT() decodes as a signed BIGINT in sqlx's MySQL driver.
+    let active_count: i64 = row.try_get("active_count").map_err(|_| ApiError::Internal)?;
+    let sold_count: i64 = row.try_get("sold_count").map_err(|_| ApiError::Internal)?;
+    let pending_count: i64 = row.try_get("pending_count").map_err(|_| ApiError::Internal)?;
+    Ok(serde_json::json!({
+        "active_count": active_count,
+        "sold_count": sold_count,
+        "pending_count": pending_count,
+        "favorite_count": 0,
+    }))
+}
+
 // --- Task 4: public reads (feed, detail, sitemap) ----------------------------
 
 /// Opaque keyset cursor: `<published-or-updated-micros>:<id>`. Plain composite
@@ -622,27 +649,189 @@ fn card_from_row(row: &sqlx::mysql::MySqlRow) -> Result<serde_json::Value, ApiEr
     }))
 }
 
-/// GET /listings — `active` only, newest first, keyset on (published_at, id).
-/// Filters: `category`, `city`, `province` (slugs). Page size caps at 50.
+/// Feed sort (API.md §3). Every sort is expressed as three monotone-ascending
+/// SQL expressions `(k1, k2, k3)`, so keyset paging is ONE predicate for all
+/// four sorts and the cursor needs no sort-specific decoding.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum FeedSort {
+    Newest,
+    PriceAsc,
+    PriceDesc,
+    Popular,
+}
+
+/// Bayesian prior for `popular` (PRODUCT.md §4): `m` pseudo-ratings at score
+/// `C`. Five 4.0 ratings' worth of doubt, so one perfect rating cannot lead.
+pub const POPULAR_PRIOR_COUNT: i64 = 5;
+pub const POPULAR_PRIOR_SCORE: i64 = 4;
+
+impl FeedSort {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FeedSort::Newest => "newest",
+            FeedSort::PriceAsc => "price_asc",
+            FeedSort::PriceDesc => "price_desc",
+            FeedSort::Popular => "popular",
+        }
+    }
+}
+
+/// `sort` is optional; unknown values are a client error, never a silent
+/// fallback (same rule as unknown filter slugs).
+pub fn parse_sort(raw: Option<&str>) -> Result<FeedSort, ApiError> {
+    match raw.unwrap_or("newest") {
+        "newest" => Ok(FeedSort::Newest),
+        "price_asc" => Ok(FeedSort::PriceAsc),
+        "price_desc" => Ok(FeedSort::PriceDesc),
+        "popular" => Ok(FeedSort::Popular),
+        _ => {
+            let mut fields = BTreeMap::new();
+            fields.insert("sort".to_string(), "unknown_sort".to_string());
+            Err(ApiError::Validation { fields })
+        }
+    }
+}
+
+/// The three keys, in ascending order. NULL prices sort last in both price
+/// directions via k1. `published_at` micros are negated for newest so
+/// "ascending keys" still means newest-first.
+pub fn sort_keys(sort: FeedSort) -> [String; 3] {
+    match sort {
+        FeedSort::Newest => [
+            "0".to_string(),
+            "-CAST(ROUND(UNIX_TIMESTAMP(l.published_at)*1000000) AS SIGNED)".to_string(),
+            "-CAST(l.id AS SIGNED)".to_string(),
+        ],
+        FeedSort::PriceAsc => [
+            "(l.price_toman IS NULL)".to_string(),
+            "CAST(COALESCE(l.price_toman,0) AS SIGNED)".to_string(),
+            "CAST(l.id AS SIGNED)".to_string(),
+        ],
+        FeedSort::PriceDesc => [
+            "(l.price_toman IS NULL)".to_string(),
+            "-CAST(COALESCE(l.price_toman,0) AS SIGNED)".to_string(),
+            "-CAST(l.id AS SIGNED)".to_string(),
+        ],
+        FeedSort::Popular => [
+            "0".to_string(),
+            // score_micros = (sum*1e6 + m*C*1e6) / (count + m), integer DIV.
+            format!(
+                "-CAST((CAST(l.rating_sum AS SIGNED)*1000000 + {}) DIV (l.rating_count + {}) AS SIGNED)",
+                POPULAR_PRIOR_COUNT * POPULAR_PRIOR_SCORE * 1_000_000,
+                POPULAR_PRIOR_COUNT
+            ),
+            "-CAST(l.id AS SIGNED)".to_string(),
+        ],
+    }
+}
+
+/// Opaque feed cursor: `<sort>:<k1>:<k2>:<k3>` (Phase 4 decision 2). The sort
+/// prefix is checked on read, so a stale cursor from another sort is a 400.
+pub fn encode_feed_cursor(sort: FeedSort, keys: [i64; 3]) -> String {
+    format!("{}:{}:{}:{}", sort.as_str(), keys[0], keys[1], keys[2])
+}
+
+pub fn decode_feed_cursor(sort: FeedSort, raw: &str) -> Result<[i64; 3], ApiError> {
+    let mut parts = raw.split(':');
+    let matches_sort = parts.next() == Some(sort.as_str());
+    let mut keys = [0i64; 3];
+    let mut parsed = true;
+    for key in keys.iter_mut() {
+        match parts.next().and_then(|s| s.parse::<i64>().ok()) {
+            Some(value) => *key = value,
+            None => parsed = false,
+        }
+    }
+    if !matches_sort || !parsed || parts.next().is_some() {
+        let mut fields = BTreeMap::new();
+        fields.insert("cursor".to_string(), "invalid_cursor".to_string());
+        return Err(ApiError::Validation { fields });
+    }
+    Ok(keys)
+}
+
+/// Search bounds (API.md §3, Phase 4 decision 4).
+const MAX_QUERY_CHARS: usize = 100;
+const MAX_QUERY_TERMS: usize = 5;
+
+/// Folds the spelling variants users actually type (`ي`/`ی`, `ك`/`ک`, ZWNJ)
+/// and splits the query into at most five terms; every term must match.
+pub fn normalize_query(raw: &str) -> Vec<String> {
+    raw.chars()
+        .filter_map(|c| match c {
+            '\u{064A}' => Some('\u{06CC}'), // Arabic yeh → Persian yeh
+            '\u{0643}' => Some('\u{06A9}'), // Arabic kaf → Persian kaf
+            '\u{200C}' => None,              // ZWNJ is a joiner, not a break
+            _ => Some(c),
+        })
+        .collect::<String>()
+        .split_whitespace()
+        .take(MAX_QUERY_TERMS)
+        .map(str::to_string)
+        .collect()
+}
+
+/// `%term%` with LIKE metacharacters escaped (`ESCAPE '!'`), so a user's `%`
+/// or `_` is literal text and can never widen the result set.
+fn like_pattern(term: &str) -> String {
+    let mut pattern = String::with_capacity(term.len() + 2);
+    pattern.push('%');
+    for ch in term.chars() {
+        if matches!(ch, '!' | '%' | '_') {
+            pattern.push('!');
+        }
+        pattern.push(ch);
+    }
+    pattern.push('%');
+    pattern
+}
+
+/// The column with the same folds as the query, so both sides compare equal.
+/// ponytail: `LIKE '%…%'` scans the feed table (no index can serve a leading
+/// wildcard); fine at Rasht scale — upgrade to FULLTEXT/ngram or a normalized
+/// shadow column once the feed outgrows it.
+fn folded_column(column: &str) -> String {
+    format!("REPLACE(REPLACE(REPLACE({column},'ي','ی'),'ك','ک'), _utf8mb4 0xE2808C, '')")
+}
+
+/// GET /listings — `active` only, keyset on the sort's three keys.
+/// Filters: `category`, `city`, `province` (slugs), `q` (terms). Caps at 50.
+#[allow(clippy::too_many_arguments)]
 pub async fn feed(
     pool: &MySqlPool,
     category: Option<&str>,
     city: Option<&str>,
     province: Option<&str>,
+    q: Option<&str>,
+    sort: Option<&str>,
     cursor: Option<&str>,
     limit_raw: Option<&str>,
 ) -> Result<serde_json::Value, ApiError> {
     let limit = page_limit(limit_raw);
-    let mut sql = "SELECT l.id, l.public_id, l.slug, l.title, l.price_toman, l.price_type, \
+    let sort = parse_sort(sort)?;
+    let keys = sort_keys(sort);
+    let terms: Vec<String> = match q {
+        None => Vec::new(),
+        Some(raw) if raw.chars().count() > MAX_QUERY_CHARS => {
+            let mut fields = BTreeMap::new();
+            fields.insert("q".to_string(), "too_long".to_string());
+            return Err(ApiError::Validation { fields });
+        }
+        Some(raw) => normalize_query(raw),
+    };
+    let mut sql = format!(
+        "SELECT l.id, l.public_id, l.slug, l.title, l.price_toman, l.price_type, \
          l.rating_sum, l.rating_count, l.published_at, c.name_fa AS city, \
          p.name_fa AS province, cat.name_fa AS category, \
          (SELECT storage_key FROM listing_images WHERE listing_id = l.id \
-          ORDER BY sort_order LIMIT 1) AS cover \
+          ORDER BY sort_order LIMIT 1) AS cover, \
+         ({}) AS k1, ({}) AS k2, ({}) AS k3 \
          FROM listings l JOIN cities c ON c.id = l.city_id \
          JOIN provinces p ON p.id = c.province_id \
          JOIN categories cat ON cat.id = l.category_id \
-         WHERE l.status = 'active' AND l.deleted_at IS NULL"
-        .to_string();
+         WHERE l.status = 'active' AND l.deleted_at IS NULL",
+        keys[0], keys[1], keys[2]
+    );
     // Fixed fragments only; every value is bound, never interpolated.
     // Unknown filter slugs are a client error (validated up front).
     if let Some(slug) = category {
@@ -657,26 +846,42 @@ pub async fn feed(
         filter_id(pool, "provinces", slug, "province", "unknown_province").await?;
         sql.push_str(" AND p.slug = ?");
     }
-    feed_query(pool, &sql, category, city, province, cursor, limit).await
+    // One AND clause per term: each term may hit title or description.
+    let patterns: Vec<String> = terms.iter().map(|t| like_pattern(t)).collect();
+    let (title_folded, description_folded) = (folded_column("l.title"), folded_column("l.description"));
+    for _ in &patterns {
+        sql.push_str(&format!(
+            " AND (({title_folded}) LIKE ? ESCAPE '!' OR ({description_folded}) LIKE ? ESCAPE '!')"
+        ));
+    }
+    feed_query(
+        pool, &sql, &keys, category, city, province, &patterns, sort, cursor, limit,
+    )
+    .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn feed_query(
     pool: &MySqlPool,
     base: &str,
+    keys: &[String; 3],
     category: Option<&str>,
     city: Option<&str>,
     province: Option<&str>,
+    patterns: &[String],
+    sort: FeedSort,
     cursor: Option<&str>,
     limit: usize,
 ) -> Result<serde_json::Value, ApiError> {
     let mut sql = base.to_string();
-    // Keyset: rows strictly older than the cursor (ties break on id).
-    let anchor: Option<(chrono::DateTime<Utc>, u64)> =
-        cursor.map(decode_cursor).transpose()?;
+    let anchor: Option<[i64; 3]> = cursor.map(|raw| decode_feed_cursor(sort, raw)).transpose()?;
     if anchor.is_some() {
-        sql.push_str(" AND (l.published_at, l.id) < (?, ?)");
+        sql.push_str(&format!(
+            " AND (({}) , ({}) , ({})) > (?, ?, ?)",
+            keys[0], keys[1], keys[2]
+        ));
     }
-    sql.push_str(" ORDER BY l.published_at DESC, l.id DESC LIMIT ?");
+    sql.push_str(" ORDER BY k1 ASC, k2 ASC, k3 ASC LIMIT ?");
     let mut q = sqlx::query(&sql);
     if let Some(slug) = category {
         q = q.bind(slug);
@@ -687,27 +892,32 @@ async fn feed_query(
     if let Some(slug) = province {
         q = q.bind(slug);
     }
-    if let Some((ts, id)) = anchor {
-        q = q.bind(ts).bind(id);
+    for pattern in patterns {
+        q = q.bind(pattern).bind(pattern);
+    }
+    if let Some([k1, k2, k3]) = anchor {
+        q = q.bind(k1).bind(k2).bind(k3);
     }
     q = q.bind((limit + 1) as i64);
     let rows = q.fetch_all(pool).await.map_err(|_| ApiError::Internal)?;
-    // Track each card with its (published_at, id) for the next cursor.
-    let mut with_keys: Vec<(serde_json::Value, chrono::DateTime<Utc>, u64)> =
-        Vec::with_capacity(rows.len());
+    // Track each card with its key triple for the next cursor.
+    let mut with_keys: Vec<(serde_json::Value, [i64; 3])> = Vec::with_capacity(rows.len());
     for row in &rows {
-        let ts: chrono::DateTime<Utc> = row.try_get("published_at").map_err(|_| ApiError::Internal)?;
-        let id: u64 = row.try_get("id").map_err(|_| ApiError::Internal)?;
-        with_keys.push((card_from_row(row)?, ts, id));
+        let triple = [
+            row.try_get::<i64, _>("k1").map_err(|_| ApiError::Internal)?,
+            row.try_get::<i64, _>("k2").map_err(|_| ApiError::Internal)?,
+            row.try_get::<i64, _>("k3").map_err(|_| ApiError::Internal)?,
+        ];
+        with_keys.push((card_from_row(row)?, triple));
     }
     let has_more = with_keys.len() > limit;
     with_keys.truncate(limit);
     let next_cursor = if has_more {
-        with_keys.last().map(|(_, ts, id)| encode_cursor(ts, *id))
+        with_keys.last().map(|(_, triple)| encode_feed_cursor(sort, *triple))
     } else {
         None
     };
-    let data: Vec<serde_json::Value> = with_keys.into_iter().map(|(item, _, _)| item).collect();
+    let data: Vec<serde_json::Value> = with_keys.into_iter().map(|(item, _)| item).collect();
     Ok(serde_json::json!({
         "data": data,
         "page": { "next_cursor": next_cursor, "has_more": has_more },

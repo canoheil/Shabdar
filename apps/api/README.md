@@ -97,7 +97,7 @@ Keep the phone awake during long runs: `termux-wake-lock`.
   edit: seconds. Measure and record the first cold `cargo build` / `cargo test`
   on your device when you run them.
 
-## Endpoints (Phase 1–3)
+## Endpoints (Phase 1–4)
 
 | Method | Path | Summary |
 |---|---|---|
@@ -116,7 +116,8 @@ Keep the phone awake during long runs: `termux-wake-lock`.
 | POST | `…/mark-sold` / `…/archive` | Owner, `active` → `sold` / `archived` |
 | DELETE | `/api/v1/listings/{public_id}` | Owner, soft-deletes `draft`/`rejected`/`archived` → `{ok:true}` |
 | GET | `/api/v1/me/listings?status=` | Own listings (`all`\|`pending`\|`active`\|`rejected`\|`sold`\|`archived`) |
-| GET | `/api/v1/listings?…` | Public feed, `active` only, newest keyset (`category`,`city`,`province`,`cursor`,`limit` ≤ 50) → `{data:[card…],page:{next_cursor,has_more}}` |
+| GET | `/api/v1/me/dashboard/summary` | Own counts `{active_count,sold_count,pending_count,favorite_count}` (`favorite_count` is `0` until favorites ships) |
+| GET | `/api/v1/listings?…` | Public feed, `active` only, keyset (`q`,`category`,`city`,`province`,`min_price`,`max_price`,`sort`,`cursor`,`limit` ≤ 50) → `{data:[card…],page:{next_cursor,has_more}}` |
 | GET | `/api/v1/listings/{slug}` | Public detail; unknown/non-public → 404, removed/deleted → 410 `gone` |
 | GET | `/api/v1/sitemap/listings` | Active `{url,updated_at}` + page envelope |
 | POST | `/api/v1/listings/{public_id}/images` | Owner, `draft`/`rejected` only. Multipart `file` field; JPEG/PNG/WebP by signature, size + count limits → `{id,storage_key,url,sort_order}` |
@@ -156,6 +157,45 @@ curl -s -X PATCH http://127.0.0.1:8080/api/v1/me \
   -H "x-csrf-token: $CSRF" \
   -d '{"display_name":"کاربر"}'
 ```
+
+### Feed search, sorts and cursors (Phase 4)
+
+`sort` is one of `newest` (default), `price_asc`, `price_desc`, `popular`;
+anything else is `400` `fields.sort=unknown_sort`. `q` accepts up to 100
+characters (over → `fields.q=too_long`), splits into at most five terms, and
+requires every term to match the title or the description. Both sides fold
+Arabic `ي`/`ك` to Persian and drop ZWNJ; LIKE metacharacters are escaped with
+`ESCAPE '!'`. `popular` is the Bayesian average `(rating_sum + 5*4.0) /
+(rating_count + 5)`.
+
+Every sort is a monotone key triple `(k1,k2,k3)` and the cursor is
+`<sort>:<k1>:<k2>:<k3>`; `decode_feed_cursor` rejects a cursor whose prefix is
+another sort, or a malformed value, as `400` `fields.cursor=invalid_cursor`.
+Send `page.next_cursor` back unchanged and stop when `page.has_more` is false:
+
+```sh
+# newest (default) / cheapest / dearest / Bayesian-popular
+curl -s 'http://127.0.0.1:8080/api/v1/listings?limit=2'
+curl -s 'http://127.0.0.1:8080/api/v1/listings?sort=price_asc&limit=2'
+curl -s 'http://127.0.0.1:8080/api/v1/listings?sort=price_desc&limit=2'
+curl -s 'http://127.0.0.1:8080/api/v1/listings?sort=popular&limit=2'
+
+# next page: the cursor already carries its sort, so send it back unchanged
+curl -s 'http://127.0.0.1:8080/api/v1/listings?sort=price_asc&limit=2' \
+  | jq -r '.page.next_cursor'
+
+# search (Persian variants folded, every term must match)
+curl -s --get --data-urlencode 'q=فرش دستباف' \
+  'http://127.0.0.1:8080/api/v1/listings'
+
+# dashboard counts (session cookie required)
+curl -s 'http://127.0.0.1:8080/api/v1/me/dashboard/summary' \
+  -H "cookie: shabdar_session=$SESSION"
+```
+
+Search is a leading-wildcard `LIKE` scan (no index can serve `%term%`);
+docs/STATUS.md has the 20k-row measurement and the FULLTEXT/ngram upgrade
+path.
 
 Multipart upload recipe (field name `file`; the server ignores the client
 filename and sniffs JPEG/PNG/WebP signatures):

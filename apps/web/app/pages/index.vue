@@ -24,12 +24,24 @@
       <NuxtLink to="/login" class="btn">ورود</NuxtLink>
     </template>
 
-    <h2>تازه‌ترین آگهی‌ها</h2>
+    <h2>آگهی‌ها</h2>
 
-    <form class="filters" @submit.prevent>
+    <form class="filters" role="search" @submit.prevent="applyNow">
+      <label class="field field--wide">
+        <span>جستجو</span>
+        <input
+          v-model="q"
+          class="field__input"
+          type="search"
+          name="q"
+          placeholder="مثلاً فرش دستباف"
+          maxlength="100"
+          @input="onSearchInput"
+        >
+      </label>
       <label class="field">
         <span>دسته</span>
-        <select v-model="category" class="field__input" @change="applyFilters">
+        <select v-model="category" class="field__input" @change="applyNow">
           <option value="">همه</option>
           <option v-for="c in categories?.data ?? []" :key="c.slug" :value="c.slug">
             {{ c.name_fa }}
@@ -38,10 +50,18 @@
       </label>
       <label class="field">
         <span>شهر</span>
-        <select v-model="city" class="field__input" @change="applyFilters">
+        <select v-model="city" class="field__input" @change="applyNow">
           <option value="">همه</option>
           <option v-for="c in cities?.data ?? []" :key="c.slug" :value="c.slug">
             {{ c.name_fa }}
+          </option>
+        </select>
+      </label>
+      <label class="field">
+        <span>مرتب‌سازی</span>
+        <select v-model="sort" class="field__input" @change="applyNow">
+          <option v-for="option in sortOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
           </option>
         </select>
       </label>
@@ -51,7 +71,13 @@
     <p v-else-if="feedError" class="alert-error" role="alert">
       خطایی رخ داد؛ دوباره تلاش کنید.
     </p>
-    <p v-else-if="(feed?.data ?? []).length === 0">هنوز آگهی‌ای ثبت نشده است.</p>
+    <div v-else-if="(feed?.data ?? []).length === 0" class="empty">
+      <p v-if="hasFilters">آگهی‌ای با این مشخصات پیدا نشد.</p>
+      <p v-else>هنوز آگهی‌ای ثبت نشده است.</p>
+      <button v-if="hasFilters" type="button" class="btn btn--secondary" @click="clearFilters">
+        پاک کردن فیلترها
+      </button>
+    </div>
     <ul v-else class="cards">
       <li v-for="item in feed?.data ?? []" :key="item.public_id" class="card">
         <NuxtLink :to="`/listings/${item.slug}`">
@@ -77,20 +103,73 @@
 <script setup lang="ts">
 import type { ApiCategory, ApiCity, ApiListingCard, ApiPage, ApiUser } from '~/types'
 
+// Filters, search and sort live in the URL (Phase 4 Task 5): a refresh,
+// a shared link and the back button all restore the same feed.
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'تازه‌ترین' },
+  { value: 'price_asc', label: 'ارزان‌ترین' },
+  { value: 'price_desc', label: 'گران‌ترین' },
+  { value: 'popular', label: 'محبوب‌ترین' },
+] as const
+
+const sortOptions = SORT_OPTIONS
+
+function queryString(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
 const route = useRoute()
-const category = ref(typeof route.query.category === 'string' ? route.query.category : '')
-const city = ref(typeof route.query.city === 'string' ? route.query.city : '')
+const q = ref(queryString(route.query.q))
+const category = ref(queryString(route.query.category))
+const city = ref(queryString(route.query.city))
+const sort = ref(queryString(route.query.sort) || 'newest')
+
+const hasFilters = computed(
+  () => Boolean(q.value.trim() || category.value || city.value || sort.value !== 'newest'),
+)
 
 function feedQuery() {
-  const q: Record<string, string> = {}
-  if (category.value) q.category = category.value
-  if (city.value) q.city = city.value
-  return q
+  const query: Record<string, string> = {}
+  const term = q.value.trim()
+  if (term) query.q = term
+  if (category.value) query.category = category.value
+  if (city.value) query.city = city.value
+  if (sort.value !== 'newest') query.sort = sort.value
+  return query
 }
 
-function applyFilters() {
+// One navigation = one feed request (useFetch watches route.query below).
+function applyNow() {
+  clearTimeout(typingTimer)
   navigateTo({ path: '/', query: feedQuery() })
 }
+
+// Typing is debounced so a search costs one request, not one per keystroke.
+const SEARCH_DEBOUNCE_MS = 400
+let typingTimer: ReturnType<typeof setTimeout> | undefined
+function onSearchInput() {
+  clearTimeout(typingTimer)
+  typingTimer = setTimeout(applyNow, SEARCH_DEBOUNCE_MS)
+}
+
+function clearFilters() {
+  q.value = ''
+  category.value = ''
+  city.value = ''
+  sort.value = 'newest'
+  applyNow()
+}
+
+// Back/forward and shared links rewrite the controls, not the other way.
+watch(
+  () => route.query,
+  (query) => {
+    q.value = queryString(query.q)
+    category.value = queryString(query.category)
+    city.value = queryString(query.city)
+    sort.value = queryString(query.sort) || 'newest'
+  },
+)
 
 // Reference data for the filters (SSR, public).
 const { data: categories } = await useFetch<{ data: ApiCategory[] }>('/api/v1/categories')
@@ -103,9 +182,10 @@ const {
   data: feed,
   pending: feedPending,
   error: feedError,
-  refresh: refreshFeed,
 } = await useFetch<ApiPage<ApiListingCard>>('/api/v1/listings', {
-  query: feedQuery(),
+  // A getter, not a snapshot: the refetch after a URL change must carry the
+  // NEW query (a plain object would replay the setup-time one).
+  query: computed(() => feedQuery()),
   watch: [() => route.query],
 })
 
@@ -126,9 +206,6 @@ async function logout() {
     loggingOut.value = false
   }
 }
-
-// Keep the feed in sync after filter navigation on the client.
-watch(() => route.query, () => refreshFeed())
 </script>
 
 <style scoped>
@@ -143,5 +220,25 @@ watch(() => route.query, () => refreshFeed())
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  background: #fff;
+  border: 1px dashed #cbd5e0;
+  border-radius: 12px;
+}
+
+.empty p {
+  margin: 0;
+}
+
+/* The search field owns a full row; the three selects share the next one. */
+.filters .field--wide {
+  flex-basis: 100%;
 }
 </style>

@@ -10,11 +10,23 @@ On mutations the proxy also copies the `shabdar_csrf` cookie value into the
 Public listing photos (`/media/**`) proxy to Axum the same way — the browser
 never talks to :8080 for images either.
 
-Pages: `/` (active feed + category/city filters + auth block), `/login`
+Pages: `/` (active feed + search/category/city/sort + auth block), `/login`
 (OTP flow), `/listings/[slug]` (SSR detail with canonical + JSON-LD,
 no `AggregateRating` until the ratings phase), `/post` (create/edit/submit
-with photo uploads; login-gated), `/admin/queue` (pending queue +
-approve/reject-with-reason; the API enforces `is_admin`).
+with photo uploads; login-gated), `/me` (seller dashboard: four counts and the
+seller's own listings, login-gated, responsive one-to-four column stat grid),
+`/admin/queue` (pending queue + approve/reject-with-reason; the API enforces
+`is_admin`).
+
+### Feed state (Phase 4)
+
+Search, filters and sort live in the URL — `/?q=…&category=…&city=…&sort=…` —
+so a refresh, a back/forward press and a shared link all restore the same
+feed. Typing is debounced by 400 ms (one request, not one per keystroke); the
+selects navigate immediately. An empty result shows «آگهی‌ای با این مشخصات
+پیدا نشد» with a «پاک کردن فیلترها» button that resets the URL. The feed's
+`useFetch` passes its query as a getter, not a snapshot, so the refetch after a
+URL change carries the new values.
 
 ## Node toolchain (Termux)
 

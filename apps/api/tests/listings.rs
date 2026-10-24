@@ -550,8 +550,26 @@ async fn create_active(
     csrf: &str,
     title: &str,
 ) -> (String, String) {
+    create_active_with(app, pool, cookie, csrf, title, "fixed", Some(5_000_000), None).await
+}
+
+/// Sort fixtures need a chosen price and rating counters; the reads under
+/// test are HTTP, so the counters are written directly (no ratings domain).
+#[allow(clippy::too_many_arguments)]
+async fn create_active_with(
+    app: &axum::Router,
+    pool: &sqlx::MySqlPool,
+    cookie: &str,
+    csrf: &str,
+    title: &str,
+    price_type: &str,
+    price_toman: Option<i64>,
+    rating: Option<(i64, i64)>,
+) -> (String, String) {
     let mut draft = valid_draft();
     draft["title"] = serde_json::json!(title);
+    draft["price_type"] = serde_json::json!(price_type);
+    draft["price_toman"] = serde_json::json!(price_toman);
     let (status, body) = send_authed(
         app.clone(),
         Method::POST,
@@ -589,6 +607,15 @@ async fn create_active(
     .execute(pool)
     .await
     .expect("activate");
+    if let Some((sum, count)) = rating {
+        sqlx::query("UPDATE listings SET rating_sum = ?, rating_count = ? WHERE public_id = ?")
+            .bind(sum)
+            .bind(count)
+            .bind(&public_id)
+            .execute(pool)
+            .await
+            .expect("rating fixture");
+    }
     (public_id, slug)
 }
 
@@ -698,6 +725,462 @@ async fn feed_keyset_cursor_pages_without_gaps() {
     slugs.sort();
     slugs.dedup();
     assert_eq!(slugs.len(), 3, "every active listing appears exactly once");
+}
+
+#[tokio::test]
+async fn feed_unknown_sort_is_400() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let app = common::spawn_app(common::test_config()).await;
+
+    let (status, body) = send(app, Method::GET, "/api/v1/listings?sort=cheapest", None).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "validation_error");
+    assert_eq!(body["error"]["fields"]["sort"], "unknown_sort");
+}
+
+/// A cursor is only meaningful for the sort that produced it: replaying it
+/// with another sort must be a client error, never a quietly wrong page.
+#[tokio::test]
+async fn feed_cursor_from_another_sort_is_400() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    for title in ["یک", "دو", "سه"] {
+        create_active(&app, &pool, &cookie, &csrf, title).await;
+    }
+
+    let (status, page1) = send(app.clone(), Method::GET, "/api/v1/listings?limit=1", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let cursor = page1["page"]["next_cursor"].as_str().expect("cursor").to_string();
+
+    let (status, body) = send(
+        app,
+        Method::GET,
+        &format!("/api/v1/listings?sort=price_asc&cursor={cursor}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "validation_error");
+    assert_eq!(body["error"]["fields"]["cursor"], "invalid_cursor");
+}
+
+// --- Phase 4 Task 2: price and popular sorts -------------------------------
+
+/// Four actives: two priced, two NULL-priced (free + negotiable). NULLs must
+/// sort last in BOTH price directions.
+async fn seed_price_fixtures(
+    app: &axum::Router,
+    pool: &sqlx::MySqlPool,
+    cookie: &str,
+    csrf: &str,
+) {
+    create_active_with(app, pool, cookie, csrf, "ارزان", "fixed", Some(100_000), None).await;
+    create_active_with(app, pool, cookie, csrf, "گران", "fixed", Some(200_000), None).await;
+    create_active_with(app, pool, cookie, csrf, "رایگان", "free", None, None).await;
+    create_active_with(app, pool, cookie, csrf, "توافقی", "negotiable", None, None).await;
+}
+
+fn titles(body: &serde_json::Value) -> Vec<String> {
+    body["data"]
+        .as_array()
+        .expect("data array")
+        .iter()
+        .map(|c| c["title"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[tokio::test]
+async fn feed_price_sorts_put_null_prices_last() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    seed_price_fixtures(&app, &pool, &cookie, &csrf).await;
+
+    let (status, asc) = send(app.clone(), Method::GET, "/api/v1/listings?sort=price_asc", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let asc_titles = titles(&asc);
+    assert_eq!(&asc_titles[..2], &["ارزان", "گران"], "cheapest first: {asc}");
+    let mut nulls = asc_titles[2..].to_vec();
+    nulls.sort();
+    assert_eq!(nulls, vec!["توافقی", "رایگان"], "NULL prices last: {asc}");
+
+    let (status, desc) = send(app, Method::GET, "/api/v1/listings?sort=price_desc", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let desc_titles = titles(&desc);
+    assert_eq!(&desc_titles[..2], &["گران", "ارزان"], "dearest first: {desc}");
+    let mut nulls = desc_titles[2..].to_vec();
+    nulls.sort();
+    assert_eq!(nulls, vec!["توافقی", "رایگان"], "NULL prices last: {desc}");
+}
+
+#[tokio::test]
+async fn feed_price_cursor_walks_all_rows_once() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    seed_price_fixtures(&app, &pool, &cookie, &csrf).await;
+
+    for sort in ["price_asc", "price_desc"] {
+        let path = format!("/api/v1/listings?sort={sort}&limit=2");
+        let (status, page1) = send(app.clone(), Method::GET, &path, None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(page1["page"]["has_more"], true, "{sort} page 1");
+        let cursor = page1["page"]["next_cursor"].as_str().expect("cursor").to_string();
+
+        let (status, page2) = send(
+            app.clone(),
+            Method::GET,
+            &format!("/api/v1/listings?sort={sort}&limit=2&cursor={cursor}"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(page2["page"]["has_more"], false, "{sort} page 2");
+
+        let mut slugs: Vec<String> = page1["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .chain(page2["data"].as_array().unwrap().iter())
+            .map(|c| c["slug"].as_str().unwrap().to_string())
+            .collect();
+        slugs.sort();
+        slugs.dedup();
+        assert_eq!(slugs.len(), 4, "{sort}: every row exactly once");
+    }
+}
+
+#[tokio::test]
+async fn feed_popular_prefers_many_good_over_one_perfect() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    // A: 5/1 → 25/6 = 4.166… · B: 48/10 → 68/15 = 4.533… · C: 0/0 → 20/5 = 4.0
+    create_active_with(&app, &pool, &cookie, &csrf, "یک‌ستاره‌کامل", "fixed", Some(100_000), Some((5, 1))).await;
+    create_active_with(&app, &pool, &cookie, &csrf, "خیلی‌خوب", "fixed", Some(100_000), Some((48, 10))).await;
+    create_active_with(&app, &pool, &cookie, &csrf, "بدون‌امتیاز", "fixed", Some(100_000), None).await;
+
+    let (status, body) = send(app, Method::GET, "/api/v1/listings?sort=popular", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        titles(&body),
+        vec!["خیلی‌خوب", "یک‌ستاره‌کامل", "بدون‌امتیاز"],
+        "Bayesian prior, not raw average: {body}"
+    );
+}
+
+#[tokio::test]
+async fn feed_popular_cursor_walks_all_rows_once() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    create_active_with(&app, &pool, &cookie, &csrf, "الف", "fixed", Some(100_000), Some((5, 1))).await;
+    create_active_with(&app, &pool, &cookie, &csrf, "ب", "fixed", Some(100_000), Some((48, 10))).await;
+    create_active_with(&app, &pool, &cookie, &csrf, "ج", "fixed", Some(100_000), None).await;
+
+    let (status, page1) =
+        send(app.clone(), Method::GET, "/api/v1/listings?sort=popular&limit=2", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(page1["page"]["has_more"], true);
+    let cursor = page1["page"]["next_cursor"].as_str().expect("cursor").to_string();
+
+    let (status, page2) = send(
+        app,
+        Method::GET,
+        &format!("/api/v1/listings?sort=popular&limit=2&cursor={cursor}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(page2["data"].as_array().unwrap().len(), 1);
+    assert_eq!(page2["page"]["has_more"], false);
+
+    let mut slugs: Vec<String> = page1["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .chain(page2["data"].as_array().unwrap().iter())
+        .map(|c| c["slug"].as_str().unwrap().to_string())
+        .collect();
+    slugs.sort();
+    slugs.dedup();
+    assert_eq!(slugs.len(), 3, "every row exactly once across pages");
+}
+
+// --- Phase 4 Task 3: keyword search ---------------------------------------
+
+/// Search fixtures: one title hit, one description-only hit, one unrelated.
+async fn seed_search_fixtures(
+    app: &axum::Router,
+    pool: &sqlx::MySqlPool,
+    cookie: &str,
+    csrf: &str,
+) {
+    // Descriptions are pinned per fixture: the shared draft description would
+    // otherwise make every listing match the same words.
+    for (title, description) in [
+        ("فرش دستباف", "فرش دستباف"),
+        ("مبل راحتی", "قالیچه نفیس ایرانی"),
+        ("لپ تاپ", "لپ تاپ"),
+    ] {
+        let (public_id, _) = create_active(app, pool, cookie, csrf, title).await;
+        sqlx::query("UPDATE listings SET description = ? WHERE public_id = ?")
+            .bind(description)
+            .bind(&public_id)
+            .execute(pool)
+            .await
+            .expect("description fixture");
+    }
+}
+
+#[tokio::test]
+async fn feed_search_matches_title_and_description() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    seed_search_fixtures(&app, &pool, &cookie, &csrf).await;
+
+    let (status, body) = send(app.clone(), Method::GET, "/api/v1/listings?q=دستباف", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(titles(&body), vec!["فرش دستباف"], "title hit: {body}");
+
+    let (status, body) = send(app.clone(), Method::GET, "/api/v1/listings?q=قالیچه", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(titles(&body), vec!["مبل راحتی"], "description hit: {body}");
+
+    let (status, body) = send(app, Method::GET, "/api/v1/listings?q=یخچال", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"], serde_json::json!([]), "no match is an empty page");
+}
+
+#[tokio::test]
+async fn feed_search_requires_every_term() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    seed_search_fixtures(&app, &pool, &cookie, &csrf).await;
+
+    let (status, body) =
+        send(app.clone(), Method::GET, "/api/v1/listings?q=فرش%20دستباف", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(titles(&body), vec!["فرش دستباف"], "both terms in the title: {body}");
+
+    let (status, body) = send(app, Method::GET, "/api/v1/listings?q=فرش%20مبل", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"], serde_json::json!([]), "terms are AND, not OR: {body}");
+}
+
+#[tokio::test]
+async fn feed_search_folds_arabic_letters_and_zwnj() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    // ZWNJ in the title, Arabic kaf in the other title.
+    create_active(&app, &pool, &cookie, &csrf, "می‌خواهم کتاب").await;
+    create_active(&app, &pool, &cookie, &csrf, "كتاب قدیمی").await;
+
+    // Query without ZWNJ, Persian yeh: matches the ZWNJ title.
+    let (status, body) =
+        send(app.clone(), Method::GET, "/api/v1/listings?q=میخواهم", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(titles(&body), vec!["می‌خواهم کتاب"], "ZWNJ folded: {body}");
+
+    // Persian kaf query: matches both the Persian and the Arabic spelling.
+    let (status, body) = send(app, Method::GET, "/api/v1/listings?q=کتاب", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(titles(&body).len(), 2, "yeh/kaf folded: {body}");
+}
+
+#[tokio::test]
+async fn feed_search_escapes_like_wildcards() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    create_active(&app, &pool, &cookie, &csrf, "کد 20% تخفیف").await;
+    create_active(&app, &pool, &cookie, &csrf, "کد 20x تخفیف").await;
+
+    let (status, body) = send(app.clone(), Method::GET, "/api/v1/listings?q=20%25", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(titles(&body), vec!["کد 20% تخفیف"], "% is literal: {body}");
+
+    // `_` alone would match any single character; escaped it matches nothing.
+    let (status, body) = send(app.clone(), Method::GET, "/api/v1/listings?q=20_", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"], serde_json::json!([]), "no wildcard widening: {body}");
+}
+
+#[tokio::test]
+async fn feed_search_rejects_overlong_q_and_ignores_blank() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    create_active(&app, &pool, &cookie, &csrf, "فرش دستباف").await;
+
+    let long = "a".repeat(101);
+    let (status, body) =
+        send(app.clone(), Method::GET, &format!("/api/v1/listings?q={long}"), None).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["fields"]["q"], "too_long");
+
+    let (status, body) = send(app, Method::GET, "/api/v1/listings?q=%20%20", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(titles(&body), vec!["فرش دستباف"], "blank q is no search: {body}");
+}
+
+// --- Phase 4 Task 4: dashboard summary ------------------------------------
+
+#[tokio::test]
+async fn summary_counts_owner_listings_by_status() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    // 2 active (one soft-deleted afterwards), 1 sold, 1 pending, 1 draft.
+    for title in ["فعال یک", "فعال دو", "فروخته", "در انتظار"] {
+        create_active(&app, &pool, &cookie, &csrf, title).await;
+    }
+    let (status, _) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/listings",
+        Some(&cookie),
+        Some(&csrf),
+        Some(valid_draft()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    for (title, status_value) in [("فروخته", "sold"), ("در انتظار", "pending")] {
+        sqlx::query("UPDATE listings SET status = ? WHERE title = ?")
+            .bind(status_value)
+            .bind(title)
+            .execute(&pool)
+            .await
+            .expect("status fixture");
+    }
+    sqlx::query("UPDATE listings SET deleted_at = NOW(3) WHERE title = 'فعال دو'")
+        .execute(&pool)
+        .await
+        .expect("soft delete fixture");
+
+    let (status, body) = send_authed(
+        app,
+        Method::GET,
+        "/api/v1/me/dashboard/summary",
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["active_count"], 1);
+    assert_eq!(body["sold_count"], 1);
+    assert_eq!(body["pending_count"], 1);
+    assert_eq!(body["favorite_count"], 0);
+}
+
+#[tokio::test]
+async fn summary_is_zeroes_for_a_new_seller() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, _csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+
+    let (status, body) = send_authed(
+        app,
+        Method::GET,
+        "/api/v1/me/dashboard/summary",
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body,
+        serde_json::json!({
+            "active_count": 0, "sold_count": 0, "pending_count": 0, "favorite_count": 0
+        })
+    );
+}
+
+#[tokio::test]
+async fn summary_requires_a_session() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let app = common::spawn_app(common::test_config()).await;
+
+    let (status, body) =
+        send(app, Method::GET, "/api/v1/me/dashboard/summary", None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body["error"]["code"], "unauthorized");
 }
 
 #[tokio::test]
