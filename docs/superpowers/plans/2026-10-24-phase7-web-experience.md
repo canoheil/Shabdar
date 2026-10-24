@@ -275,19 +275,19 @@ git commit -m "feat(web): add semantic tokens and SSR color mode"
 - `BrandMascot` props: `pose?: 'mark' | 'full' | 'search'` (default `mark`), `decorative?: boolean` (default `true`), `label?: string` (default `شبدرُک`).
 - Decorative SVG is `aria-hidden="true"`; meaningful SVG has `role="img"` and the Persian label. All poses share a 96×96 viewBox and `data-pose` for consumer tests.
 
-- [ ] **Step 1: Write failing brand tests**
+- [x] **Step 1: Write failing brand tests**
 
 Assert a local SVG brand mark beside the wordmark, decorative vs labelled semantics, a valid same-origin favicon, and no request for the raster concept or any external asset. Run `@brand`; expected FAIL because the SVG/component/favicon do not exist.
 
-- [ ] **Step 2: Translate concept 1 to minimal flat SVG**
+- [x] **Step 2: Translate concept 1 to minimal flat SVG**
 
 Use the selected rounded body, two-leaf sprout, two eyes/small smile, and magnifier geometry. Use `currentColor` plus the existing `--color-primary`, `--color-on-primary`, and `--color-text` tokens, avoid gradients/filters/fine highlights, and keep the head readable at 32px. Derive `favicon.svg` from the same head geometry with static approved `#047857`/`#062E22` colors because an external favicon cannot inherit page tokens. Define all three poses now; later Home/Login tasks own their rendered pose tests rather than adding a test-only page.
 
-- [ ] **Step 3: Verify rendered mark and static SVG constraints**
+- [x] **Step 3: Verify rendered mark and static SVG constraints**
 
 Run `@brand`, parse both production SVG sources for no external references/raster/image/filter elements, and check the mark at 375px and both themes. Expected: PASS with no raster request or horizontal overflow.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/app/components/BrandMascot.vue apps/web/public/favicon.svg apps/web/app/layouts/default.vue apps/web/nuxt.config.ts apps/web/tests/e2e/brand.spec.ts
