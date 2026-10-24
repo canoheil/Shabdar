@@ -140,14 +140,9 @@ jobs:
         working-directory: apps/web
         run: npm run measure:client
 
-      - name: Check client JS budget after baseline is committed
+      - name: Check production route client JS budget
         working-directory: apps/web
-        run: |
-          if [ -f ../../docs/performance/phase7-client-baseline.json ]; then
-            npm run test:client-budget
-          else
-            echo "Baseline bootstrap: upload the measured report, then commit it before the next run."
-          fi
+        run: npm run test:client-budget
 
       - name: Verify and publish performance report summary
         working-directory: apps/web
