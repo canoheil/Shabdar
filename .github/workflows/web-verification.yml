@@ -197,7 +197,21 @@ jobs:
           }
           if (runs.length !== 6) throw new Error(`Expected six Lighthouse reports, got ${runs.length}`)
           if (lighthouse.home.runs.length !== 3 || lighthouse.detail.runs.length !== 3) throw new Error('Expected three reports for each route')
-          publish('client', client)
+          const clientSummary = {
+            schemaVersion: client.schemaVersion,
+            measuredAt: client.measuredAt,
+            measuredHead: client.measuredHead,
+            productBaseline: client.productBaseline,
+            baseURL: client.baseURL,
+            node: client.node,
+            nuxt: client.nuxt,
+            playwright: client.playwright,
+            gzipLevel: client.gzipLevel,
+            home: { totalGzip: client.home.totalGzip, scriptCount: client.home.scripts.length },
+            detail: { totalGzip: client.detail.totalGzip, scriptCount: client.detail.scripts.length },
+            fonts: client.fonts,
+          }
+          publish('client', clientSummary)
           publish('Lighthouse', lighthouse)
           EOF
 
