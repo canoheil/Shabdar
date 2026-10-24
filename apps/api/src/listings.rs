@@ -928,7 +928,11 @@ async fn feed_query(
 /// GET /listings/{slug} — public detail. `active` → 200; `removed` or
 /// soft-deleted → 410 `gone`; anything else (draft/pending/rejected/unknown)
 /// → 404 with no existence signal.
-pub async fn detail(pool: &MySqlPool, slug: &str) -> Result<serde_json::Value, ApiError> {
+pub async fn detail(
+    pool: &MySqlPool,
+    slug: &str,
+    viewer_user_id: Option<u64>,
+) -> Result<serde_json::Value, ApiError> {
     let row = sqlx::query(
         "SELECT l.*, c.name_fa AS city, p.name_fa AS province, cat.name_fa AS category, \
          u.public_id AS seller_public_id, u.display_name AS seller_name \
@@ -952,6 +956,20 @@ pub async fn detail(pool: &MySqlPool, slug: &str) -> Result<serde_json::Value, A
         return Err(ApiError::NotFound);
     }
     let id: u64 = row.try_get("id").map_err(|_| ApiError::Internal)?;
+    let favorited = match viewer_user_id {
+        Some(viewer_user_id) => {
+            let exists: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM favorites WHERE user_id = ? AND listing_id = ?)",
+            )
+            .bind(viewer_user_id)
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .map_err(|_| ApiError::Internal)?;
+            Some(exists)
+        }
+        None => None,
+    };
     let images = sqlx::query(
         "SELECT storage_key, alt_text FROM listing_images WHERE listing_id = ? ORDER BY sort_order",
     )
@@ -971,7 +989,7 @@ pub async fn detail(pool: &MySqlPool, slug: &str) -> Result<serde_json::Value, A
     let count: u32 = row.try_get("rating_count").map_err(|_| ApiError::Internal)?;
     let published_at: chrono::DateTime<Utc> =
         row.try_get("published_at").map_err(|_| ApiError::Internal)?;
-    Ok(serde_json::json!({
+    let mut body = serde_json::json!({
         "public_id": row.try_get::<String, _>("public_id").map_err(|_| ApiError::Internal)?,
         "slug": row.try_get::<String, _>("slug").map_err(|_| ApiError::Internal)?,
         "title": row.try_get::<String, _>("title").map_err(|_| ApiError::Internal)?,
@@ -990,7 +1008,11 @@ pub async fn detail(pool: &MySqlPool, slug: &str) -> Result<serde_json::Value, A
         "rating_count": count,
         "comment_count": row.try_get::<u32, _>("comment_count").map_err(|_| ApiError::Internal)?,
         "published_at": published_at.to_rfc3339(),
-    }))
+    });
+    if let Some(favorited) = favorited {
+        body["favorited"] = serde_json::json!(favorited);
+    }
+    Ok(body)
 }
 
 /// GET /sitemap/listings — active slugs + `updated_at`, same page envelope.

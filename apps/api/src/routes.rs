@@ -470,12 +470,26 @@ async fn feed_listings(
     Ok(Json(page))
 }
 
-/// GET /api/v1/listings/{slug} — public detail (Phase 3 Task 4).
+/// GET /api/v1/listings/{slug} — public detail with optional viewer state.
 async fn listing_detail(
     State(state): State<AppState>,
     Path(slug): Path<String>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    Ok(Json(crate::listings::detail(&state.pool, &slug).await?))
+    current_user: Result<CurrentUser, ApiError>,
+) -> Result<axum::response::Response, ApiError> {
+    let viewer_user_id = match current_user {
+        Ok(user) => Some(user.user_id),
+        Err(ApiError::Unauthorized) => None,
+        Err(error) => return Err(error),
+    };
+    let body = crate::listings::detail(&state.pool, &slug, viewer_user_id).await?;
+    let mut response = Json(body).into_response();
+    if viewer_user_id.is_some() {
+        response.headers_mut().insert(
+            axum::http::header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("private, no-store"),
+        );
+    }
+    Ok(response)
 }
 
 /// GET /api/v1/sitemap/listings — active slugs for the Nuxt sitemap.
