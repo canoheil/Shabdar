@@ -13,7 +13,8 @@ test('@home search-led hierarchy and visible categories work at mobile and deskt
   await expect(page.getByRole('searchbox', { name: 'جستجو', exact: true })).toBeVisible()
   const categories = page.locator('.home__categories')
   await expect(categories).toBeVisible()
-  await expect(categories.getByRole('button')).toHaveCount(7)
+  // Seven seeded categories plus the native "همه" action.
+  await expect(categories.getByRole('button')).toHaveCount(8)
   await expect(categories.getByRole('button', { name: 'همه', exact: true })).toHaveAttribute('aria-pressed', 'true')
   const firstCategory = categories.getByRole('button').nth(1)
   await firstCategory.click()

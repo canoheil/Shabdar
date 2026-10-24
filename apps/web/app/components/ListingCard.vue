@@ -4,6 +4,7 @@
       <span class="listing-card__media">
         <img
           v-if="showImage"
+          ref="imageElement"
           class="listing-card__image"
           :src="listing.cover_image ?? undefined"
           alt=""
@@ -38,9 +39,17 @@ const props = withDefaults(defineProps<{
 })
 
 const failedImageId = ref<string | null>(null)
+const imageElement = ref<HTMLImageElement | null>(null)
 watch(() => props.listing.public_id, () => {
   failedImageId.value = null
 })
+
+function checkHydratedImage(): void {
+  const image = imageElement.value
+  // An SSR image can fail before Vue attaches its error listener.
+  if (image?.complete && image.naturalWidth === 0) markImageFailed()
+}
+onMounted(checkHydratedImage)
 
 const imageFailed = computed(() => failedImageId.value === props.listing.public_id)
 const showImage = computed(() => Boolean(props.listing.cover_image) && !imageFailed.value)
