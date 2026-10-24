@@ -22,6 +22,7 @@ export default defineNuxtConfig({
     preference: 'system',
     fallback: 'light',
     classSuffix: '',
+    disableTransition: true,
   },
 
   css: [
