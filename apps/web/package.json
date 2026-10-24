@@ -8,7 +8,11 @@
     "preview": "nuxt preview",
     "typecheck": "nuxi typecheck",
     "test:e2e": "playwright test",
-    "test:fixtures": "playwright test --grep @fixture-smoke"
+    "test:fixtures": "playwright test --grep @fixture-smoke",
+    "measure:client": "npm run test:fixtures && node scripts/measure-client-js.mjs",
+    "test:client-budget": "node --test scripts/compare-client-js.test.mjs && node scripts/compare-client-js.mjs ../../docs/performance/phase7-client-baseline.json test-results/client-js.json",
+    "measure:lighthouse": "npm run test:fixtures && lhci collect --config=./lighthouserc.cjs",
+    "test:lighthouse": "npm run test:fixtures && lhci autorun --config=./lighthouserc.cjs"
   },
   "dependencies": {
     "@fontsource-variable/vazirmatn": "5.3.0",
@@ -18,6 +22,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
+    "@lhci/cli": "0.15.1",
     "@playwright/test": "1.64.1",
     "typescript": "^6.0.3",
     "vue-tsc": "3.3.13"

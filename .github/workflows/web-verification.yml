@@ -130,6 +130,36 @@ jobs:
         working-directory: apps/web
         run: npm run test:e2e
 
+      - name: Measure production route client JS
+        working-directory: apps/web
+        run: npm run measure:client
+
+      - name: Check client JS budget after baseline is committed
+        working-directory: apps/web
+        run: |
+          if [ -f ../../docs/performance/phase7-client-baseline.json ]; then
+            npm run test:client-budget
+          else
+            echo "Baseline bootstrap: upload the measured report, then commit it before the next run."
+          fi
+
+      - name: Collect three-run Lighthouse reports without legacy-UI assertions
+        working-directory: apps/web
+        run: |
+          export CHROME_PATH="$(node --input-type=module -e "import { chromium } from '@playwright/test'; process.stdout.write(chromium.executablePath())")"
+          npm run measure:lighthouse
+
+      - name: Upload performance reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-performance-${{ github.run_id }}
+          path: |
+            apps/web/test-results/client-js.json
+            apps/web/.lighthouseci/
+            apps/web/lighthouse-report/
+          if-no-files-found: ignore
+
       - name: Show Nuxt log on failure
         if: failure()
         run: tail -n 100 /tmp/shabdar-web.log
