@@ -19,7 +19,9 @@ pub enum ApiError {
     Validation { fields: BTreeMap<String, String> },
     InvalidPhone,
     InvalidPurpose,
-    RateLimited,
+    /// HTTP 429. `retry_after_secs` becomes the `Retry-After` header when
+    /// known; both the resend cooldown and every Phase 5 abuse limit know it.
+    RateLimited { retry_after_secs: Option<u64> },
     InvalidCode,
     ChallengeExpired,
     ChallengeLocked,
@@ -37,16 +39,25 @@ pub enum ApiError {
     Forbidden,
     /// 410 for publicly removed or deleted listings (Phase 3, `gone`).
     Gone,
+    /// 400 for a request body axum could not accept (Phase 5, `invalid_request`).
+    /// `body` becomes `fields.body`: malformed_json, invalid_json,
+    /// unsupported_content_type or unreadable_body.
+    InvalidRequest { body: &'static str },
+    /// 413 for a body past the extractor's length limit (Phase 5,
+    /// `payload_too_large`).
+    PayloadTooLarge,
     Internal,
 }
 
 impl ApiError {
     fn status(&self) -> StatusCode {
         match self {
-            ApiError::Validation { .. } | ApiError::InvalidPhone | ApiError::InvalidPurpose => {
-                StatusCode::BAD_REQUEST
-            }
-            ApiError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+            ApiError::Validation { .. }
+            | ApiError::InvalidPhone
+            | ApiError::InvalidPurpose
+            | ApiError::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
+            ApiError::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            ApiError::RateLimited { .. } => StatusCode::TOO_MANY_REQUESTS,
             ApiError::InvalidCode
             | ApiError::ChallengeExpired
             | ApiError::ChallengeLocked
@@ -64,7 +75,7 @@ impl ApiError {
             ApiError::Validation { .. } => "validation_error",
             ApiError::InvalidPhone => "invalid_phone",
             ApiError::InvalidPurpose => "invalid_purpose",
-            ApiError::RateLimited => "rate_limited",
+            ApiError::RateLimited { .. } => "rate_limited",
             ApiError::InvalidCode => "invalid_code",
             ApiError::ChallengeExpired => "challenge_expired",
             ApiError::ChallengeLocked => "challenge_locked",
@@ -74,6 +85,8 @@ impl ApiError {
             ApiError::CsrfFailed => "csrf_failed",
             ApiError::Forbidden => "forbidden",
             ApiError::Gone => "gone",
+            ApiError::InvalidRequest { .. } => "invalid_request",
+            ApiError::PayloadTooLarge => "payload_too_large",
             ApiError::Internal => "internal_error",
         }
     }
@@ -85,7 +98,7 @@ impl ApiError {
             ApiError::Validation { .. } => "One or more fields are invalid",
             ApiError::InvalidPhone => "Phone number is not a valid Iranian mobile number",
             ApiError::InvalidPurpose => "Purpose must be \"login\" or \"register\"",
-            ApiError::RateLimited => "Too many requests; please wait and try again",
+            ApiError::RateLimited { .. } => "Too many requests; please wait and try again",
             ApiError::InvalidCode => "Invalid code",
             ApiError::ChallengeExpired => "Code expired; request a new one",
             ApiError::ChallengeLocked => "Too many wrong attempts; request a new code",
@@ -95,6 +108,8 @@ impl ApiError {
             ApiError::CsrfFailed => "CSRF token missing or invalid",
             ApiError::Forbidden => "Not allowed",
             ApiError::Gone => "Listing is no longer available",
+            ApiError::InvalidRequest { .. } => "Request body is not valid JSON",
+            ApiError::PayloadTooLarge => "Request body is too large",
             ApiError::Internal => "Internal server error",
         }
     }
@@ -106,8 +121,12 @@ impl IntoResponse for ApiError {
             "code": self.code(),
             "message": self.message(),
         });
-        if let ApiError::Validation { fields } = &self {
-            error["fields"] = serde_json::json!(fields);
+        match &self {
+            ApiError::Validation { fields } => error["fields"] = serde_json::json!(fields),
+            ApiError::InvalidRequest { body } => {
+                error["fields"] = serde_json::json!({ "body": body })
+            }
+            _ => {}
         }
         // ponytail: a fresh ULID keeps the envelope self-contained; the
         // request-id middleware owns the x-request-id header + extensions.
@@ -117,7 +136,19 @@ impl IntoResponse for ApiError {
             "error": error,
             "request_id": ulid::Ulid::new().to_string(),
         });
-        (self.status(), Json(body)).into_response()
+        let mut response = (self.status(), Json(body)).into_response();
+        // 429 tells the client when to come back (docs/PHASE5_PLAN.md).
+        if let ApiError::RateLimited {
+            retry_after_secs: Some(secs),
+        } = self
+        {
+            if let Ok(value) = axum::http::HeaderValue::from_str(&secs.to_string()) {
+                response
+                    .headers_mut()
+                    .insert(axum::http::header::RETRY_AFTER, value);
+            }
+        }
+        response
     }
 }
 
@@ -146,11 +177,11 @@ mod tests {
             .collect()
     }
 
-    /// The plan's contract table, pinned exactly: HTTP status + code for all 14
-    /// variants, plus a non-empty message on every one.
+    /// The plan's contract table, pinned exactly: HTTP status + code for every
+    /// variant, plus a non-empty message on every one.
     #[tokio::test]
     async fn status_and_code_match_contract_for_every_variant() {
-        let cases: [(super::ApiError, StatusCode, &str); 14] = [
+        let cases: [(super::ApiError, StatusCode, &str); 16] = [
             (
                 super::ApiError::Validation { fields: fields(&[]) },
                 StatusCode::BAD_REQUEST,
@@ -163,7 +194,9 @@ mod tests {
                 "invalid_purpose",
             ),
             (
-                super::ApiError::RateLimited,
+                super::ApiError::RateLimited {
+                    retry_after_secs: None,
+                },
                 StatusCode::TOO_MANY_REQUESTS,
                 "rate_limited",
             ),
@@ -202,6 +235,19 @@ mod tests {
                 "forbidden",
             ),
             (super::ApiError::Gone, StatusCode::GONE, "gone"),
+            // Phase 5 additions (docs/PHASE5_PLAN.md "Contract additions").
+            (
+                super::ApiError::InvalidRequest {
+                    body: "malformed_json",
+                },
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+            ),
+            (
+                super::ApiError::PayloadTooLarge,
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "payload_too_large",
+            ),
         ];
         for (err, want_status, want_code) in cases {
             let (status, body) = render(err).await;
@@ -214,6 +260,42 @@ mod tests {
                 "message must be a non-empty string"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn rate_limited_sets_retry_after_header() {
+        let resp = super::ApiError::RateLimited {
+            retry_after_secs: Some(42),
+        }
+        .into_response();
+        assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            resp.headers()
+                .get(axum::http::header::RETRY_AFTER)
+                .and_then(|v| v.to_str().ok()),
+            Some("42")
+        );
+        let bytes = http_body_util::BodyExt::collect(resp.into_body())
+            .await
+            .expect("readable body")
+            .to_bytes();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).expect("valid JSON");
+        assert_eq!(body["error"]["code"], "rate_limited");
+    }
+
+    #[tokio::test]
+    async fn rate_limited_without_seconds_has_no_header() {
+        let resp = super::ApiError::RateLimited {
+            retry_after_secs: None,
+        }
+        .into_response();
+        assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(
+            resp.headers()
+                .get(axum::http::header::RETRY_AFTER)
+                .is_none(),
+            "no retry-after when the remaining time is unknown"
+        );
     }
 
     #[tokio::test]

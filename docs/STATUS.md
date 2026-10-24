@@ -1,14 +1,97 @@
-# Status — Phase 4 discovery
+# Status — Phase 5 auth hardening
 
-Updated 2026-10-24 on the Railway cloud agent after the Phase 4 gate (API
-suite + clippy + a 38-check API/SSR smoke run + browser e2e of the web pages).
+Updated 2026-10-24 on the Railway cloud agent after the Phase 5 gate (full API
+suite + clippy + a curl smoke run of the limits and the error envelope).
 
-- **Phase 4 is COMPLETE — discovery slice (Tasks 1–7).**
-- **Branch: `railway/phase4-plan`**, PR against `main`; plan and task
-  contracts in `docs/PHASE4_PLAN.md`. Code commits `5949924` … `a86fdec`,
-  then the docs sync (this commit).
-- **Next: the launch blockers below**, then per-IP/global OTP limits + the
-  malformed-JSON error shape, then the ratings/favorites domains.
+- **Phase 5 is COMPLETE — auth hardening (Tasks 1–6).**
+- **Branch: `railway/phase5-plan`**, PR #10 against `main`; plan and task
+  contracts in `docs/PHASE5_PLAN.md`. Commits `a076f20` (plan), `6c96140`,
+  `dffe850`, `de10c8c`, then the docs sync (this commit).
+- **Next: favorites** (migration 0007 + the three endpoints + dashboard
+  `favorite_count` + `/me/favorites`), then ratings/comments; the launch
+  blockers below stay open (SMS provider, HTTPS, profanity filter).
+
+## What Phase 5 built
+
+- API — abuse limits on the OTP endpoints, all answering `429 rate_limited`
+  with `Retry-After`: 5 requests / 10 min per client IP and 200 SMS / hour
+  globally on `POST /auth/otp/request`, 10 challenges / 24 h per phone number
+  (counted from `otp_challenges`, so it survives restarts), and 20 verifies /
+  10 min per IP on `POST /auth/otp/verify`.
+- API — check order is deliberate: body fields → IP window → phone
+  normalization → phone daily cap → resend cooldown → global SMS budget →
+  insert. A request rejected before the last step never spends an SMS slot.
+- API — client identity: `X-Forwarded-For` is honoured only with
+  `TRUST_PROXY=true`, and then its **last** entry (the Nuxt proxy replaces the
+  header with the real client); otherwise the socket peer address is used, so a
+  spoofed header cannot buy a fresh window.
+- API — `ApiJson<T>` on all eight body-taking handlers: a body axum
+  cannot accept still returns the one envelope — 400 `invalid_request` with
+  `fields.body` = `malformed_json` / `invalid_json` /
+  `unsupported_content_type` / `unreadable_body`, or 413 `payload_too_large`
+  past 2 MiB.
+- API — the limiter is process-local (`std::sync::Mutex<HashMap>`, no new
+  crate), pruned opportunistically past 4096 keys, and lives on `AppState`, so
+  every test app starts empty.
+- Config — nine new env keys with defaults (`TRUST_PROXY`,
+  `OTP_REQUEST_IP_LIMIT`/`_WINDOW_SECS`, `OTP_VERIFY_IP_LIMIT`/`_WINDOW_SECS`,
+  `OTP_PHONE_DAILY_LIMIT`/`_WINDOW_SECS`,
+  `OTP_SMS_GLOBAL_LIMIT`/`_WINDOW_SECS`); invalid values name the variable and
+  abort startup.
+
+## Verification results (Phase 5 gate — PASS)
+
+- `cargo test` with `TEST_DATABASE_URL` on MariaDB 11 (full suite, not just the
+  new tests): **159/159 passed** (lib 62 + admin_listings 5 + auth_otp 15 +
+  auth_rate_limits 11 + db_migrations 6 + health 2 + listing_images 4 +
+  listings 32 + not_found 3 + session_auth 19).
+- `cargo clippy --all-targets -- -D warnings`: **0 warnings**.
+- Manual smoke against the real binary (Axum on `127.0.0.1:8081`,
+  `TRUST_PROXY=true`, test DB): six `otp/request` calls from one spoofed IP →
+  **200 ×5 then 429 with `Retry-After: 600`**; `POST` with body `{` →
+  **400** `{"error":{"code":"invalid_request","fields":{"body":"malformed_json"},
+  "message":"Request body is not valid JSON"},"request_id":"…"}`.
+- New tests: `apps/api/tests/auth_rate_limits.rs` (11) covers each limit, the
+  per-IP isolation, the spoofed-header case with `TRUST_PROXY` off, the
+  "rejected request spends no SMS slot" rule, and the four envelope paths.
+  `src/ratelimit.rs` and `src/client_ip.rs` carry the core unit tests.
+
+### Reproduce the gate
+
+```sh
+cd apps/api
+TEST_DATABASE_URL='mysql://root:…@127.0.0.1:3306/shabdar_test' cargo test
+cargo clippy --all-targets -- -D warnings
+
+# smoke (dev values; drop OTP_RESEND_SECS=0 for the real cooldown)
+DATABASE_URL="$TEST_DATABASE_URL" OTP_PEPPER=smoke TRUST_PROXY=true \
+  BIND_ADDR=127.0.0.1:8081 OTP_RESEND_SECS=0 ./target/debug/shabdar-api
+for i in 1 2 3 4 5 6; do
+  curl -s -o /dev/null -w '%{http_code} %header{retry-after}\n' \
+    -X POST http://127.0.0.1:8081/api/v1/auth/otp/request \
+    -H 'content-type: application/json' -H 'x-forwarded-for: 203.0.113.9' \
+    -d "{\"phone\":\"0912500000$i\",\"purpose\":\"register\"}"
+done
+```
+
+## Decisions and their evidence
+
+1. **The limiter stays in process memory.** One instance runs today; the
+   expensive action (SMS) is additionally bounded per phone in the database, so
+   a restart or a second replica cannot turn into an SMS bill. Upgrade path
+   (shared store) is a code comment, not work here.
+2. **Per-phone counting uses `otp_challenges`, not a new table.**
+   `idx_otp_phone_purpose_created` already covers
+   `WHERE phone_e164 = ? AND created_at > ?`; `COUNT(*) + MIN(created_at)` in
+   one query yields both the count and the honest `Retry-After`.
+3. **`TRUST_PROXY` defaults to false.** The proxy replaces `X-Forwarded-For`
+   with the real client, so trusting the last entry is safe behind it; the API
+   must not be directly reachable when the flag is on.
+4. **`ApiError::RateLimited` now carries `Option<u64>`.** The resend cooldown
+   reports the real remaining seconds instead of no header at all.
+5. **`request_ip_hash` is still always `NULL`.** Retention is undecided; the
+   rate limiter does not need the column, so Phase 5 did not start writing
+   personal data to it.
 
 ## What Phase 4 built
 
@@ -166,6 +249,10 @@ lives outside the repo; the durable form of those assertions is
 - Turn `OTP_DEV_MODE` off and stop printing codes to the log. (There is no
   `/dev/otp/last` route any more — checked 2026-10-24; the dev code goes to
   stdout only.)
+- Set `TRUST_PROXY=true` only when the API is reachable exclusively through the
+  Nuxt proxy; keep the OTP limits at their defaults (or stricter) in
+  production. The counters are per process — a multi-replica deployment needs
+  the shared-store upgrade noted in `src/ratelimit.rs`.
 - Node/npm versions: **Node v26.3.1, npm 11.17.0** (recorded 2026-10-10).
 - npm install cost: wall time **to record**; `apps/web/node_modules` measured
   **224 MB** on the Railway VM (2026-10-24). `package-lock.json` is generated
@@ -189,6 +276,9 @@ lives outside the repo; the durable form of those assertions is
   dev-stack e2e, all in-session on Termux.**
 - **Phase 4 — COMPLETE (Tasks 1–7) on `railway/phase4-plan`: 136/136 API
   tests + clippy clean + 38/38 smoke checks + browser e2e of the web pages.**
-- **Next: Phase 5 plan** (per-IP/global OTP limits, malformed-JSON error
-  shape, favorites domain) or the launch blockers above, whichever is picked;
-  then profanity filter + SMS provider (Phase 2 review order, unchanged).
+- **Phase 5 — COMPLETE (Tasks 1–6) on `railway/phase5-plan`: 159/159 API
+  tests + clippy clean + smoke of every limit and the envelope.**
+- **Next: favorites** (Phase 6 candidate: migration 0007, PUT/DELETE/GET,
+  real `favorite_count`, save button + `/me/favorites`), then
+  ratings/comments; launch blockers and profanity filter + SMS provider stay in
+  their recorded order.

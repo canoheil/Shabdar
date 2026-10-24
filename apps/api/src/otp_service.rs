@@ -16,20 +16,58 @@ pub struct ChallengeCreated {
     pub public_id: String,
 }
 
-/// Create an OTP challenge for a phone + purpose (Task 8 rules): normalize
-/// the phone, validate the purpose, enforce the resend cooldown, then insert
-/// the challenge with the HMAC of the code (never the plaintext).
-pub async fn create_challenge(
+/// A request that passed the per-phone rules: normalization, purpose, the
+/// Phase 5 daily cap and the resend cooldown. Splitting this out lets the
+/// handler reserve the global SMS budget *after* a request is known to be
+/// legitimate, so a rejected request never spends an SMS slot.
+pub struct ValidatedRequest {
+    pub phone_e164: String,
+    pub purpose: String,
+}
+
+/// The rules that only need the request itself (no insert): normalize the
+/// phone, validate the purpose, enforce the per-phone daily cap and the
+/// resend cooldown (docs/PHASE5_PLAN.md "Rate limits").
+pub async fn validate_request(
     pool: &MySqlPool,
     cfg: &Config,
     phone_raw: &str,
     purpose: &str,
-    code: &str,
-) -> Result<ChallengeCreated, ApiError> {
+) -> Result<ValidatedRequest, ApiError> {
     let phone_e164 =
         phone::normalize_iranian_mobile(phone_raw).map_err(|_| ApiError::InvalidPhone)?;
     if purpose != "login" && purpose != "register" {
         return Err(ApiError::InvalidPurpose);
+    }
+
+    // Per-phone cap: every challenge for this number inside the window counts,
+    // whatever the purpose, because each one costs an SMS. The index
+    // idx_otp_phone_purpose_created covers the scan.
+    if cfg.otp_phone_daily_limit > 0 {
+        let cutoff = Utc::now() - Duration::seconds(cfg.otp_phone_daily_window_secs as i64);
+        let (count, oldest) = sqlx::query_as::<_, (i64, Option<chrono::DateTime<Utc>>)>(
+            "SELECT COUNT(*) AS n, MIN(created_at) AS oldest
+             FROM otp_challenges
+             WHERE phone_e164 = ? AND created_at > ?",
+        )
+        .bind(&phone_e164)
+        .bind(cutoff)
+        .fetch_one(pool)
+        .await
+        .map_err(|_| ApiError::Internal)?;
+
+        if count >= i64::from(cfg.otp_phone_daily_limit) {
+            // The oldest row in the window decides when the number frees up.
+            let retry_after_secs = match oldest {
+                Some(oldest) => (cfg.otp_phone_daily_window_secs as i64
+                    - (Utc::now() - oldest).num_seconds())
+                .max(1) as u64,
+                None => u64::from(cfg.otp_phone_daily_window_secs).max(1),
+            };
+            return Err(ApiError::RateLimited {
+                retry_after_secs: Some(retry_after_secs),
+            });
+        }
     }
 
     // Cooldown: the newest challenge for (phone, purpose) must be older than
@@ -49,11 +87,30 @@ pub async fn create_challenge(
     .map_err(|_| ApiError::Internal)?;
 
     if let Some((created_at,)) = newest {
-        if created_at > Utc::now() - Duration::seconds(cfg.otp_resend_secs as i64) {
-            return Err(ApiError::RateLimited);
+        let resend_window = Duration::seconds(cfg.otp_resend_secs as i64);
+        if created_at > Utc::now() - resend_window {
+            // The client is told exactly how long is left, never less than 1 s.
+            let elapsed = (Utc::now() - created_at).num_seconds().max(0);
+            let remaining = (cfg.otp_resend_secs as i64 - elapsed).max(1) as u64;
+            return Err(ApiError::RateLimited {
+                retry_after_secs: Some(remaining),
+            });
         }
     }
 
+    Ok(ValidatedRequest {
+        phone_e164,
+        purpose: purpose.to_string(),
+    })
+}
+
+/// Inserts the challenge with the HMAC of the code (never the plaintext).
+pub async fn insert_challenge(
+    pool: &MySqlPool,
+    cfg: &Config,
+    request: &ValidatedRequest,
+    code: &str,
+) -> Result<ChallengeCreated, ApiError> {
     let public_id = ulid::Ulid::new().to_string();
     let code_hash = otp::hash_code(code, &cfg.otp_pepper);
     let expires_at = Utc::now() + Duration::seconds(cfg.otp_ttl_secs as i64);
@@ -65,8 +122,8 @@ pub async fn create_challenge(
          VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(&public_id)
-    .bind(&phone_e164)
-    .bind(purpose)
+    .bind(&request.phone_e164)
+    .bind(&request.purpose)
     .bind(&code_hash[..])
     .bind(expires_at)
     .bind(Utc::now())
@@ -75,6 +132,19 @@ pub async fn create_challenge(
     .map_err(|_| ApiError::Internal)?;
 
     Ok(ChallengeCreated { public_id })
+}
+
+/// Validate + insert in one call. Kept for callers (including test fixtures)
+/// that do not reserve a global budget themselves.
+pub async fn create_challenge(
+    pool: &MySqlPool,
+    cfg: &Config,
+    phone_raw: &str,
+    purpose: &str,
+    code: &str,
+) -> Result<ChallengeCreated, ApiError> {
+    let request = validate_request(pool, cfg, phone_raw, purpose).await?;
+    insert_challenge(pool, cfg, &request, code).await
 }
 
 /// The public user shape in verify responses (approved, plan review §3).
