@@ -424,15 +424,15 @@ git commit -m "feat(web): redesign search-led listing discovery"
 - `ListingGallery` props: `images: ApiListingImage[]`, `listingTitle: string`; internal selected index starts at 0 and clamps when images change.
 - Main image is 1200×900, eager, high fetch priority; thumbnails are 160×120 lazy native buttons with `aria-pressed` and «تصویر N از M» names. Alt uses `alt_text` when present, otherwise the Persian listing title plus the one-based image number; no autoplay.
 
-- [ ] **Step 1: Write failing detail/gallery and privacy tests**
+- [x] **Step 1: Write failing detail/gallery and privacy tests**
 
 Cover stacked mobile/two-column desktop layout, main/thumbnail selection by keyboard, eight images, empty/broken media, and readable long description. Re-pin anonymous SSR without `favorited`, one authenticated post-hydration detail read, false→true→false, non-optimistic persistent PUT/DELETE failure, 401 login, and live announcements.
 
-- [ ] **Step 2: Implement gallery and detail composition**
+- [x] **Step 2: Implement gallery and detail composition**
 
 Use the Task 7 primitives and Task 5 auth state. Keep the original public SSR fetch separate from viewer hydration and retain all favorite request rules. Add the summary/action column and a `max-inline-size: 70ch` description measure without changing head, canonical, or JSON-LD truthfulness.
 
-- [ ] **Step 3: Run GREEN and media/privacy checks**
+- [x] **Step 3: Run GREEN and media/privacy checks**
 
 ```bash
 cd apps/web
@@ -443,7 +443,7 @@ npm run measure:client && npm run test:client-budget
 
 Expected: gallery/favorite/privacy tests PASS; only the main detail image is eager/high and the route budget holds.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/app/pages/listings/'[slug].vue' apps/web/app/components/ListingGallery.vue apps/web/tests/e2e/detail.spec.ts
