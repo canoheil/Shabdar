@@ -256,6 +256,11 @@ try {
     if (message.type() === 'error') favoritesConsoleErrors.push(message.text())
   })
   favoritesPage.on('pageerror', (error) => favoritesPageErrors.push(error.message))
+  favoritesPage.on('response', (response) => {
+    if (response.url().includes('/api/v1/me/favorites')) {
+      console.log(`OBSERVE favorites response ${response.status()} ${response.request().method()} ${response.url()}`)
+    }
+  })
   await favoritesPage.goto(base + '/me')
   let failInitial = true
   await favoritesPage.route('**/api/v1/me/favorites*', async (route) => {
@@ -342,6 +347,8 @@ try {
   console.log('TASK 7 REAL-STACK BROWSER GATE PASSED')
 } catch (error) {
   if (activePage) {
+    console.error(`DIAGNOSTIC page URL: ${activePage.url()}`)
+    console.error(`DIAGNOSTIC page body: ${(await activePage.locator('body').innerText().catch(() => '')).slice(0, 3000)}`)
     await activePage.screenshot({ path: '/tmp/shabdar-phase6-failure.png', fullPage: true }).catch(() => {})
   }
   throw error
