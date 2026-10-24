@@ -304,15 +304,15 @@ git commit -m "feat(web): add Shabdarak vector brand assets"
 - `useAuth(): Promise<{ user: ComputedRef<ApiUser | null>; status: ComputedRef<'pending' | 'authenticated' | 'anonymous' | 'unavailable'>; pending: ComputedRef<boolean>; refresh: () => Promise<void> }>`.
 - Every consumer uses key `auth:me`, SSR cookie forwarding, and Nuxt deduplication. Only HTTP 401 maps to `anonymous`; no data without an error is not silently anonymous.
 
-- [ ] **Step 1: Write failing auth-state tests**
+- [x] **Step 1: Write failing auth-state tests**
 
 Cover authenticated Account navigation without a separate Login item, zero duplicate hydration `/me` requests after SSR and exactly one client `/me` request when shell+page mount together on client navigation, persistent `/me` 500 producing unavailable/retry rather than login, 401 producing anonymous, stale-session detail behavior, and OTP verify refreshing auth before navigation. Count browser-observable requests separately from server-side SSR fetches. Run `@auth`; expected FAIL on the old independent/unavailable behavior.
 
-- [ ] **Step 2: Implement and migrate every `/me` consumer**
+- [x] **Step 2: Implement and migrate every `/me` consumer**
 
 Create the keyed composable and replace local fetches/imports. Pending never renders a false guest state; unavailable shows «وضعیت ورود مشخص نیست؛ دوباره تلاش کنید.» with `refresh`. `/post` redirects only for anonymous. Detail favorite logic still loads only for authenticated users. Login and logout await the same `refresh` before continuing.
 
-- [ ] **Step 3: Run GREEN and request-count checks**
+- [x] **Step 3: Run GREEN and request-count checks**
 
 ```bash
 cd apps/web
@@ -322,7 +322,7 @@ npm run typecheck && npm run build
 
 Expected: all auth states PASS; no duplicate hydration request, one shared client-navigation request, one post-login refresh, and no false Login on 500.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/app/composables/useAuth.ts apps/web/app/layouts/default.vue apps/web/app/pages apps/web/tests/e2e/auth.spec.ts
