@@ -62,7 +62,28 @@ Error codes used by the auth and session endpoints:
 
 Listing card shape: `{ public_id, slug, title, price_toman, price_type, city, province, category, cover_image, rating_average, rating_count, published_at }`.
 
-The `popular` sort uses the weighted formula in PRODUCT.md section 6. The server reads the constants `C` and `m` from configuration.
+### Search and sorting (Phase 4)
+
+- **`q`** — at most 100 characters. Split on whitespace into at most 5 terms; **every** term must
+  appear in the title or the description. Persian spelling variants are folded on both sides:
+  Arabic `ي`/`ك` become `ی`/`ک`, and ZWNJ is dropped (so `کتاب‌های` and `کتابهای` are the same
+  search). LIKE metacharacters are literal text — `q=%` matches only listings containing a
+  literal `%`. Longer than 100 characters → `400` with `fields: {q: "too_long"}`.
+- **`sort`** — `newest` (default), `price_asc`, `price_desc`, `popular`. Unknown values are a
+  client error, never a silent fallback: `400` with `fields: {sort: "unknown_sort"}`.
+  `price_asc`/`price_desc` place listings without a numeric price (`free`, `negotiable`) after the
+  priced ones, newest first within that group.
+- **`popular`** uses the Bayesian average from PRODUCT.md section 6,
+  `(rating_sum + m·C) / (rating_count + m)` with `m = 5` and `C = 4.0`, compiled in as
+  `POPULAR_PRIOR_COUNT` / `POPULAR_PRIOR_SCORE`. Listings with no ratings therefore score the
+  prior (4.0) instead of jumping to the top or vanishing.
+- **`cursor`** is opaque and shaped `<sort>:<k1>:<k2>:<k3>`; follow `page.next_cursor` until
+  `page.has_more` is `false`. It is tied to the sort that produced it — replaying a `newest`
+  cursor under `sort=popular`, or a malformed value, is `400` with
+  `fields: {cursor: "invalid_cursor"}`.
+
+Search is a leading-wildcard `LIKE` scan by design at launch scale; see docs/STATUS.md for the
+measured numbers and the FULLTEXT/ngram upgrade path.
 
 ## 4. Seller listings
 
@@ -75,7 +96,7 @@ The `popular` sort uses the weighted formula in PRODUCT.md section 6. The server
 | POST | `/listings/{public_id}/archive` | Owner | `active` → `archived`. |
 | DELETE | `/listings/{public_id}` | Owner | Soft-deletes a `draft`, `rejected`, or `archived` listing. Returns `{ ok: true }`. |
 | GET | `/me/listings?status=all\|pending\|active\|rejected\|sold&cursor=…` | User | Dashboard list of the user's own listings. |
-| GET | `/me/dashboard/summary` | User | `{ active_count, sold_count, pending_count, favorite_count }`. |
+| GET | `/me/dashboard/summary` | User | `{ active_count, sold_count, pending_count, favorite_count }`. Counts are scoped to the session's own listings; `favorite_count` is `0` until the favorites domain ships (a documented placeholder, not a missing field). |
 
 Rejected listings include `rejection_reason` for the owner only.
 
