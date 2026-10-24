@@ -11,6 +11,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   reporter: [
     ['list'],
+    ...(process.env.GITHUB_ACTIONS ? [['github'] as const] : []),
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
   ],
   use: {
