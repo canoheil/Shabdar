@@ -21,6 +21,7 @@ use axum::{
 use serde::Deserialize;
 use sqlx::Row;
 
+use crate::api_json::ApiJson;
 use crate::client_ip::{client_ip, PeerAddr};
 use crate::error::ApiError;
 use crate::request_id::request_id_middleware;
@@ -120,7 +121,7 @@ async fn update_me(
     State(state): State<AppState>,
     user: CurrentUser,
     headers: HeaderMap,
-    Json(body): Json<UpdateMeBody>,
+    ApiJson(body): ApiJson<UpdateMeBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     // CSRF first (plan Task 8): a failed check must not mutate anything.
     crate::csrf::check_csrf(&headers)?;
@@ -193,7 +194,7 @@ async fn create_listing(
     State(state): State<AppState>,
     user: CurrentUser,
     headers: HeaderMap,
-    Json(body): Json<crate::listings::CreateBody>,
+    ApiJson(body): ApiJson<crate::listings::CreateBody>,
 ) -> Result<Json<crate::listings::ListingOut>, ApiError> {
     // CSRF first: a failed check must not create anything.
     crate::csrf::check_csrf(&headers)?;
@@ -206,7 +207,7 @@ async fn edit_listing(
     user: CurrentUser,
     headers: HeaderMap,
     Path(public_id): Path<String>,
-    Json(body): Json<crate::listings::EditBody>,
+    ApiJson(body): ApiJson<crate::listings::EditBody>,
 ) -> Result<Json<crate::listings::ListingOut>, ApiError> {
     crate::csrf::check_csrf(&headers)?;
     Ok(Json(crate::listings::edit_listing(&state.pool, user.user_id, &public_id, body).await?))
@@ -358,7 +359,7 @@ async fn admin_reject(
     user: CurrentUser,
     headers: HeaderMap,
     Path(public_id): Path<String>,
-    Json(body): Json<AdminReasonBody>,
+    ApiJson(body): ApiJson<AdminReasonBody>,
 ) -> Result<Json<crate::listings::ListingOut>, ApiError> {
     crate::csrf::check_csrf(&headers)?;
     crate::admin::require_admin(&user)?;
@@ -371,7 +372,7 @@ async fn admin_remove(
     user: CurrentUser,
     headers: HeaderMap,
     Path(public_id): Path<String>,
-    Json(body): Json<AdminReasonBody>,
+    ApiJson(body): ApiJson<AdminReasonBody>,
 ) -> Result<Json<crate::listings::ListingOut>, ApiError> {
     crate::csrf::check_csrf(&headers)?;
     crate::admin::require_admin(&user)?;
@@ -390,7 +391,7 @@ async fn images_order(
     user: CurrentUser,
     headers: HeaderMap,
     Path(public_id): Path<String>,
-    Json(body): Json<ImagesOrderBody>,
+    ApiJson(body): ApiJson<ImagesOrderBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     crate::csrf::check_csrf(&headers)?;
     let Some(ids) = body.image_ids else {
@@ -579,7 +580,7 @@ async fn otp_request(
     State(state): State<AppState>,
     peer: PeerAddr,
     headers: HeaderMap,
-    Json(body): Json<OtpRequestBody>,
+    ApiJson(body): ApiJson<OtpRequestBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let phone = body.phone.unwrap_or_default();
     let purpose = body.purpose.unwrap_or_default();
@@ -659,7 +660,7 @@ async fn otp_verify(
     State(state): State<AppState>,
     peer: PeerAddr,
     headers: HeaderMap,
-    Json(body): Json<OtpVerifyBody>,
+    ApiJson(body): ApiJson<OtpVerifyBody>,
 ) -> Result<(StatusCode, HeaderMap, Json<serde_json::Value>), ApiError> {
     let challenge_id = body.challenge_id.unwrap_or_default();
     let code = body.code.unwrap_or_default();

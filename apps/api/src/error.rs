@@ -39,15 +39,24 @@ pub enum ApiError {
     Forbidden,
     /// 410 for publicly removed or deleted listings (Phase 3, `gone`).
     Gone,
+    /// 400 for a request body axum could not accept (Phase 5, `invalid_request`).
+    /// `body` becomes `fields.body`: malformed_json, invalid_json,
+    /// unsupported_content_type or unreadable_body.
+    InvalidRequest { body: &'static str },
+    /// 413 for a body past the extractor's length limit (Phase 5,
+    /// `payload_too_large`).
+    PayloadTooLarge,
     Internal,
 }
 
 impl ApiError {
     fn status(&self) -> StatusCode {
         match self {
-            ApiError::Validation { .. } | ApiError::InvalidPhone | ApiError::InvalidPurpose => {
-                StatusCode::BAD_REQUEST
-            }
+            ApiError::Validation { .. }
+            | ApiError::InvalidPhone
+            | ApiError::InvalidPurpose
+            | ApiError::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
+            ApiError::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             ApiError::RateLimited { .. } => StatusCode::TOO_MANY_REQUESTS,
             ApiError::InvalidCode
             | ApiError::ChallengeExpired
@@ -76,6 +85,8 @@ impl ApiError {
             ApiError::CsrfFailed => "csrf_failed",
             ApiError::Forbidden => "forbidden",
             ApiError::Gone => "gone",
+            ApiError::InvalidRequest { .. } => "invalid_request",
+            ApiError::PayloadTooLarge => "payload_too_large",
             ApiError::Internal => "internal_error",
         }
     }
@@ -97,6 +108,8 @@ impl ApiError {
             ApiError::CsrfFailed => "CSRF token missing or invalid",
             ApiError::Forbidden => "Not allowed",
             ApiError::Gone => "Listing is no longer available",
+            ApiError::InvalidRequest { .. } => "Request body is not valid JSON",
+            ApiError::PayloadTooLarge => "Request body is too large",
             ApiError::Internal => "Internal server error",
         }
     }
@@ -108,8 +121,12 @@ impl IntoResponse for ApiError {
             "code": self.code(),
             "message": self.message(),
         });
-        if let ApiError::Validation { fields } = &self {
-            error["fields"] = serde_json::json!(fields);
+        match &self {
+            ApiError::Validation { fields } => error["fields"] = serde_json::json!(fields),
+            ApiError::InvalidRequest { body } => {
+                error["fields"] = serde_json::json!({ "body": body })
+            }
+            _ => {}
         }
         // ponytail: a fresh ULID keeps the envelope self-contained; the
         // request-id middleware owns the x-request-id header + extensions.
@@ -160,11 +177,11 @@ mod tests {
             .collect()
     }
 
-    /// The plan's contract table, pinned exactly: HTTP status + code for all 14
-    /// variants, plus a non-empty message on every one.
+    /// The plan's contract table, pinned exactly: HTTP status + code for every
+    /// variant, plus a non-empty message on every one.
     #[tokio::test]
     async fn status_and_code_match_contract_for_every_variant() {
-        let cases: [(super::ApiError, StatusCode, &str); 14] = [
+        let cases: [(super::ApiError, StatusCode, &str); 16] = [
             (
                 super::ApiError::Validation { fields: fields(&[]) },
                 StatusCode::BAD_REQUEST,
@@ -218,6 +235,19 @@ mod tests {
                 "forbidden",
             ),
             (super::ApiError::Gone, StatusCode::GONE, "gone"),
+            // Phase 5 additions (docs/PHASE5_PLAN.md "Contract additions").
+            (
+                super::ApiError::InvalidRequest {
+                    body: "malformed_json",
+                },
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+            ),
+            (
+                super::ApiError::PayloadTooLarge,
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "payload_too_large",
+            ),
         ];
         for (err, want_status, want_code) in cases {
             let (status, body) = render(err).await;

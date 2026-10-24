@@ -40,6 +40,15 @@ fn request(path: &str, body: &serde_json::Value, ip: &str) -> Request<Body> {
         .unwrap()
 }
 
+/// A request with an arbitrary raw body, so the tests can send invalid JSON.
+fn raw_request(path: &str, content_type: Option<&str>, body: String) -> Request<Body> {
+    let mut builder = Request::builder().method("POST").uri(path);
+    if let Some(value) = content_type {
+        builder = builder.header("content-type", value);
+    }
+    builder.body(Body::from(body)).unwrap()
+}
+
 async fn send(app: axum::Router, req: Request<Body>) -> (StatusCode, HeaderMap, serde_json::Value) {
     let resp = app.oneshot(req).await.unwrap();
     let status = resp.status();
@@ -375,4 +384,84 @@ async fn otp_request_without_trust_proxy_ignores_forwarded_header() {
         StatusCode::TOO_MANY_REQUESTS,
         "a spoofed header must not buy a fresh window: {body}"
     );
+}
+
+// ---- Task 5: the JSON error envelope (docs/PHASE5_PLAN.md, WP C) ----
+
+#[tokio::test]
+async fn malformed_json_returns_the_envelope() {
+    let app = common::spawn_app(base_config()).await;
+    let (status, _, body) = send(
+        app,
+        raw_request(
+            "/api/v1/auth/otp/request",
+            Some("application/json"),
+            "{".to_string(),
+        ),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(code(&body), "invalid_request");
+    assert_eq!(body["error"]["fields"]["body"], "malformed_json");
+    let request_id = body["request_id"].as_str().expect("request_id");
+    assert_eq!(request_id.len(), 26, "request_id must be a ULID: {request_id}");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .is_some_and(|m| !m.is_empty()),
+        "message must be present"
+    );
+}
+
+#[tokio::test]
+async fn wrong_content_type_returns_the_envelope() {
+    let app = common::spawn_app(base_config()).await;
+    let (status, _, body) = send(
+        app,
+        raw_request(
+            "/api/v1/auth/otp/request",
+            Some("text/plain"),
+            "{\"phone\":\"09120000000\"}".to_string(),
+        ),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(code(&body), "invalid_request");
+    assert_eq!(body["error"]["fields"]["body"], "unsupported_content_type");
+}
+
+#[tokio::test]
+async fn wrong_json_type_returns_the_envelope() {
+    let app = common::spawn_app(base_config()).await;
+    let (status, _, body) = send(
+        app,
+        raw_request(
+            "/api/v1/auth/otp/request",
+            Some("application/json"),
+            "{\"phone\":5,\"purpose\":\"login\"}".to_string(),
+        ),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(code(&body), "invalid_request");
+    assert_eq!(body["error"]["fields"]["body"], "invalid_json");
+}
+
+#[tokio::test]
+async fn oversized_json_body_is_413() {
+    let app = common::spawn_app(base_config()).await;
+    // axum's default body limit is 2 MiB; one byte over must be a clean 413.
+    let body = format!("\"{}\"", " ".repeat(2 * 1024 * 1024));
+    let (status, _, parsed) = send(
+        app,
+        raw_request("/api/v1/auth/otp/request", Some("application/json"), body),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(code(&parsed), "payload_too_large");
+    assert_eq!(parsed["error"]["code"], "payload_too_large");
 }
