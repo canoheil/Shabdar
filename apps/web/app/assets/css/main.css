@@ -68,6 +68,7 @@ a {
   display: inline-flex;
   align-items: center;
   min-block-size: 44px;
+  min-inline-size: 44px;
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--color-text);
