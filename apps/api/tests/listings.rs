@@ -113,6 +113,7 @@ static WRITE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// tests/db_migrations.rs) and re-apply, so each test starts clean.
 async fn reset_db(pool: &sqlx::MySqlPool) {
     for table in [
+        "favorites",
         "listing_images",
         "listings",
         "admin_audit_logs",

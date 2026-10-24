@@ -21,6 +21,7 @@ static DB_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// Phase 3 tables drop first (see auth_otp.rs: FK error 1451/3730 otherwise).
 async fn reset_db(pool: &sqlx::MySqlPool) {
     for table in [
+        "favorites",
         "listing_images",
         "listings",
         "admin_audit_logs",
