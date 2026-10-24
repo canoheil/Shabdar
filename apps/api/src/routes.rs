@@ -15,7 +15,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::{
     middleware,
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch, post, put},
     Json, Router,
 };
 use serde::Deserialize;
@@ -36,6 +36,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/auth/otp/verify", post(otp_verify))
         .route("/api/v1/auth/logout", post(logout))
         .route("/api/v1/me", get(me).patch(update_me))
+        .route(
+            "/api/v1/me/favorites/{public_id}",
+            put(save_favorite).delete(unsave_favorite),
+        )
         .route("/api/v1/me/listings", get(my_listings))
         .route(
             "/api/v1/me/dashboard/summary",
@@ -175,6 +179,30 @@ async fn dashboard_summary(
     Ok(Json(
         crate::listings::summary(&state.pool, user.user_id).await?,
     ))
+}
+
+/// PUT /api/v1/me/favorites/{public_id} — save an active listing.
+async fn save_favorite(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::favorites::save(&state.pool, user.user_id, &public_id).await?;
+    Ok(Json(serde_json::json!({ "favorited": true })))
+}
+
+/// DELETE /api/v1/me/favorites/{public_id} — remove the current user's row.
+async fn unsave_favorite(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::favorites::unsave(&state.pool, user.user_id, &public_id).await?;
+    Ok(Json(serde_json::json!({ "favorited": false })))
 }
 
 /// GET /api/v1/me/listings — the seller's own listings (Phase 3 Task 3).

@@ -8,6 +8,7 @@ pub mod csrf;
 pub mod db;
 pub mod admin;
 pub mod error;
+pub mod favorites;
 pub mod listing_images;
 pub mod listings;
 pub mod otp;
