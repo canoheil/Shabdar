@@ -1,15 +1,97 @@
-# Status — Phase 5 auth hardening
+# Status — Phase 6 favorites
 
-Updated 2026-10-24 on the Railway cloud agent after the Phase 5 gate (full API
-suite + clippy + a curl smoke run of the limits and the error envelope).
+Updated 2026-10-24 on Arena.ai Agent Mode after the Phase 6 GitHub Actions gate
+(full API suite + Clippy + real Axum/Nuxt/MariaDB browser and OTP smoke).
 
-- **Phase 5 is COMPLETE — auth hardening (Tasks 1–6).**
-- **Branch: `railway/phase5-plan`**, PR #10 against `main`; plan and task
-  contracts in `docs/PHASE5_PLAN.md`. Commits `a076f20` (plan), `6c96140`,
-  `dffe850`, `de10c8c`, then the docs sync (this commit).
-- **Next: favorites** (migration 0007 + the three endpoints + dashboard
-  `favorite_count` + `/me/favorites`), then ratings/comments; the launch
-  blockers below stay open (SMS provider, HTTPS, profanity filter).
+- **Phase 6 is COMPLETE — favorites (Tasks 1–8).**
+- **Branch: `arena/8d80fa18-shabdar`.** Production implementation is in commit
+  range `0fd364c..a587a9b`; the measured final browser/OTP gate and contract
+  documentation are at `f229843`. The only later changes are this STATUS entry
+  and removal of the temporary `.github/phase6-browser*` harness. The approved
+  plan is `docs/PHASE6_PLAN.md` and the binding design is
+  `docs/superpowers/specs/2026-10-24-favorites-design.md`.
+- **Next: ratings/comments or the selected launch blocker.** The public-launch
+  blockers below remain open, including a real SMS provider, HTTPS, profanity
+  filtering, and the outstanding physical-phone checks.
+
+## What Phase 6 built
+
+- DB — migration `0007_favorites.sql` creates `favorites` with the composite
+  primary key, both supporting indexes, and user/listing cascades. Test reset
+  and drop helpers include the table, and empty-schema migration plus cascade
+  behavior are covered.
+- API — `PUT`/`DELETE /api/v1/me/favorites/{public_id}` require session + CSRF
+  and return the exact boolean bodies. Each mutation locks the listing and
+  changes the favorite row and `listings.favorite_count` atomically. Duplicate
+  saves preserve `created_at`; repeated deletes never decrement twice.
+- API — `GET /api/v1/me/favorites` returns only the caller's active,
+  non-deleted saved cards. It uses `(created_at, listing_id)` descending keyset
+  pages, default 20 / maximum 50, opaque timestamp/id cursors, and anchors that
+  remain valid after the anchor favorite is removed.
+- API — dashboard `favorite_count` is now the exact sum of favorites
+  **received on the seller's own non-deleted listings**, across listing
+  statuses. It is not the seller's personal saved-list count.
+- API — public listing detail remains anonymous by default. A valid viewer
+  receives optional `favorited: true|false` with private `no-store` caching;
+  anonymous or stale-session responses omit the key.
+- Web — listing detail hydrates viewer state after public SSR and provides an
+  SSR-safe save/unsave control with pending, success, failure, login, keyboard,
+  and `aria-live` behavior. No favorite buttons were added to home-feed cards.
+- Web — `/me/favorites` provides login, loading/error/retry, empty, cards,
+  successful-only removal, and forward load-more states. Failed requests keep
+  loaded cards and cursor state. `/me` links to the personal page and labels
+  the separate received-favorites tile «ذخیرهٔ آگهی‌های من».
+
+## Verification results (Phase 6 final gate — PASS)
+
+- **API run `40094584175`**, head `f229843`, MariaDB 11: **174/174 passed**
+  (lib 62 + admin_listings 5 + auth_otp 15 + auth_rate_limits 11 +
+  db_migrations 7 + favorites 14 + health 2 + listing_images 4 + listings 32 +
+  not_found 3 + session_auth 19). This was the full suite, including Phases
+  1–5, not only favorites.
+- `cargo clippy --all-targets -- -D warnings` in that same run: **0 warnings**.
+- **Real-stack browser run `40094584167`**, head `f229843`: Nuxt production
+  build, Axum, Nuxt proxy, and MariaDB all started successfully. Chromium
+  passed every Task 6–7 check at **375 px and 1280 px**: anonymous/stale login
+  gates, no viewer state in SSR HTML, hydration false/true states, keyboard
+  save/unsave, pending and announcements, persistence, failed-mutation retry,
+  empty/one-page/paginated favorites, 20 + 2 unique cards after cursor-anchor
+  removal, no gaps/duplicates, dashboard received count **22** distinct from
+  the viewer's initial personal count **23**, RTL, no horizontal overflow,
+  44 px targets, and no unexpected console/page errors.
+- The same real-stack run passed dev-mode OTP register/login through the Nuxt
+  proxy, proxy CSRF injection without a client-supplied CSRF header, detail
+  `favorited` false → true → false, personal-list updates, and unsave. The
+  seller's complete summary changed by exactly **+1** after the first save,
+  was unchanged by a duplicate save, and returned exactly to its prior value
+  after unsave.
+- Durable favorites coverage is in `apps/api/tests/favorites.rs` (14 tests)
+  plus the migration/cascade test in `apps/api/tests/db_migrations.rs`. The
+  Playwright/OTP harness used for the browser measurements was temporary and
+  is removed after the run; it is not presented as permanent web coverage.
+
+### Reproduce the API gate
+
+```sh
+cd apps/api
+TEST_DATABASE_URL='mysql://root:…@127.0.0.1:3306/shabdar_test' cargo test
+cargo clippy --all-targets -- -D warnings
+```
+
+## Accepted ceilings and honest remaining gaps
+
+- Logged-in detail uses one additional browser request after hydration rather
+  than embedding personal state in public SSR. Personal favorites pagination
+  is forward-only and page state is local; there is no global favorites store.
+- Counter consistency covers Phase 6 and existing application flows. A future
+  user-hard-delete workflow must reconcile every affected listing counter in
+  its transaction before cascading favorite rows; current user deletion is
+  soft. Listing status transitions do not delete favorites or rewrite counts.
+- Browser measurements used headless Chromium emulating a 375 px viewport,
+  **not a physical phone**. No permanent web browser-test harness or
+  `vue-tsc` typechecker is committed; the Nuxt production build is the web
+  build gate. Physical-phone and all public-launch checks listed below remain
+  open and are not implied by this PASS.
 
 ## What Phase 5 built
 
@@ -111,7 +193,8 @@ done
   `400 unknown_sort`, never a silent fallback.
 - API — `GET /me/dashboard/summary` →
   `{active_count, sold_count, pending_count, favorite_count}`, scoped to the
-  session's own listings (`favorite_count` is `0` until favorites ships).
+  session's own listings (`favorite_count` was a Phase 4 placeholder of `0`;
+  Phase 6 above replaced it with the received-favorites sum).
 - Web — feed search box (400 ms debounce, one request instead of one per
   keystroke) and sort select; search, filters and sort all live in the URL, so
   refresh, back/forward and shared links restore the same feed.
@@ -173,9 +256,9 @@ lives outside the repo; the durable form of those assertions is
 3. **Cursor prefix is checked, not trusted.** A cursor without its sort is
    ambiguous once there are four sorts; rejecting the mismatch keeps paging
    correct across a sort change instead of returning plausible nonsense.
-4. **`favorite_count` is a literal `0`.** The favorites domain does not exist
-   yet; the field is in the contract now so the dashboard does not need a
-   breaking change later.
+4. **Phase 4 kept `favorite_count` as a literal `0`.** The field was already in
+   the contract so the dashboard would not need a breaking change later.
+   Phase 6 superseded this placeholder with the real received-favorites sum.
 
 ## What Phase 3 built
 
@@ -227,18 +310,20 @@ lives outside the repo; the durable form of those assertions is
 
 ## Marking rules
 
-- Mark individual plan items `[x]` **only after the user pastes the real
-  command/browser output**. This file lists what has been run and the result;
-  anything not pasted stays **UNVERIFIED** regardless of how confident it
-  looks. Self-review and static analysis are not verification.
-- Web items are verified by running the real stack (Nuxt dev server + Axum +
-  MariaDB) and driving it with Playwright — first on the Railway VM
-  (2026-10-24), browser e2e only. A physical-phone pass is still the final
-  word; `vue-tsc` is not installed anywhere yet, so type errors are caught by
-  the dev server/build, not a typechecker.
-- API items were verified in-session against a scratch `*_test` database
-  (MariaDB 11 in Docker on the Railway VM, not the user's `shabdar_test`);
-  re-run `cargo test` with the real `TEST_DATABASE_URL` before release.
+- Mark individual plan items `[x]` **only with real command/browser output**
+  observed directly from a local run, the user, or an identified CI job. This
+  file lists what has actually run and its result; anything unobserved stays
+  **UNVERIFIED** regardless of confidence. Self-review and static analysis are
+  not verification.
+- Web items are verified by running the real stack (Nuxt + Axum + MariaDB)
+  and driving it with Playwright — first on the Railway VM and, for Phase 6,
+  in GitHub Actions (2026-10-24), browser e2e only. A physical-phone pass is
+  still the final word; `vue-tsc` is not installed, so type errors are caught
+  by the dev server/build, not a typechecker.
+- API items were verified against scratch `*_test` databases on MariaDB 11 in
+  Docker (Railway VM for earlier phases, GitHub Actions for Phase 6), not the
+  user's own database; re-run `cargo test` with the real `TEST_DATABASE_URL`
+  before release.
 
 ## Must do before public launch
 
@@ -278,7 +363,8 @@ lives outside the repo; the durable form of those assertions is
   tests + clippy clean + 38/38 smoke checks + browser e2e of the web pages.**
 - **Phase 5 — COMPLETE (Tasks 1–6) on `railway/phase5-plan`: 159/159 API
   tests + clippy clean + smoke of every limit and the envelope.**
-- **Next: favorites** (Phase 6 candidate: migration 0007, PUT/DELETE/GET,
-  real `favorite_count`, save button + `/me/favorites`), then
-  ratings/comments; launch blockers and profanity filter + SMS provider stay in
-  their recorded order.
+- **Phase 6 — COMPLETE (Tasks 1–8) on `arena/8d80fa18-shabdar`: 174/174 API
+  tests + clippy clean + real-stack Chromium and OTP/API smoke at `f229843`.**
+- **Next: ratings/comments or the selected launch blocker.** Physical-phone
+  verification, profanity filtering, real SMS, HTTPS, and the other recorded
+  public-launch blockers remain open in their recorded order.
