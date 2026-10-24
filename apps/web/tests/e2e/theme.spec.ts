@@ -50,10 +50,17 @@ const DARK = {
 } as const
 
 async function tokenValues(page: Page, names: string[]) {
-  return page.evaluate((tokens) => {
+  const values = await page.evaluate((tokens) => {
     const styles = getComputedStyle(document.documentElement)
     return Object.fromEntries(tokens.map((name) => [name, styles.getPropertyValue(name).trim()]))
   }, names)
+  return Object.fromEntries(Object.entries(values).map(([name, value]) => {
+    const shortHex = /^#([\da-f])([\da-f])([\da-f])$/i.exec(value)
+    const normalized = shortHex
+      ? `#${shortHex.slice(1).map((digit) => digit.repeat(2)).join('')}`
+      : value
+    return [name, normalized.toUpperCase()]
+  }))
 }
 
 test('@theme native control, exact semantic tokens, local font, and quality gates', async ({ page }) => {
@@ -96,13 +103,24 @@ test('@theme native control, exact semantic tokens, local font, and quality gate
 test('@theme stored dark applies before paint without a light-class flash', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('nuxt-color-mode', 'dark')
-    const root = document.documentElement
-    const observed = [root.className]
-    new MutationObserver(() => observed.push(root.className)).observe(root, {
-      attributes: true,
-      attributeFilter: ['class'],
-    })
+    const observed: string[] = []
     Object.assign(window, { __phase7ThemeClasses: observed })
+    const observeRoot = () => {
+      const root = document.documentElement
+      if (!root) return false
+      observed.push(root.className)
+      new MutationObserver(() => observed.push(root.className)).observe(root, {
+        attributes: true,
+        attributeFilter: ['class'],
+      })
+      return true
+    }
+    if (!observeRoot()) {
+      const documentObserver = new MutationObserver(() => {
+        if (observeRoot()) documentObserver.disconnect()
+      })
+      documentObserver.observe(document, { childList: true, subtree: true })
+    }
   })
   await page.goto('/')
   await expect(page.locator('html')).toHaveClass(/(^|\s)dark(\s|$)/)
