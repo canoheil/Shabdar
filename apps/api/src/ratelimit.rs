@@ -46,6 +46,21 @@ pub enum LimitOutcome {
     Limited { retry_after_secs: u64 },
 }
 
+impl LimitOutcome {
+    /// `Err(429 rate_limited ...)` when the window is exhausted, so handlers
+    /// stay linear (`?` instead of a match per call site).
+    pub fn into_result(self) -> Result<(), crate::error::ApiError> {
+        match self {
+            LimitOutcome::Allowed => Ok(()),
+            LimitOutcome::Limited { retry_after_secs } => {
+                Err(crate::error::ApiError::RateLimited {
+                    retry_after_secs: Some(retry_after_secs),
+                })
+            }
+        }
+    }
+}
+
 impl RateLimiter {
     pub fn new() -> Self {
         Self::default()

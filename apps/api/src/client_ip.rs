@@ -10,13 +10,36 @@
 //! The returned string is always either a parsed IP or `"unknown"`, so a
 //! hostile header can never create unbounded distinct limiter keys.
 
+use std::convert::Infallible;
 use std::net::{IpAddr, SocketAddr};
 
+use axum::extract::{ConnectInfo, FromRequestParts};
+use axum::http::request::Parts;
 use axum::http::HeaderMap;
 
 /// The key used when neither a trusted header nor a peer address is available
 /// (oneshot tests build requests without connection info).
 pub const UNKNOWN_IP: &str = "unknown";
+
+/// The socket peer address, when the server was started with connect info.
+///
+/// axum's `ConnectInfo` rejects the request when no peer is available, and
+/// `Option<ConnectInfo<_>>` is not implemented, so this wrapper yields `None`
+/// instead. Tests deliberately run without a peer and expect that.
+pub struct PeerAddr(pub Option<SocketAddr>);
+
+impl<S: Send + Sync> FromRequestParts<S> for PeerAddr {
+    type Rejection = Infallible;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        Ok(PeerAddr(
+            parts
+                .extensions
+                .get::<ConnectInfo<SocketAddr>>()
+                .map(|ConnectInfo(addr)| *addr),
+        ))
+    }
+}
 
 pub fn client_ip(trust_proxy: bool, peer: Option<SocketAddr>, headers: &HeaderMap) -> String {
     if trust_proxy {
@@ -70,6 +93,21 @@ mod tests {
     fn falls_back_to_peer_when_the_header_is_junk() {
         let ip = client_ip(true, peer("10.0.0.5"), &headers_with("not-an-ip"));
         assert_eq!(ip, "10.0.0.5");
+    }
+
+    #[test]
+    fn peer_addr_extracts_from_extensions() {
+        // The extractor is exercised end-to-end through the router in
+        // tests/auth_rate_limits.rs; here we pin the Option mapping only.
+        let mut parts = axum::http::Request::new(()).into_parts().0;
+        parts
+            .extensions
+            .insert(ConnectInfo(SocketAddr::new("203.0.113.5".parse().unwrap(), 9000)));
+        let peer = parts
+            .extensions
+            .get::<ConnectInfo<SocketAddr>>()
+            .map(|ConnectInfo(addr)| *addr);
+        assert_eq!(peer.unwrap().ip().to_string(), "203.0.113.5");
     }
 
     #[test]

@@ -21,6 +21,7 @@ use axum::{
 use serde::Deserialize;
 use sqlx::Row;
 
+use crate::client_ip::{client_ip, PeerAddr};
 use crate::error::ApiError;
 use crate::request_id::request_id_middleware;
 use crate::session::CurrentUser;
@@ -576,6 +577,8 @@ struct OtpRequestBody {
 /// {"challenge_id","expires_in_seconds","resend_after_seconds"}.
 async fn otp_request(
     State(state): State<AppState>,
+    peer: PeerAddr,
+    headers: HeaderMap,
     Json(body): Json<OtpRequestBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let phone = body.phone.unwrap_or_default();
@@ -591,10 +594,39 @@ async fn otp_request(
         return Err(ApiError::Validation { fields });
     }
 
+    // Abuse limits (docs/PHASE5_PLAN.md): the client's window is charged first,
+    // so scanning phone numbers from one address still throttles, then the
+    // request must survive the per-phone rules, and only then may it spend a
+    // slot from the global SMS budget.
+    let ip = client_ip(
+        state.config.trust_proxy,
+        peer.0,
+        &headers,
+    );
+    state
+        .limiter
+        .hit(
+            &format!("otp:req:ip:{ip}"),
+            state.config.otp_request_ip_limit,
+            Duration::from_secs(u64::from(state.config.otp_request_ip_window_secs)),
+        )
+        .into_result()?;
+
+    let validated =
+        crate::otp_service::validate_request(&state.pool, &state.config, &phone, &purpose).await?;
+
+    state
+        .limiter
+        .hit(
+            "otp:sms:global",
+            state.config.otp_sms_global_limit,
+            Duration::from_secs(u64::from(state.config.otp_sms_global_window_secs)),
+        )
+        .into_result()?;
+
     let code = crate::otp::generate_code();
     let created =
-        crate::otp_service::create_challenge(&state.pool, &state.config, &phone, &purpose, &code)
-            .await?;
+        crate::otp_service::insert_challenge(&state.pool, &state.config, &validated, &code).await?;
 
     // Dev print (approved form), only in debug builds with OTP_DEV_MODE on:
     // the phone is masked to its last 4 digits, never logged in full.
@@ -602,10 +634,9 @@ async fn otp_request(
     // the compile-time enforcement upgrade is a build-feature gate (e.g.
     // `#[cfg(feature = "dev-otp")]`) once a release profile exists.
     if state.config.otp_dev_mode && cfg!(debug_assertions) {
-        if let Ok(e164) = crate::phone::normalize_iranian_mobile(&phone) {
-            let masked = format!("***{}", &e164[e164.len() - 4..]);
-            tracing::info!("DEV OTP for {masked}: {code}");
-        }
+        let e164 = &validated.phone_e164;
+        let masked = format!("***{}", &e164[e164.len() - 4..]);
+        tracing::info!("DEV OTP for {masked}: {code}");
     }
 
     Ok(Json(serde_json::json!({
@@ -626,6 +657,8 @@ struct OtpVerifyBody {
 /// {"user":{"public_id","display_name","is_admin"},"is_new_user"}.
 async fn otp_verify(
     State(state): State<AppState>,
+    peer: PeerAddr,
+    headers: HeaderMap,
     Json(body): Json<OtpVerifyBody>,
 ) -> Result<(StatusCode, HeaderMap, Json<serde_json::Value>), ApiError> {
     let challenge_id = body.challenge_id.unwrap_or_default();
@@ -640,6 +673,21 @@ async fn otp_verify(
     if !fields.is_empty() {
         return Err(ApiError::Validation { fields });
     }
+
+    // Guessing codes is a per-client activity: bound it before touching the DB.
+    let ip = client_ip(
+        state.config.trust_proxy,
+        peer.0,
+        &headers,
+    );
+    state
+        .limiter
+        .hit(
+            &format!("otp:verify:ip:{ip}"),
+            state.config.otp_verify_ip_limit,
+            Duration::from_secs(u64::from(state.config.otp_verify_ip_window_secs)),
+        )
+        .into_result()?;
 
     let outcome =
         crate::otp_service::verify_challenge(&state.pool, &state.config, &challenge_id, &code)
