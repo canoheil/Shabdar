@@ -880,3 +880,132 @@ async fn dashboard_counts_received_not_personal_favorites() {
     assert_eq!(dashboard(t.app.clone(), &seller).await["favorite_count"], 1);
     assert_eq!(dashboard(t.app.clone(), &other_seller).await["favorite_count"], 1);
 }
+
+#[tokio::test]
+async fn detail_favorite_state_is_viewer_specific_and_private() {
+    let Some(t) = setup().await else { return };
+    let seller = create_user(&t.pool, &t.cfg, "+989100000001").await;
+    let first = create_user(&t.pool, &t.cfg, "+989100000002").await;
+    let second = create_user(&t.pool, &t.cfg, "+989100000003").await;
+    let listing = create_listing(&t.pool, seller.id, "active").await;
+    let uri = format!("/api/v1/listings/{}", listing.slug);
+
+    for cookie in [None, Some("shabdar_session=stale; shabdar_csrf=stale")] {
+        let (status, headers, body) = send(
+            t.app.clone(),
+            Method::GET,
+            &uri,
+            cookie,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.get("favorited").is_none());
+        assert_ne!(
+            headers
+                .get(axum::http::header::CACHE_CONTROL)
+                .and_then(|value| value.to_str().ok()),
+            Some("private, no-store")
+        );
+    }
+
+    let (status, headers, body) = send(
+        t.app.clone(),
+        Method::GET,
+        &uri,
+        Some(&first.cookie),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["favorited"], false);
+    assert_eq!(
+        headers
+            .get(axum::http::header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("private, no-store")
+    );
+
+    let favorite_uri = format!("/api/v1/me/favorites/{}", listing.public_id);
+    let (status, _, _) = send(
+        t.app.clone(),
+        Method::PUT,
+        &favorite_uri,
+        Some(&first.cookie),
+        Some(&first.csrf),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, headers, body) = send(
+        t.app.clone(),
+        Method::GET,
+        &uri,
+        Some(&first.cookie),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["favorited"], true);
+    assert_eq!(
+        headers
+            .get(axum::http::header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("private, no-store")
+    );
+
+    let (status, headers, body) = send(
+        t.app.clone(),
+        Method::GET,
+        &uri,
+        Some(&second.cookie),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["favorited"], false, "another viewer's row must not leak");
+    assert_eq!(
+        headers
+            .get(axum::http::header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("private, no-store")
+    );
+    let (status, _, body) = send(t.app.clone(), Method::GET, &uri, None, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.get("favorited").is_none());
+
+    let draft = create_listing(&t.pool, seller.id, "draft").await;
+    let (status, _, _) = send(
+        t.app.clone(),
+        Method::GET,
+        &format!("/api/v1/listings/{}", draft.slug),
+        Some(&first.cookie),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let removed = create_listing(&t.pool, seller.id, "removed").await;
+    let (status, _, _) = send(
+        t.app.clone(),
+        Method::GET,
+        &format!("/api/v1/listings/{}", removed.slug),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::GONE);
+    let deleted = create_listing(&t.pool, seller.id, "active").await;
+    sqlx::query("UPDATE listings SET deleted_at = NOW(3) WHERE id = ?")
+        .bind(deleted.id)
+        .execute(&t.pool)
+        .await
+        .expect("soft-delete fixture");
+    let (status, _, _) = send(
+        t.app.clone(),
+        Method::GET,
+        &format!("/api/v1/listings/{}", deleted.slug),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::GONE);
+}
