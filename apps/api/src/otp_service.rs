@@ -49,8 +49,14 @@ pub async fn create_challenge(
     .map_err(|_| ApiError::Internal)?;
 
     if let Some((created_at,)) = newest {
-        if created_at > Utc::now() - Duration::seconds(cfg.otp_resend_secs as i64) {
-            return Err(ApiError::RateLimited);
+        let resend_window = Duration::seconds(cfg.otp_resend_secs as i64);
+        if created_at > Utc::now() - resend_window {
+            // The client is told exactly how long is left, never less than 1 s.
+            let elapsed = (Utc::now() - created_at).num_seconds().max(0);
+            let remaining = (cfg.otp_resend_secs as i64 - elapsed).max(1) as u64;
+            return Err(ApiError::RateLimited {
+                retry_after_secs: Some(remaining),
+            });
         }
     }
 

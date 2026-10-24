@@ -19,7 +19,9 @@ pub enum ApiError {
     Validation { fields: BTreeMap<String, String> },
     InvalidPhone,
     InvalidPurpose,
-    RateLimited,
+    /// HTTP 429. `retry_after_secs` becomes the `Retry-After` header when
+    /// known; both the resend cooldown and every Phase 5 abuse limit know it.
+    RateLimited { retry_after_secs: Option<u64> },
     InvalidCode,
     ChallengeExpired,
     ChallengeLocked,
@@ -46,7 +48,7 @@ impl ApiError {
             ApiError::Validation { .. } | ApiError::InvalidPhone | ApiError::InvalidPurpose => {
                 StatusCode::BAD_REQUEST
             }
-            ApiError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+            ApiError::RateLimited { .. } => StatusCode::TOO_MANY_REQUESTS,
             ApiError::InvalidCode
             | ApiError::ChallengeExpired
             | ApiError::ChallengeLocked
@@ -64,7 +66,7 @@ impl ApiError {
             ApiError::Validation { .. } => "validation_error",
             ApiError::InvalidPhone => "invalid_phone",
             ApiError::InvalidPurpose => "invalid_purpose",
-            ApiError::RateLimited => "rate_limited",
+            ApiError::RateLimited { .. } => "rate_limited",
             ApiError::InvalidCode => "invalid_code",
             ApiError::ChallengeExpired => "challenge_expired",
             ApiError::ChallengeLocked => "challenge_locked",
@@ -85,7 +87,7 @@ impl ApiError {
             ApiError::Validation { .. } => "One or more fields are invalid",
             ApiError::InvalidPhone => "Phone number is not a valid Iranian mobile number",
             ApiError::InvalidPurpose => "Purpose must be \"login\" or \"register\"",
-            ApiError::RateLimited => "Too many requests; please wait and try again",
+            ApiError::RateLimited { .. } => "Too many requests; please wait and try again",
             ApiError::InvalidCode => "Invalid code",
             ApiError::ChallengeExpired => "Code expired; request a new one",
             ApiError::ChallengeLocked => "Too many wrong attempts; request a new code",
@@ -117,7 +119,19 @@ impl IntoResponse for ApiError {
             "error": error,
             "request_id": ulid::Ulid::new().to_string(),
         });
-        (self.status(), Json(body)).into_response()
+        let mut response = (self.status(), Json(body)).into_response();
+        // 429 tells the client when to come back (docs/PHASE5_PLAN.md).
+        if let ApiError::RateLimited {
+            retry_after_secs: Some(secs),
+        } = self
+        {
+            if let Ok(value) = axum::http::HeaderValue::from_str(&secs.to_string()) {
+                response
+                    .headers_mut()
+                    .insert(axum::http::header::RETRY_AFTER, value);
+            }
+        }
+        response
     }
 }
 
@@ -163,7 +177,9 @@ mod tests {
                 "invalid_purpose",
             ),
             (
-                super::ApiError::RateLimited,
+                super::ApiError::RateLimited {
+                    retry_after_secs: None,
+                },
                 StatusCode::TOO_MANY_REQUESTS,
                 "rate_limited",
             ),
@@ -214,6 +230,42 @@ mod tests {
                 "message must be a non-empty string"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn rate_limited_sets_retry_after_header() {
+        let resp = super::ApiError::RateLimited {
+            retry_after_secs: Some(42),
+        }
+        .into_response();
+        assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            resp.headers()
+                .get(axum::http::header::RETRY_AFTER)
+                .and_then(|v| v.to_str().ok()),
+            Some("42")
+        );
+        let bytes = http_body_util::BodyExt::collect(resp.into_body())
+            .await
+            .expect("readable body")
+            .to_bytes();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).expect("valid JSON");
+        assert_eq!(body["error"]["code"], "rate_limited");
+    }
+
+    #[tokio::test]
+    async fn rate_limited_without_seconds_has_no_header() {
+        let resp = super::ApiError::RateLimited {
+            retry_after_secs: None,
+        }
+        .into_response();
+        assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(
+            resp.headers()
+                .get(axum::http::header::RETRY_AFTER)
+                .is_none(),
+            "no retry-after when the remaining time is unknown"
+        );
     }
 
     #[tokio::test]
