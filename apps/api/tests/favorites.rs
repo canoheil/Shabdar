@@ -798,3 +798,85 @@ async fn favorites_cursor_survives_anchor_unsave() {
     );
     assert!(!card_public_ids(&second_page).contains(&anchor));
 }
+
+async fn dashboard(app: Router, user: &TestUser) -> serde_json::Value {
+    let (status, _, body) = send(
+        app,
+        Method::GET,
+        "/api/v1/me/dashboard/summary",
+        Some(&user.cookie),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    body
+}
+
+#[tokio::test]
+async fn dashboard_counts_received_not_personal_favorites() {
+    let Some(t) = setup().await else { return };
+    let seller = create_user(&t.pool, &t.cfg, "+989100000001").await;
+    let first = create_user(&t.pool, &t.cfg, "+989100000002").await;
+    let second = create_user(&t.pool, &t.cfg, "+989100000003").await;
+    let other_seller = create_user(&t.pool, &t.cfg, "+989100000004").await;
+    let a = create_listing(&t.pool, seller.id, "active").await;
+    let b = create_listing(&t.pool, seller.id, "active").await;
+    let other = create_listing(&t.pool, other_seller.id, "active").await;
+
+    for (user, listing) in [(&first, &a), (&second, &a), (&first, &b)] {
+        let (status, _, body) = send(
+            t.app.clone(),
+            Method::PUT,
+            &format!("/api/v1/me/favorites/{}", listing.public_id),
+            Some(&user.cookie),
+            Some(&user.csrf),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body, serde_json::json!({ "favorited": true }));
+    }
+    let initial = dashboard(t.app.clone(), &seller).await;
+    assert_eq!(initial["favorite_count"], 3);
+    assert_eq!(initial.as_object().expect("summary object").len(), 4);
+
+    // Sold listings still belong to the seller's non-deleted dashboard sum.
+    sqlx::query("UPDATE listings SET status = 'sold' WHERE id = ?")
+        .bind(a.id)
+        .execute(&t.pool)
+        .await
+        .expect("sold fixture");
+    assert_eq!(dashboard(t.app.clone(), &seller).await["favorite_count"], 3);
+
+    // A personal save on somebody else's listing is received by that seller,
+    // never added to the viewer's own received-favorites number.
+    let (status, _, _) = send(
+        t.app.clone(),
+        Method::PUT,
+        &format!("/api/v1/me/favorites/{}", other.public_id),
+        Some(&seller.cookie),
+        Some(&seller.csrf),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(dashboard(t.app.clone(), &seller).await["favorite_count"], 3);
+    assert_eq!(dashboard(t.app.clone(), &other_seller).await["favorite_count"], 1);
+
+    let (status, _, _) = send(
+        t.app.clone(),
+        Method::DELETE,
+        &format!("/api/v1/me/favorites/{}", a.public_id),
+        Some(&first.cookie),
+        Some(&first.csrf),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(dashboard(t.app.clone(), &seller).await["favorite_count"], 2);
+
+    sqlx::query("UPDATE listings SET deleted_at = NOW(3) WHERE id = ?")
+        .bind(b.id)
+        .execute(&t.pool)
+        .await
+        .expect("soft-delete fixture");
+    assert_eq!(dashboard(t.app.clone(), &seller).await["favorite_count"], 1);
+    assert_eq!(dashboard(t.app.clone(), &other_seller).await["favorite_count"], 1);
+}
