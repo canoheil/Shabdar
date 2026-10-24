@@ -460,15 +460,15 @@ git commit -m "feat(web): redesign listing detail and gallery"
 - Consumes `AppAlert.focus()` and Task 5 `refresh(): Promise<void>`; uses `BrandMascot pose="full"` beside equivalent text with decorative SVG.
 - Keeps existing `Step`, `Purpose`, challenge, countdown, and Persian error-code behavior.
 
-- [ ] **Step 1: Write failing login-flow tests**
+- [x] **Step 1: Write failing login-flow tests**
 
 Through real debug OTP cover register/login, purpose change preserving phone but resetting challenge, editable phone, OTP paste/autocomplete attributes, invalid-code alert focus, resend state, and post-verify auth refresh. Assert full-pose mascot semantics and that the login panel's bounding height changes by at most 1px on a successful phone→code transition without an error.
 
-- [ ] **Step 2: Implement the focused login panel**
+- [x] **Step 2: Implement the focused login panel**
 
 Use shared field/button/alert primitives, a labelled purpose group, stable flow min-block-size based on the code step, and responsive card spacing. Focus the exposed alert after errors; do not alter phone normalization, error mapping, timers, or challenge bodies.
 
-- [ ] **Step 3: Run GREEN**
+- [x] **Step 3: Run GREEN**
 
 ```bash
 cd apps/web
@@ -478,7 +478,7 @@ npm run typecheck && npm run build
 
 Expected: real OTP, focus, stable-panel, and shared-auth tests PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/app/pages/login.vue apps/web/tests/e2e/login.spec.ts
