@@ -534,14 +534,14 @@ pub async fn my_listings(
 }
 
 /// GET /me/dashboard/summary — the seller's own counts (API.md §4).
-/// `favorite_count` stays 0 until the favorites domain exists (Phase 4
-/// decision 5): the field is part of the pinned shape, so it ships as a
-/// placeholder rather than being omitted.
+/// Favorites are the current total received on this seller's non-deleted
+/// listings, never the seller's personal saves on other people's listings.
 pub async fn summary(pool: &MySqlPool, seller_id: u64) -> Result<serde_json::Value, ApiError> {
     let row = sqlx::query(
         "SELECT COUNT(CASE WHEN status = 'active' THEN 1 END) AS active_count, \
                 COUNT(CASE WHEN status = 'sold' THEN 1 END) AS sold_count, \
-                COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending_count \
+                COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending_count, \
+                COALESCE(SUM(favorite_count), 0) AS favorite_count \
          FROM listings WHERE seller_id = ? AND deleted_at IS NULL",
     )
     .bind(seller_id)
@@ -552,11 +552,12 @@ pub async fn summary(pool: &MySqlPool, seller_id: u64) -> Result<serde_json::Val
     let active_count: i64 = row.try_get("active_count").map_err(|_| ApiError::Internal)?;
     let sold_count: i64 = row.try_get("sold_count").map_err(|_| ApiError::Internal)?;
     let pending_count: i64 = row.try_get("pending_count").map_err(|_| ApiError::Internal)?;
+    let favorite_count: i64 = row.try_get("favorite_count").map_err(|_| ApiError::Internal)?;
     Ok(serde_json::json!({
         "active_count": active_count,
         "sold_count": sold_count,
         "pending_count": pending_count,
-        "favorite_count": 0,
+        "favorite_count": favorite_count,
     }))
 }
 
