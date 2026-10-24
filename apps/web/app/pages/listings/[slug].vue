@@ -1,71 +1,69 @@
-<!--
-  Listing detail (Phase 3 Task 7): SSR title, canonical, meta tags, and
-  JSON-LD Product/Offer with only true fields (no AggregateRating — counts
-  are 0 until the ratings phase). 404/410 map to plain Persian messages.
--->
 <template>
   <section class="detail">
-    <p v-if="pending">در حال بارگذاری…</p>
-    <div v-else-if="gone" class="alert-error" role="alert">
+    <AppSkeleton v-if="pending" variant="detail" label="در حال بارگذاری آگهی…" />
+    <AppAlert v-else-if="gone" tone="error">
       <p>این آگهی دیگر موجود نیست.</p>
-      <NuxtLink to="/">بازگشت به خانه</NuxtLink>
-    </div>
-    <div v-else-if="missing" class="alert-error" role="alert">
+      <NuxtLink to="/" class="btn btn--secondary">بازگشت به خانه</NuxtLink>
+    </AppAlert>
+    <AppAlert v-else-if="missing" tone="error">
       <p>آگهی یافت نشد.</p>
-      <NuxtLink to="/">بازگشت به خانه</NuxtLink>
-    </div>
-    <article v-else-if="listing">
-      <h1>{{ listing.title }}</h1>
-      <p class="card__price">{{ formatPrice(listing.price_toman, listing.price_type) }}</p>
-      <p class="meta">{{ listing.city }}، {{ listing.province }} · {{ listing.category }}</p>
-      <div v-if="listing.images.length > 0" class="detail__gallery">
-        <img
-          v-for="(img, i) in listing.images"
-          :key="i"
-          class="card__cover"
-          :src="img.url"
-          :alt="img.alt_text ?? listing.title"
-          loading="lazy"
-        >
-      </div>
-      <p class="detail__description">{{ listing.description }}</p>
-      <p class="meta">فروشنده: {{ listing.seller.display_name ?? 'کاربر شبدر' }}</p>
+      <NuxtLink to="/" class="btn btn--secondary">بازگشت به خانه</NuxtLink>
+    </AppAlert>
+    <article v-else-if="listing" class="detail__article">
+      <header class="detail__header">
+        <p class="meta">{{ listing.category }}</p>
+        <h1>{{ listing.title }}</h1>
+      </header>
+      <div class="detail__layout">
+        <ListingGallery
+          class="detail__gallery"
+          :images="listing.images"
+          :listing-title="listing.title"
+        />
+        <aside class="detail__summary" aria-label="خلاصه و اقدامات آگهی">
+          <p class="detail__price">{{ formatPrice(listing.price_toman, listing.price_type) }}</p>
+          <p class="meta">{{ listing.city }}، {{ listing.province }} · {{ listing.category }}</p>
+          <p class="meta">فروشنده: {{ listing.seller.display_name ?? 'کاربر شبدر' }}</p>
 
-      <div v-if="!mePending" class="detail__favorite">
-        <NuxtLink
-          v-if="authStatus === 'anonymous' || favoriteAuthExpired"
-          to="/login"
-          class="btn btn--secondary"
-        >
-          ورود برای ذخیره
-        </NuxtLink>
-        <template v-else-if="authStatus === 'authenticated' && me">
-          <button
-            v-if="favorited !== undefined"
-            type="button"
-            class="btn btn--secondary"
-            :disabled="favoritePending"
-            :aria-pressed="favorited"
-            @click="toggleFavorite"
-          >
-            {{ favoritePending ? 'در حال به‌روزرسانی…' : favorited ? removeLabel : saveLabel }}
-          </button>
-          <p v-else-if="!favoriteError" class="meta">در حال بررسی علاقه‌مندی…</p>
-          <p v-if="favoriteError" class="alert-error" role="alert">{{ favoriteError }}</p>
-          <button
-            v-if="favoriteError"
-            type="button"
-            class="btn btn--secondary"
-            :disabled="favoritePending"
-            @click="retryFavorite"
-          >
-            تلاش دوباره
-          </button>
-        </template>
-        <p class="meta" role="status" aria-live="polite" aria-atomic="true">{{ favoriteNotice }}</p>
+          <div v-if="!mePending" class="detail__favorite">
+            <NuxtLink
+              v-if="authStatus === 'anonymous' || favoriteAuthExpired"
+              to="/login"
+              class="btn btn--secondary"
+            >
+              ورود برای ذخیره
+            </NuxtLink>
+            <template v-else-if="authStatus === 'authenticated' && me">
+              <AppButton
+                v-if="favorited !== undefined"
+                variant="secondary"
+                :disabled="favoritePending"
+                :aria-pressed="favorited"
+                @click="toggleFavorite"
+              >
+                {{ favoritePending ? 'در حال به‌روزرسانی…' : favorited ? removeLabel : saveLabel }}
+              </AppButton>
+              <p v-else-if="!favoriteError" class="meta">در حال بررسی علاقه‌مندی…</p>
+              <AppAlert v-if="favoriteError" tone="error">{{ favoriteError }}</AppAlert>
+              <AppButton
+                v-if="favoriteError"
+                variant="secondary"
+                :disabled="favoritePending"
+                @click="retryFavorite"
+              >
+                تلاش دوباره
+              </AppButton>
+            </template>
+            <p class="meta" role="status" aria-live="polite" aria-atomic="true">{{ favoriteNotice }}</p>
+          </div>
+        </aside>
       </div>
+      <section class="detail__body" aria-labelledby="detail-description-title">
+        <h2 id="detail-description-title">توضیحات</h2>
+        <p class="detail__description">{{ listing.description }}</p>
+      </section>
     </article>
-    <p v-else class="alert-error" role="alert">خطایی رخ داد؛ دوباره تلاش کنید.</p>
+    <AppAlert v-else tone="error">خطایی رخ داد؛ دوباره تلاش کنید.</AppAlert>
   </section>
 </template>
 
@@ -79,7 +77,6 @@ const detailUrl = `/api/v1/listings/${encodeURIComponent(slug)}`
 // Keep this original read public: personal state is fetched after hydration.
 const { data: listing, pending, error } = await useFetch<ApiListingDetail>(detailUrl)
 
-// Shared auth never adds viewer state to the public detail payload.
 const {
   user: me,
   status: authStatus,
@@ -120,8 +117,6 @@ async function loadFavoriteState() {
       favorited.value = detail.favorited
       favoriteAuthExpired.value = false
     } else {
-      // Detail deliberately treats a stale session as anonymous. In that
-      // case there is no viewer field, so the UI must offer login again.
       favoriteAuthExpired.value = true
     }
   } catch (requestError) {
@@ -196,8 +191,6 @@ useHead(() => ({
             category: listing.value.category,
             offers: {
               '@type': 'Offer',
-              // No AggregateRating: counts are 0 until the ratings phase
-              // (ARCHITECTURE.md §8 — only true fields).
               price: listing.value.price_toman ?? undefined,
               priceCurrency: 'IRT',
               availability: 'https://schema.org/InStock',
@@ -210,36 +203,89 @@ useHead(() => ({
 </script>
 
 <style scoped>
-.detail {
+.detail,
+.detail__article {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-6);
+  min-inline-size: 0;
 }
 
-.detail__gallery {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
-  gap: 0.75rem;
+.detail__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
-.detail__description {
-  white-space: pre-line;
+.detail__header h1,
+.detail__header p,
+.detail__summary p,
+.detail__favorite p,
+.detail__body h2,
+.detail__body p {
+  margin: 0;
+}
+
+.detail__header h1 {
+  font-size: clamp(1.55rem, 4vw, 2.2rem);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.detail__layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-inline-size: 0;
+}
+
+.detail__summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-inline-size: 0;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+
+.detail__price {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--color-primary);
 }
 
 .detail__favorite {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 0.75rem;
+  align-items: stretch;
+  gap: var(--space-3);
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--color-border);
 }
 
-.detail__favorite p {
-  margin: 0;
+.detail__body {
+  max-inline-size: 70ch;
 }
 
-.detail__favorite .btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.detail__body h2 {
+  margin-block-end: var(--space-3);
+  font-size: 1.25rem;
+}
+
+.detail__description {
+  line-height: 1.9;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 900px) {
+  .detail__layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(18rem, 1fr);
+    align-items: start;
+    gap: var(--space-6);
+  }
 }
 </style>
