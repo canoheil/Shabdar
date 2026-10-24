@@ -2,14 +2,14 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 import { expectNoOverflow, expectNoSeriousA11y, expectTouchTargets } from './support/quality'
 
-async function waitForOtp(offset: number): Promise<string> {
+async function waitForOtp(offset: number, lastFour = '0101'): Promise<string> {
   const logPath = process.env.E2E_API_LOG
   if (!logPath) throw new Error('E2E_API_LOG is required')
   const deadline = Date.now() + 15_000
   while (Date.now() < deadline) {
     if (existsSync(logPath)) {
       const appended = readFileSync(logPath, 'utf8').slice(offset)
-      const matches = [...appended.matchAll(/DEV OTP.*0101: (\d{6})/g)]
+      const matches = [...appended.matchAll(new RegExp(`DEV OTP.*${lastFour}: (\\d{6})`, 'g'))]
       const match = matches.at(-1)
       if (match?.[1]) return match[1]
     }
@@ -106,9 +106,10 @@ test('@login real OTP clipboard paste verifies and reaches authenticated Home', 
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
   await page.goto('/login')
   const offset = logOffset()
-  await page.getByLabel('شمارهٔ موبایل', { exact: true }).fill('+989000000101')
+  await page.getByRole('button', { name: 'ثبت‌نام', exact: true }).click()
+  await page.getByLabel('شمارهٔ موبایل', { exact: true }).fill('+989000000199')
   await page.getByRole('button', { name: 'ارسال کد', exact: true }).click()
-  const value = await waitForOtp(offset)
+  const value = await waitForOtp(offset, '0199')
   const code = page.getByLabel('کد تأیید', { exact: true })
   await page.evaluate((text) => navigator.clipboard.writeText(text), value)
   await code.focus()
