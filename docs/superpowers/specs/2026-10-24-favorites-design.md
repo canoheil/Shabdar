@@ -7,8 +7,10 @@
 > است. وضعیت شخصی `favorited` وارد HTML عمومی SSR نمی‌شود و بعد از hydration
 > خوانده می‌شود. Ratings، Comments و دکمه روی کارت‌های فید در این فاز نیستند.
 
-**Date:** 2026-10-24  
-**Status:** Design approved in chat; written spec awaiting review  
+**Date:** 2026-10-24
+
+**Status:** Design and written spec approved by the user on 2026-10-24
+
 **Sources:** `docs/PRODUCT.md` §3/§5 · `docs/API.md` §1/§3/§4/§6 ·
 `docs/DATABASE.md` §2 (`listings`, `favorites`) · `docs/ARCHITECTURE.md`
 §3/§5/§7/§8 · `docs/STATUS.md` (post-Phase-5 next step)
@@ -74,6 +76,12 @@ a counter invariant violation; an underflow or SQL error aborts the transaction.
 
 All existing test reset/drop helpers must drop `favorites` before `listings` and
 `users`, so the new foreign keys do not break otherwise unrelated suites.
+
+User hard deletion is not an application flow in Phase 6. A foreign-key cascade
+does not invoke the favorites service, so a future hard-delete workflow must
+first decrement every affected listing counter in that same transaction. Direct
+hard deletion of a user who still has favorites is outside the supported
+operations until that workflow exists; current user deletion remains soft.
 
 ## 4. Mutation semantics and consistency
 
@@ -253,3 +261,6 @@ Add focused integration coverage for:
   backward cursor are added.
 - The personal page removes items locally after confirmed deletes; it does not
   introduce a shared reactive favorites store for unrelated pages.
+- Counter consistency covers the Phase 6 API and existing application flows.
+  User hard deletion must reconcile counters before it is introduced, as noted
+  in section 3; no speculative hard-delete subsystem is built now.
