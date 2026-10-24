@@ -87,6 +87,8 @@ Error codes used by the auth and session endpoints:
 
 Listing card shape: `{ public_id, slug, title, price_toman, price_type, city, province, category, cover_image, rating_average, rating_count, published_at }`.
 
+Public detail keeps the existing visibility rules. For a valid logged-in viewer it also contains `favorited: true|false`; anonymous, invalid, expired, or non-active sessions receive the normal public payload without a `favorited` key. A response containing viewer state is private and `no-store`; it must not be placed in public SSR/cached HTML.
+
 ### Search and sorting (Phase 4)
 
 - **`q`** — at most 100 characters. Split on whitespace into at most 5 terms; **every** term must
@@ -121,7 +123,7 @@ measured numbers and the FULLTEXT/ngram upgrade path.
 | POST | `/listings/{public_id}/archive` | Owner | `active` → `archived`. |
 | DELETE | `/listings/{public_id}` | Owner | Soft-deletes a `draft`, `rejected`, or `archived` listing. Returns `{ ok: true }`. |
 | GET | `/me/listings?status=all\|pending\|active\|rejected\|sold&cursor=…` | User | Dashboard list of the user's own listings. |
-| GET | `/me/dashboard/summary` | User | `{ active_count, sold_count, pending_count, favorite_count }`. Counts are scoped to the session's own listings; `favorite_count` is `0` until the favorites domain ships (a documented placeholder, not a missing field). |
+| GET | `/me/dashboard/summary` | User | `{ active_count, sold_count, pending_count, favorite_count }`. Counts are scoped to the session's own listings; `favorite_count` sums current favorites **received** on all of the seller's non-deleted listings, regardless of listing status. It is not the seller's personal saved-list count. |
 
 Rejected listings include `rejection_reason` for the owner only.
 
@@ -135,13 +137,37 @@ Rejected listings include `rejection_reason` for the owner only.
 
 Uploads never accept client file paths. The storage adapter writes to the local data directory; the API returns only the image record and a URL.
 
-## 6. Favorites
+## 6. Favorites (Phase 6 — built)
 
 | Method | Path | Auth | Summary |
 |---|---|---|---|
-| PUT | `/me/favorites/{public_id}` | User | Adds a favorite. Idempotent. Returns `{ favorited: true }`. Target must be `active`. |
-| DELETE | `/me/favorites/{public_id}` | User | Removes a favorite. Returns `{ favorited: false }`. |
-| GET | `/me/favorites?cursor=…` | User | Favorite listing cards. |
+| PUT | `/me/favorites/{public_id}` | User + CSRF | Saves an `active`, non-deleted listing. Returns exactly `{ "favorited": true }`. |
+| DELETE | `/me/favorites/{public_id}` | User + CSRF | Removes the caller's favorite from any known listing, including non-active or soft-deleted ones. Returns exactly `{ "favorited": false }`. |
+| GET | `/me/favorites?cursor=…&limit=…` | User | Returns only the caller's favorites whose listings are `active` and non-deleted, using the public listing-card shape. |
+
+Each mutation locks the listing and updates the favorite row and `listings.favorite_count` in one transaction. Duplicate saves preserve the original `created_at` and increment only once; repeated deletes decrement only once. Saving one's own listing is allowed. An unknown target, or a save target that is not publicly active, is `404 not_found`. Missing/invalid CSRF is `403 csrf_failed` before any mutation. Listing status transitions do not delete favorite rows or change their counters; hidden favorites simply disappear from the personal active-only query.
+
+The personal list defaults to 20 and accepts the existing limit rules up to 50. Order is `favorites.created_at DESC, favorites.listing_id DESC`; its opaque cursor is `<saved-at-micros>:<listing-id>`. Continue with `(created_at, listing_id) < (cursor values)` by sending `page.next_cursor` unchanged until `has_more` is false. Removing the favorite referenced by a cursor does not invalidate that anchor. A malformed cursor is `400 validation_error` with `fields.cursor = "invalid_cursor"`.
+
+The seller dashboard's `favorite_count` is the sum of current favorite rows received on the seller's own non-deleted listings across all listing statuses. It is distinct from the count of listings that seller personally saved.
+
+```sh
+API='http://127.0.0.1:8080/api/v1'
+AUTH="cookie: shabdar_session=$SESSION; shabdar_csrf=$CSRF"
+
+# PUT and DELETE require session + CSRF; their success bodies are exact booleans.
+curl -s -X PUT "$API/me/favorites/$PUBLIC_ID" \
+  -H "$AUTH" -H "x-csrf-token: $CSRF"
+curl -s -X DELETE "$API/me/favorites/$PUBLIC_ID" \
+  -H "$AUTH" -H "x-csrf-token: $CSRF"
+
+# GET is read-only, so only the session cookie is required.
+curl -s "$API/me/favorites?limit=20" \
+  -H "cookie: shabdar_session=$SESSION"
+curl -s --get "$API/me/favorites" \
+  --data-urlencode "cursor=$CURSOR" --data-urlencode 'limit=20' \
+  -H "cookie: shabdar_session=$SESSION"
+```
 
 ## 7. Ratings
 

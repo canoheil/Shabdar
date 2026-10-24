@@ -75,6 +75,8 @@ export interface ApiListingDetail {
   rating_count: number
   comment_count: number
   published_at: string
+  // Present only on a valid viewer's detail response; absent from public SSR.
+  favorited?: boolean
 }
 
 export interface ApiListingOut {

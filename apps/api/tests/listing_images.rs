@@ -15,6 +15,7 @@ static UPLOAD_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// Same child-first reset as the other suites (see tests/db_migrations.rs).
 async fn reset_db(pool: &sqlx::MySqlPool) {
     for table in [
+        "favorites",
         "listing_images",
         "listings",
         "admin_audit_logs",
@@ -146,11 +147,16 @@ async fn upload(
     (status, serde_json::from_slice(&bytes).expect("JSON body"))
 }
 
+/// A portable scratch path; the process id keeps parallel test binaries apart.
+fn scratch_media_dir(name: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("shabdar-{name}-{}", std::process::id()))
+}
+
 /// Config pointing MEDIA_DIR at a fresh scratch directory (deleted first).
-fn media_cfg(dir: &str) -> shabdar_api::config::Config {
+fn media_cfg(dir: &std::path::Path) -> shabdar_api::config::Config {
     let _ = std::fs::remove_dir_all(dir);
     let mut cfg = common::test_config();
-    cfg.media_dir = dir.to_string();
+    cfg.media_dir = dir.to_string_lossy().into_owned();
     cfg
 }
 
@@ -179,8 +185,8 @@ async fn uploaded_file_is_served_back_with_bytes() {
         return;
     };
     reset_db(&pool).await;
-    let dir = "/data/data/com.termux/files/usr/tmp/opencode/media-png";
-    let cfg = media_cfg(dir);
+    let dir = scratch_media_dir("media-png");
+    let cfg = media_cfg(&dir);
     let app = common::spawn_app(cfg.clone()).await;
     let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
     let public_id = create_draft(&app, &cookie, &csrf).await;
@@ -190,7 +196,7 @@ async fn uploaded_file_is_served_back_with_bytes() {
     let key = body["storage_key"].as_str().expect("storage_key");
     assert_eq!(body["url"], serde_json::json!(format!("/media/{key}")));
     assert!(
-        std::path::Path::new(dir).join(key).is_file(),
+        dir.join(key).is_file(),
         "file must exist under MEDIA_DIR: {key}"
     );
     // WebP rides the same path (third accepted signature).
@@ -228,8 +234,8 @@ async fn upload_rejects_exe_bytes_and_wrong_owner_and_active_listing() {
         return;
     };
     reset_db(&pool).await;
-    let dir = "/data/data/com.termux/files/usr/tmp/opencode/media-neg";
-    let cfg = media_cfg(dir);
+    let dir = scratch_media_dir("media-neg");
+    let cfg = media_cfg(&dir);
     let app = common::spawn_app(cfg.clone()).await;
     let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
     let (other_cookie, other_csrf) = register_user(&app, &pool, &cfg, "+989009876543").await;
@@ -271,8 +277,8 @@ async fn upload_enforces_size_and_count_limits() {
         return;
     };
     reset_db(&pool).await;
-    let dir = "/data/data/com.termux/files/usr/tmp/opencode/media-limits";
-    let mut cfg = media_cfg(dir);
+    let dir = scratch_media_dir("media-limits");
+    let mut cfg = media_cfg(&dir);
     cfg.max_image_bytes = 16;
     cfg.max_images_per_listing = 2;
     let app = common::spawn_app(cfg.clone()).await;
@@ -304,8 +310,8 @@ async fn reorder_with_foreign_id_is_rejected_and_delete_removes_file() {
         return;
     };
     reset_db(&pool).await;
-    let dir = "/data/data/com.termux/files/usr/tmp/opencode/media-order";
-    let cfg = media_cfg(dir);
+    let dir = scratch_media_dir("media-order");
+    let cfg = media_cfg(&dir);
     let app = common::spawn_app(cfg.clone()).await;
     let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
     let public_id = create_draft(&app, &cookie, &csrf).await;
@@ -352,7 +358,7 @@ async fn reorder_with_foreign_id_is_rejected_and_delete_removes_file() {
     let resp = app.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     assert!(
-        !std::path::Path::new(dir).join(&key2).exists(),
+        !dir.join(&key2).exists(),
         "delete must remove the file too"
     );
     let _ = std::fs::remove_dir_all(dir);

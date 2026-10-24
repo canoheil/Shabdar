@@ -1,6 +1,6 @@
 # Shabdar API (`apps/api`)
 
-Rust + Axum REST API for the Shabdar marketplace. Phase 1–3 scope: MariaDB
+Rust + Axum REST API for the Shabdar marketplace. Phase 1–6 scope: MariaDB
 via sqlx (runtime queries only — no compile-time macros), `GET /api/v1/health`,
 dev-mode OTP login (`POST /api/v1/auth/otp/request` +
 `POST /api/v1/auth/otp/verify`) issuing a 30-day session cookie + a CSRF
@@ -8,10 +8,11 @@ cookie, the session surface (`GET`/`PATCH /api/v1/me`,
 `POST /api/v1/auth/logout`), a `404 not_found` fallback, and the listings
 domain: reference reads (categories, provinces/cities), seller listing
 write (draft → pending → sold/archived/deleted), public feed/detail/sitemap,
-local-disk image uploads, and the admin approve/reject/remove queue with
-audit rows. The Nuxt frontend lives in `apps/web` and talks to this API
-through its same-origin `/api` proxy. Ratings, comments, reports, chat, and
-notifications are later phases.
+local-disk image uploads, the admin approve/reject/remove queue with
+audit rows, and atomic personal favorites with exact listing counters. The
+Nuxt frontend lives in `apps/web` and talks to this API through its same-origin
+`/api` proxy. Ratings, comments, reports, chat, and notifications are later
+phases.
 
 Development happens on Termux (Android). No Docker; MariaDB runs as a native
 service on the phone.
@@ -65,9 +66,9 @@ FLUSH PRIVILEGES;
 into `DATABASE_URL` / `TEST_DATABASE_URL` — never into any file in the
 repository.
 
-Migrations (`migrations/0001_users_otp_challenges.sql` … `0006_admin_audit_logs.sql`:
+Migrations (`migrations/0001_users_otp_challenges.sql` … `0007_favorites.sql`:
 users, OTP challenges, sessions, provinces/cities/categories + Rasht and
-7-category seeds, listings, listing_images, admin_audit_logs) are applied
+7-category seeds, listings, listing_images, admin_audit_logs, favorites) are applied
 automatically at startup by sqlx's
 runtime `Migrator` (no compile-time `migrate!` macro). The migrator reads the
 `migrations/` directory at runtime, so **start the server from the crate
@@ -97,7 +98,7 @@ Keep the phone awake during long runs: `termux-wake-lock`.
   edit: seconds. Measure and record the first cold `cargo build` / `cargo test`
   on your device when you run them.
 
-## Endpoints (Phase 1–4)
+## Endpoints (Phase 1–6)
 
 | Method | Path | Summary |
 |---|---|---|
@@ -116,9 +117,12 @@ Keep the phone awake during long runs: `termux-wake-lock`.
 | POST | `…/mark-sold` / `…/archive` | Owner, `active` → `sold` / `archived` |
 | DELETE | `/api/v1/listings/{public_id}` | Owner, soft-deletes `draft`/`rejected`/`archived` → `{ok:true}` |
 | GET | `/api/v1/me/listings?status=` | Own listings (`all`\|`pending`\|`active`\|`rejected`\|`sold`\|`archived`) |
-| GET | `/api/v1/me/dashboard/summary` | Own counts `{active_count,sold_count,pending_count,favorite_count}` (`favorite_count` is `0` until favorites ships) |
+| GET | `/api/v1/me/dashboard/summary` | Own counts `{active_count,sold_count,pending_count,favorite_count}`; `favorite_count` is the sum of favorites received on the seller's non-deleted listings |
 | GET | `/api/v1/listings?…` | Public feed, `active` only, keyset (`q`,`category`,`city`,`province`,`min_price`,`max_price`,`sort`,`cursor`,`limit` ≤ 50) → `{data:[card…],page:{next_cursor,has_more}}` |
-| GET | `/api/v1/listings/{slug}` | Public detail; unknown/non-public → 404, removed/deleted → 410 `gone` |
+| GET | `/api/v1/listings/{slug}` | Public detail; unknown/non-public → 404, removed/deleted → 410 `gone`; valid viewers also get `favorited`, anonymous responses omit it |
+| PUT | `/api/v1/me/favorites/{public_id}` | Session + CSRF; save an active listing idempotently → exactly `{favorited:true}` |
+| DELETE | `/api/v1/me/favorites/{public_id}` | Session + CSRF; unsave any known listing idempotently → exactly `{favorited:false}` |
+| GET | `/api/v1/me/favorites?cursor=…&limit=…` | Session; caller's active saved cards, newest save first, default 20 / max 50 + page envelope |
 | GET | `/api/v1/sitemap/listings` | Active `{url,updated_at}` + page envelope |
 | POST | `/api/v1/listings/{public_id}/images` | Owner, `draft`/`rejected` only. Multipart `file` field; JPEG/PNG/WebP by signature, size + count limits → `{id,storage_key,url,sort_order}` |
 | DELETE | `…/images/{image_id}` | Owner → removes row + file |
@@ -197,6 +201,44 @@ Search is a leading-wildcard `LIKE` scan (no index can serve `%term%`);
 docs/STATUS.md has the 20k-row measurement and the FULLTEXT/ngram upgrade
 path.
 
+### Favorites (Phase 6)
+
+Save and unsave lock the listing and change its favorite row and
+`listings.favorite_count` in one transaction. A duplicate save preserves the
+original `created_at` and does not increment twice; a repeated unsave does not
+decrement twice. Saving requires an `active`, non-deleted listing. Unsave also
+works after the listing becomes non-active or soft-deleted. Status transitions
+do not delete favorite rows or rewrite counters.
+
+`GET /me/favorites` is private to the caller and lists only active,
+non-deleted listings. Hidden favorites remain stored. Pages are ordered by
+`f.created_at DESC, f.listing_id DESC`; the opaque cursor is
+`<saved-at-micros>:<listing-id>` and remains valid even if its favorite row is
+removed. Follow `page.next_cursor` unchanged until `has_more` is false. A bad
+cursor is `400 validation_error` with `fields.cursor=invalid_cursor`.
+
+The dashboard's `favorite_count` is the sum of favorites **received** on all
+of the seller's non-deleted listings, regardless of listing status. It is not
+the seller's personal saved-list count. On public detail, `favorited` is
+included only for a valid viewer; viewer-specific responses use a private
+`no-store` cache policy, while anonymous responses omit the key.
+
+```sh
+API='http://127.0.0.1:8080/api/v1'
+AUTH="cookie: shabdar_session=$SESSION; shabdar_csrf=$CSRF"
+
+# Save / unsave (PUT and DELETE require both cookies and the CSRF header).
+curl -s -X PUT "$API/me/favorites/$PUBLIC_ID" \
+  -H "$AUTH" -H "x-csrf-token: $CSRF"
+curl -s -X DELETE "$API/me/favorites/$PUBLIC_ID" \
+  -H "$AUTH" -H "x-csrf-token: $CSRF"
+
+# First personal page and the next cursor page (GET needs no CSRF header).
+curl -s "$API/me/favorites?limit=20" -H "$AUTH"
+curl -s --get "$API/me/favorites" \
+  --data-urlencode "cursor=$CURSOR" --data-urlencode 'limit=20' -H "$AUTH"
+```
+
 Multipart upload recipe (field name `file`; the server ignores the client
 filename and sniffs JPEG/PNG/WebP signatures):
 
@@ -227,9 +269,9 @@ With `OTP_DEV_MODE=true` in a debug build:
    promote a user to admin (`UPDATE users SET is_admin=TRUE …`), approve →
    feed shows it, detail renders, remove → detail goes 410.
 
-## Known deviations (WP 1–2)
+## Known limits
 
-- Malformed JSON bodies get axum's default rejection body, not the error
-  envelope. **Not in the Phase 2 plan — needs a follow-up plan.**
 - No SMS provider: debug builds print the OTP code to the log; real SMS
-  sending arrives with the provider decision.
+  sending arrives with the provider decision. Phase 5 closed the former
+  malformed-JSON deviation: unreadable or invalid bodies now use the standard
+  error envelope.

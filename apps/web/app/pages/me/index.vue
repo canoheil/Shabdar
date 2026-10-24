@@ -19,6 +19,9 @@
       <p class="dashboard__hello">
         خوش آمدید، {{ me.user.display_name ?? 'کاربر شبدر' }}
       </p>
+      <NuxtLink to="/me/favorites" class="btn btn--secondary dashboard__favorites">
+        علاقه‌مندی‌های من
+      </NuxtLink>
 
       <ul class="stats">
         <li v-for="tile in tiles" :key="tile.label" class="stat">
@@ -83,7 +86,7 @@ const tiles = computed(() => [
   { label: 'فعال', value: summary.value?.active_count ?? 0 },
   { label: 'در انتظار تأیید', value: summary.value?.pending_count ?? 0 },
   { label: 'فروخته‌شده', value: summary.value?.sold_count ?? 0 },
-  { label: 'علاقه‌مندی', value: summary.value?.favorite_count ?? 0 },
+  { label: 'ذخیرهٔ آگهی‌های من', value: summary.value?.favorite_count ?? 0 },
 ])
 
 const STATUS_LABELS: Record<string, string> = {
@@ -111,6 +114,12 @@ function statusLabel(status: string): string {
 
 .dashboard__hello {
   margin: 0;
+}
+
+.dashboard__favorites {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
 }
 
 .stats {

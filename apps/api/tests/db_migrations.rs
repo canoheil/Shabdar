@@ -21,6 +21,7 @@ static DB_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// named *_test.
 async fn drop_owned_tables(pool: &sqlx::MySqlPool) {
     for table in [
+        "favorites",
         "listing_images",
         "listings",
         "admin_audit_logs",
@@ -57,6 +58,7 @@ async fn migrations_apply_on_empty_database() {
         "categories",
         "listings",
         "listing_images",
+        "favorites",
         "admin_audit_logs",
     ] {
         let sql = format!("SELECT COUNT(*) AS c FROM {table}"); // fixed literals
@@ -165,6 +167,104 @@ async fn listings_price_check_rejects_fixed_without_price() {
         err.to_string().contains("chk_listings_price"),
         "the failure must be the CHECK, got: {err}"
     );
+}
+
+#[tokio::test]
+async fn favorites_rows_cascade_with_user_and_listing() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+
+    drop_owned_tables(&pool).await;
+    run_migrations(&pool).await.expect("migrations apply");
+
+    // Both listings belong to user 2, so hard-deleting user 1 exercises the
+    // favorite FK without colliding with listings.seller_id's RESTRICT rule.
+    sqlx::query(
+        "INSERT INTO users (public_id, phone_e164, created_at, updated_at) VALUES \
+         ('AAAAAAAAAAAAAAAAAAAAAAAAAA', '+989111111101', NOW(3), NOW(3)), \
+         ('BBBBBBBBBBBBBBBBBBBBBBBBBB', '+989111111102', NOW(3), NOW(3))",
+    )
+    .execute(&pool)
+    .await
+    .expect("two users");
+    let user1: u64 = sqlx::query_scalar(
+        "SELECT id FROM users WHERE public_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAA'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("user 1 id");
+    let user2: u64 = sqlx::query_scalar(
+        "SELECT id FROM users WHERE public_id = 'BBBBBBBBBBBBBBBBBBBBBBBBBB'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("user 2 id");
+
+    sqlx::query(
+        "INSERT INTO listings (public_id, seller_id, category_id, city_id, title, slug, \
+         description, price_toman, price_type, status, created_at, updated_at) VALUES \
+         ('CCCCCCCCCCCCCCCCCCCCCCCCCC', ?, 1, 1, 'one', 'favorites-cascade-one', 'd', \
+         1000, 'fixed', 'active', NOW(3), NOW(3)), \
+         ('DDDDDDDDDDDDDDDDDDDDDDDDDD', ?, 1, 1, 'two', 'favorites-cascade-two', 'd', \
+         1000, 'fixed', 'active', NOW(3), NOW(3))",
+    )
+    .bind(user2)
+    .bind(user2)
+    .execute(&pool)
+    .await
+    .expect("two listings");
+
+    for (user_id, listing_public_id) in [
+        (user1, "CCCCCCCCCCCCCCCCCCCCCCCCCC"),
+        (user2, "DDDDDDDDDDDDDDDDDDDDDDDDDD"),
+    ] {
+        sqlx::query(
+            "INSERT INTO favorites (user_id, listing_id, created_at) \
+             SELECT ?, id, NOW(3) FROM listings WHERE public_id = ?",
+        )
+        .bind(user_id)
+        .bind(listing_public_id)
+        .execute(&pool)
+        .await
+        .expect("favorite row");
+    }
+
+    let duplicate = sqlx::query(
+        "INSERT INTO favorites (user_id, listing_id, created_at) \
+         SELECT ?, id, NOW(3) FROM listings \
+         WHERE public_id = 'CCCCCCCCCCCCCCCCCCCCCCCCCC'",
+    )
+    .bind(user1)
+    .execute(&pool)
+    .await;
+    assert!(
+        duplicate.is_err(),
+        "the composite primary key must reject a duplicate favorite"
+    );
+
+    // Schema-only check: a future user-hard-delete application flow must
+    // reconcile listing counters first; that unsupported flow is not built here.
+    let deleted = sqlx::query("DELETE FROM users WHERE id = ?")
+        .bind(user1)
+        .execute(&pool)
+        .await
+        .expect("hard-delete user 1");
+    assert_eq!(deleted.rows_affected(), 1);
+    let deleted = sqlx::query(
+        "DELETE FROM listings WHERE public_id = 'DDDDDDDDDDDDDDDDDDDDDDDDDD'",
+    )
+    .execute(&pool)
+    .await
+    .expect("hard-delete listing 2");
+    assert_eq!(deleted.rows_affected(), 1);
+
+    let remaining: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM favorites")
+        .fetch_one(&pool)
+        .await
+        .expect("favorites count");
+    assert_eq!(remaining, 0, "both cascading foreign keys removed their rows");
 }
 
 // --- Environment-free guard tests: these must pass with no database at all.

@@ -12,7 +12,7 @@
 - Soft delete (`deleted_at`) for users and listings. Hard delete only for personal data on request, after a retention review.
 - Uniqueness and check constraints are enforced in the database.
 - This is a logical design, not executable migration SQL. Migrations are written after approval. Each migration is tested on an empty database.
-- Phase 3 status (2026-10-11): `provinces`, `cities` (+ Gilan/Rasht seed, Rasht = launch city), `categories` (+ the 7 launch seeds), `listings` (price CHECK: fixed requires a price, negotiable optional, free must be NULL), `listing_images`, and `admin_audit_logs` are built (migrations 0003–0006) with seeds applied. Still deferred: `listing_locations`, `support_tickets`, profanity keyword table, and everything in §2 not named here (ratings, comments, favorites, reports, blocks, conversations, messages, notifications).
+- Phase 6 status (2026-10-24): `provinces`, `cities` (+ Gilan/Rasht seed, Rasht = launch city), `categories` (+ the 7 launch seeds), `listings` (price CHECK: fixed requires a price, negotiable optional, free must be NULL), `listing_images`, `admin_audit_logs`, and `favorites` are built (migrations 0003–0007) with seeds applied. Still deferred: `listing_locations`, `support_tickets`, profanity keyword table, and everything in §2 not named here (ratings, comments, reports, blocks, conversations, messages, notifications).
 
 ## 2. Tables
 
@@ -149,11 +149,17 @@ Rules enforced in the service layer and tested: the rater is not the seller. Whe
 Reasoning: `hidden` is set immediately when a report arrives. Only admins can restore it to `visible`. Profanity filtering (required before public launch) will set `hidden` automatically; it is not in v1.
 
 ### `favorites`
+
+**Built in migration `0007_favorites.sql` (Phase 6).**
+
 - `user_id BIGINT UNSIGNED NOT NULL` FK → `users.id` (ON DELETE CASCADE)
 - `listing_id BIGINT UNSIGNED NOT NULL` FK → `listings.id` (ON DELETE CASCADE)
 - `created_at DATETIME(3) NOT NULL`
-- Primary key: `(user_id, listing_id)`
-- Index: `(listing_id)`
+- Primary key: `(user_id, listing_id)` — one current saved row per pair.
+- Index `idx_favorites_listing`: `(listing_id)` — supports the listing-side foreign key.
+- Index `idx_favorites_user_created`: `(user_id, created_at, listing_id)` — supports the personal cursor order and lookup.
+
+The integration reset/drop helpers include `favorites`, so a fresh test schema and migration reapplication remain compatible. Save/unsave changes the row and `listings.favorite_count` in the same transaction while holding the listing row lock; only an actual insert/delete changes the counter. Personal queries filter to active, non-deleted listings without deleting hidden favorite rows. Listing deletion cascades remove rows; a future user hard-delete workflow must reconcile affected listing counters in its transaction before cascading user favorites. Current user deletion is soft.
 
 ### `reports`
 - `id BIGINT UNSIGNED PK`
@@ -251,6 +257,6 @@ When the nearby feature returns:
 ## 6. Relations overview
 
 - A user has many listings, favorites, ratings, comments, reports, and blocks.
-- A listing belongs to one seller, one category, one city, and has many images, ratings, comments, and conversations.
+- A listing belongs to one seller, one category, one city, and has many images, favorites, ratings, comments, and conversations.
 - A conversation links one listing, one buyer, and one seller, and has many messages.
 - Reports point to a listing, comment, or user through `target_type` and `target_id`.
