@@ -55,9 +55,7 @@ async fn reset_db(pool: &MySqlPool) {
 
 async fn setup() -> Option<Setup> {
     let lock = TEST_LOCK.lock().await;
-    let Some(pool) = common::test_pool().await else {
-        return None;
-    };
+    let pool = common::test_pool().await?;
     reset_db(&pool).await;
     let cfg = common::test_config();
     let app = common::spawn_app(cfg.clone()).await;
