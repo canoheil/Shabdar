@@ -6,6 +6,7 @@
 
 use std::net::SocketAddr;
 
+use shabdar_api::ratelimit::RateLimiter;
 use shabdar_api::{config::Config, db, routes, state::AppState};
 
 #[tokio::main]
@@ -33,7 +34,11 @@ async fn main() {
 
     let addr: SocketAddr = cfg.bind_addr.parse().expect("BIND_ADDR must be host:port");
 
-    let state = AppState { pool, config: cfg };
+    let state = AppState {
+        pool,
+        config: cfg,
+        limiter: RateLimiter::new(),
+    };
     let app = routes::router(state);
 
     let listener = tokio::net::TcpListener::bind(addr)
@@ -41,7 +46,9 @@ async fn main() {
         .expect("failed to bind BIND_ADDR");
     tracing::info!(%addr, "shabdar-api listening");
 
-    axum::serve(listener, app)
+    // Connect info gives handlers the socket peer, which is the rate-limit key
+    // when TRUST_PROXY is off (docs/PHASE5_PLAN.md).
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
         .with_graceful_shutdown(async {
             // ctrl-c only; add SIGTERM when a deployment actually sends it.
             tokio::signal::ctrl_c().await.expect("ctrl-c handler");

@@ -57,6 +57,17 @@ pub fn test_config() -> Config {
         otp_ttl_secs: 120,
         otp_resend_secs: 60,
         otp_max_attempts: 5,
+        trust_proxy: false,
+        // Deliberately generous so existing tests never trip an abuse limit;
+        // the rate-limit tests lower exactly the number they exercise.
+        otp_request_ip_limit: 1000,
+        otp_request_ip_window_secs: 60,
+        otp_verify_ip_limit: 1000,
+        otp_verify_ip_window_secs: 60,
+        otp_phone_daily_limit: 1000,
+        otp_phone_daily_window_secs: 86_400,
+        otp_sms_global_limit: 1000,
+        otp_sms_global_window_secs: 3_600,
         session_ttl_secs: 2_592_000,
         cookie_name: "shabdar_session".to_string(),
         cookie_secure: false,
@@ -66,10 +77,22 @@ pub fn test_config() -> Config {
     }
 }
 
+/// `test_config()` with one or more fields changed (rate-limit tests need a
+/// small limit without a second copy of the whole struct).
+pub fn test_config_with(tweak: impl FnOnce(&mut Config)) -> Config {
+    let mut config = test_config();
+    tweak(&mut config);
+    config
+}
+
 /// Builds the app router for oneshot tests. No database contact here:
 /// create_pool is lazy, so a router against an unreachable URL is legal too.
 /// Tests that need schema run migrations on their own pool first.
 pub async fn spawn_app(config: Config) -> axum::Router {
     let pool = shabdar_api::db::create_pool(&config);
-    shabdar_api::routes::router(shabdar_api::state::AppState { pool, config })
+    shabdar_api::routes::router(shabdar_api::state::AppState {
+        pool,
+        config,
+        limiter: shabdar_api::ratelimit::RateLimiter::new(),
+    })
 }

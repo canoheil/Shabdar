@@ -10,12 +10,24 @@
 #[derive(Clone)]
 pub struct Config {
     pub bind_addr: String,
+    /// Honour `X-Forwarded-For` for client IPs (Phase 5). Only true when the
+    /// API is reachable exclusively through the Nuxt proxy.
+    pub trust_proxy: bool,
     pub database_url: String,
     pub otp_pepper: String,
     pub otp_dev_mode: bool,
     pub otp_ttl_secs: u32,
     pub otp_resend_secs: u32,
     pub otp_max_attempts: u16,
+    /// Phase 5 abuse limits (docs/PHASE5_PLAN.md "Rate limits").
+    pub otp_request_ip_limit: u32,
+    pub otp_request_ip_window_secs: u32,
+    pub otp_verify_ip_limit: u32,
+    pub otp_verify_ip_window_secs: u32,
+    pub otp_phone_daily_limit: u32,
+    pub otp_phone_daily_window_secs: u32,
+    pub otp_sms_global_limit: u32,
+    pub otp_sms_global_window_secs: u32,
     pub session_ttl_secs: u32,
     pub cookie_name: String,
     pub cookie_secure: bool,
@@ -30,6 +42,7 @@ impl Config {
     pub fn from_env() -> Result<Config, String> {
         Ok(Config {
             bind_addr: optional_string("BIND_ADDR", "127.0.0.1:8080"),
+            trust_proxy: parse_bool("TRUST_PROXY", false)?,
             database_url: required("DATABASE_URL")?,
             otp_pepper: required("OTP_PEPPER")?,
             otp_dev_mode: parse_bool("OTP_DEV_MODE", false)?,
@@ -38,6 +51,14 @@ impl Config {
             // u16 per the contract; reject values above u16::MAX, never wrap.
             otp_max_attempts: u16::try_from(parse_u32("OTP_MAX_ATTEMPTS", 5)?)
                 .map_err(|_| "OTP_MAX_ATTEMPTS must fit in 0..=65535".to_string())?,
+            otp_request_ip_limit: parse_u32("OTP_REQUEST_IP_LIMIT", 5)?,
+            otp_request_ip_window_secs: parse_u32("OTP_REQUEST_IP_WINDOW_SECS", 600)?,
+            otp_verify_ip_limit: parse_u32("OTP_VERIFY_IP_LIMIT", 20)?,
+            otp_verify_ip_window_secs: parse_u32("OTP_VERIFY_IP_WINDOW_SECS", 600)?,
+            otp_phone_daily_limit: parse_u32("OTP_PHONE_DAILY_LIMIT", 10)?,
+            otp_phone_daily_window_secs: parse_u32("OTP_PHONE_DAILY_WINDOW_SECS", 86_400)?,
+            otp_sms_global_limit: parse_u32("OTP_SMS_GLOBAL_LIMIT", 200)?,
+            otp_sms_global_window_secs: parse_u32("OTP_SMS_GLOBAL_WINDOW_SECS", 3_600)?,
             session_ttl_secs: parse_u32("SESSION_TTL_SECS", 2_592_000)?,
             cookie_name: optional_string("COOKIE_NAME", "shabdar_session"),
             cookie_secure: parse_bool("COOKIE_SECURE", false)?,
@@ -97,14 +118,23 @@ mod tests {
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     /// Every variable Config reads (keep in sync with from_env).
-    const VARS: [&str; 13] = [
+    const VARS: [&str; 22] = [
         "DATABASE_URL",
         "OTP_PEPPER",
         "BIND_ADDR",
+        "TRUST_PROXY",
         "OTP_DEV_MODE",
         "OTP_TTL_SECS",
         "OTP_RESEND_SECS",
         "OTP_MAX_ATTEMPTS",
+        "OTP_REQUEST_IP_LIMIT",
+        "OTP_REQUEST_IP_WINDOW_SECS",
+        "OTP_VERIFY_IP_LIMIT",
+        "OTP_VERIFY_IP_WINDOW_SECS",
+        "OTP_PHONE_DAILY_LIMIT",
+        "OTP_PHONE_DAILY_WINDOW_SECS",
+        "OTP_SMS_GLOBAL_LIMIT",
+        "OTP_SMS_GLOBAL_WINDOW_SECS",
         "SESSION_TTL_SECS",
         "COOKIE_NAME",
         "COOKIE_SECURE",
@@ -157,6 +187,7 @@ mod tests {
         let (_lock, _env) = locked_required_env();
         let cfg = super::Config::from_env().expect("required vars are set");
         assert_eq!(cfg.bind_addr, "127.0.0.1:8080");
+        assert!(!cfg.trust_proxy);
         assert_eq!(
             cfg.database_url,
             "mysql://user:pass@127.0.0.1:3306/shabdar_test"
@@ -166,6 +197,14 @@ mod tests {
         assert_eq!(cfg.otp_ttl_secs, 120);
         assert_eq!(cfg.otp_resend_secs, 60);
         assert_eq!(cfg.otp_max_attempts, 5);
+        assert_eq!(cfg.otp_request_ip_limit, 5);
+        assert_eq!(cfg.otp_request_ip_window_secs, 600);
+        assert_eq!(cfg.otp_verify_ip_limit, 20);
+        assert_eq!(cfg.otp_verify_ip_window_secs, 600);
+        assert_eq!(cfg.otp_phone_daily_limit, 10);
+        assert_eq!(cfg.otp_phone_daily_window_secs, 86_400);
+        assert_eq!(cfg.otp_sms_global_limit, 200);
+        assert_eq!(cfg.otp_sms_global_window_secs, 3_600);
         assert_eq!(cfg.session_ttl_secs, 2_592_000);
         assert_eq!(cfg.cookie_name, "shabdar_session");
         assert!(!cfg.cookie_secure);
@@ -182,6 +221,15 @@ mod tests {
         env.set("OTP_TTL_SECS", "90"); // plan's example: 90 must land in otp_ttl_secs
         env.set("OTP_RESEND_SECS", "30");
         env.set("OTP_MAX_ATTEMPTS", "3");
+        env.set("TRUST_PROXY", "1");
+        env.set("OTP_REQUEST_IP_LIMIT", "7");
+        env.set("OTP_REQUEST_IP_WINDOW_SECS", "120");
+        env.set("OTP_VERIFY_IP_LIMIT", "9");
+        env.set("OTP_VERIFY_IP_WINDOW_SECS", "240");
+        env.set("OTP_PHONE_DAILY_LIMIT", "4");
+        env.set("OTP_PHONE_DAILY_WINDOW_SECS", "3600");
+        env.set("OTP_SMS_GLOBAL_LIMIT", "50");
+        env.set("OTP_SMS_GLOBAL_WINDOW_SECS", "1800");
         env.set("SESSION_TTL_SECS", "3600");
         env.set("COOKIE_NAME", "test_cookie");
         env.set("COOKIE_SECURE", "1");
@@ -194,6 +242,15 @@ mod tests {
         assert_eq!(cfg.otp_ttl_secs, 90);
         assert_eq!(cfg.otp_resend_secs, 30);
         assert_eq!(cfg.otp_max_attempts, 3);
+        assert!(cfg.trust_proxy);
+        assert_eq!(cfg.otp_request_ip_limit, 7);
+        assert_eq!(cfg.otp_request_ip_window_secs, 120);
+        assert_eq!(cfg.otp_verify_ip_limit, 9);
+        assert_eq!(cfg.otp_verify_ip_window_secs, 240);
+        assert_eq!(cfg.otp_phone_daily_limit, 4);
+        assert_eq!(cfg.otp_phone_daily_window_secs, 3_600);
+        assert_eq!(cfg.otp_sms_global_limit, 50);
+        assert_eq!(cfg.otp_sms_global_window_secs, 1_800);
         assert_eq!(cfg.session_ttl_secs, 3600);
         assert_eq!(cfg.cookie_name, "test_cookie");
         assert!(cfg.cookie_secure);
@@ -247,6 +304,24 @@ mod tests {
             Ok(_) => panic!("non-bool OTP_DEV_MODE must be an error"),
             Err(e) => assert!(
                 e.contains("OTP_DEV_MODE"),
+                "error must name the variable, got: {e}"
+            ),
+        }
+        env.set("OTP_DEV_MODE", "false");
+        env.set("OTP_SMS_GLOBAL_LIMIT", "lots");
+        match super::Config::from_env() {
+            Ok(_) => panic!("non-numeric OTP_SMS_GLOBAL_LIMIT must be an error"),
+            Err(e) => assert!(
+                e.contains("OTP_SMS_GLOBAL_LIMIT"),
+                "error must name the variable, got: {e}"
+            ),
+        }
+        env.set("OTP_SMS_GLOBAL_LIMIT", "200");
+        env.set("TRUST_PROXY", "sometimes");
+        match super::Config::from_env() {
+            Ok(_) => panic!("non-bool TRUST_PROXY must be an error"),
+            Err(e) => assert!(
+                e.contains("TRUST_PROXY"),
                 "error must name the variable, got: {e}"
             ),
         }
