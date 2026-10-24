@@ -204,13 +204,13 @@ a {
 
 @media (min-width: 1024px) {
   .shell {
-    padding-inline-end: 17rem;
+    padding-inline-start: 17rem;
   }
 
   .shell__header {
     position: fixed;
     inset-block: 0;
-    inset-inline-end: 0;
+    inset-inline-start: 0;
     inline-size: 17rem;
     block-size: 100dvh;
     flex-direction: column;
@@ -221,7 +221,7 @@ a {
     overflow-y: auto;
     padding: var(--space-6) var(--space-4);
     border-block-end: 0;
-    border-inline-start: 1px solid var(--color-border);
+    border-inline-end: 1px solid var(--color-border);
   }
 
   .shell__brand {
