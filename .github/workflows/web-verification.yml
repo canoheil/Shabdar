@@ -149,6 +149,13 @@ jobs:
           export CHROME_PATH="$(node --input-type=module -e "import { chromium } from '@playwright/test'; process.stdout.write(chromium.executablePath())")"
           npm run measure:lighthouse
 
+      - name: Verify performance reports exist
+        working-directory: apps/web
+        run: |
+          test -s test-results/client-js.json
+          test -s lighthouse-report/manifest.json
+          node -e "const reports = require('./lighthouse-report/manifest.json'); if (reports.length !== 6) throw new Error('Expected six Lighthouse reports, got ' + reports.length)"
+
       - name: Upload performance reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -156,9 +163,9 @@ jobs:
           name: web-performance-${{ github.run_id }}
           path: |
             apps/web/test-results/client-js.json
-            apps/web/.lighthouseci/
             apps/web/lighthouse-report/
-          if-no-files-found: ignore
+          if-no-files-found: error
+          include-hidden-files: true
 
       - name: Show Nuxt log on failure
         if: failure()
