@@ -45,6 +45,11 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/me/dashboard/summary", get(dashboard_summary))
         .route("/api/v1/listings", post(create_listing).get(feed_listings))
         .route(
+            "/api/v1/listings/{slug}/comments",
+            get(listing_comments).post(create_comment),
+        )
+        .route("/api/v1/comments/{public_id}", delete(delete_comment))
+        .route(
             "/api/v1/listings/{slug}/rating",
             put(put_rating).delete(delete_rating),
         )
@@ -296,6 +301,65 @@ async fn delete_rating(
         .into_result()?;
     Ok(Json(
         crate::ratings::delete(&state.pool, user.user_id, &slug).await?,
+    ))
+}
+
+#[derive(Deserialize)]
+struct CommentBody {
+    body: Option<String>,
+}
+
+/// GET /api/v1/listings/{slug}/comments — public viewer-independent page.
+async fn listing_comments(
+    State(state): State<AppState>,
+    Path(slug): Path<String>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(
+        crate::comments::list(
+            &state.pool,
+            &slug,
+            params.get("cursor").map(String::as_str),
+            params.get("limit").map(String::as_str),
+        )
+        .await?,
+    ))
+}
+
+/// POST /api/v1/listings/{slug}/comments — publish one visible comment.
+async fn create_comment(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(slug): Path<String>,
+    ApiJson(body): ApiJson<CommentBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    let body = crate::comments::validate_body(body.body.as_deref())?;
+    state
+        .limiter
+        .hit(
+            &format!("comment:user:{}", user.user_id),
+            state.config.comment_user_limit,
+            Duration::from_secs(u64::from(state.config.comment_user_window_secs)),
+        )
+        .into_result()?;
+    Ok(Json(
+        crate::comments::create(&state.pool, user.user_id, &slug, &body).await?,
+    ))
+}
+
+/// DELETE /api/v1/comments/{public_id} — author-only idempotent soft delete.
+/// It deliberately does not spend the new-comment creation allowance.
+async fn delete_comment(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    Ok(Json(
+        crate::comments::delete(&state.pool, user.user_id, &public_id).await?,
     ))
 }
 

@@ -115,13 +115,15 @@ GREEN evidence: run `40229057555` passed all eight rating tests, including concu
 
 **Files:** `comments.rs`, routes, `tests/comments.rs`, shared reset helpers.
 
-- [ ] **Step 1: Write failing comment tests**
+- [x] **Step 1: Write failing comment tests**
 
 Cover public list/auth mutations/CSRF, Unicode empty/1000/1001 validation, immediate visibility, self-comment allowed, author-only/idempotent delete, hidden/deleted exclusion, target visibility, rate limits, and concurrent counters.
 
-- [ ] **Step 2: Add cursor RED cases**
+- [x] **Step 2: Add cursor RED cases**
 
 Use default/cap limits, malformed cursors, equal timestamps, and deletion of the anchor between pages. Assert every visible comment appears once and failed/unknown targets do not leak existence.
+
+RED evidence for Steps 1–2: run `40229627813` passed compile, fmt, and Clippy, then executed all nine comment tests on MariaDB: 0 passed / 9 failed. Failures were the expected missing-route 404s (including expected 200/400/401/410 responses), with no skipped DB evidence. The cursor cases were present in that run.
 
 - [ ] **Step 3: Implement comment service and routes**
 
