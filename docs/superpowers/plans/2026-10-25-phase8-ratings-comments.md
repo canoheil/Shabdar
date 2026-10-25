@@ -153,11 +153,13 @@ RED evidence: run `40230394088` executed nine rating tests; eight passed and onl
 
 Extend the existing valid-viewer detail lookup to load favorite and stars efficiently. Do not add another browser endpoint or include own state in anonymous SSR.
 
-- [ ] **Step 3: Run GREEN and all contract suites**
+- [x] **Step 3: Run GREEN and all contract suites**
 
 Verify existing favorite hydration/status behavior and 404/410 semantics remain unchanged.
 
-- [ ] **Step 4: Commit**
+GREEN evidence: run `40230631445` passed the complete API and web workflow at `ab3cf3a`, including all rating/comment contracts, all older browser tests, formatting, Clippy, Nuxt checks, JS budgets, and three-run Lighthouse medians.
+
+- [x] **Step 4: Commit**
 
 `feat(api): add private viewer rating state`
 

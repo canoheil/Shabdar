@@ -15,15 +15,21 @@ const ARTIFACTS_DIR = resolve(process.cwd(), 'tests/e2e/.artifacts')
 const FIXTURES_FILE = resolve(ARTIFACTS_DIR, 'fixtures.json')
 const SELLER_STORAGE = resolve(ARTIFACTS_DIR, 'seller.json')
 const ADMIN_STORAGE = resolve(ARTIFACTS_DIR, 'admin.json')
+const BUYER_STORAGE = resolve(ARTIFACTS_DIR, 'buyer.json')
+const BUYER_TWO_STORAGE = resolve(ARTIFACTS_DIR, 'buyer-two.json')
 const COVER_FILE = resolve(process.cwd(), 'tests/e2e/fixtures/listing-cover.png')
 const SELLER_PHONE = '+989000000101'
 const ADMIN_PHONE = '+989000000102'
+const BUYER_PHONE = '+989000000103'
+const BUYER_TWO_PHONE = '+989000000104'
 
 export interface E2eFixtures {
   detailPath: string
   listingPublicId: string
   sellerStorage: string
   adminStorage: string
+  buyerStorage: string
+  buyerTwoStorage: string
 }
 
 export interface CreateListingInput {
@@ -92,10 +98,19 @@ export function readFixtures(): E2eFixtures {
   return JSON.parse(readFileSync(FIXTURES_FILE, 'utf8')) as E2eFixtures
 }
 
-export async function apiAs(role: 'seller' | 'admin'): Promise<APIRequestContext> {
+export type FixtureRole = 'seller' | 'admin' | 'buyer' | 'buyerTwo'
+
+const ROLE_STORAGE: Record<FixtureRole, string> = {
+  seller: SELLER_STORAGE,
+  admin: ADMIN_STORAGE,
+  buyer: BUYER_STORAGE,
+  buyerTwo: BUYER_TWO_STORAGE,
+}
+
+export async function apiAs(role: FixtureRole): Promise<APIRequestContext> {
   return request.newContext({
     baseURL: baseURL(),
-    storageState: role === 'seller' ? SELLER_STORAGE : ADMIN_STORAGE,
+    storageState: ROLE_STORAGE[role],
   })
 }
 
@@ -202,6 +217,8 @@ export async function initializeStack(): Promise<void> {
   resetMedia()
   await registerAndStore(SELLER_PHONE, SELLER_STORAGE)
   await registerAndStore(ADMIN_PHONE, ADMIN_STORAGE)
+  await registerAndStore(BUYER_PHONE, BUYER_STORAGE)
+  await registerAndStore(BUYER_TWO_PHONE, BUYER_TWO_STORAGE)
   await promoteAdmin(ADMIN_PHONE)
   const listing = await createListing({
     title: 'آگهی آزمون شبدر',
@@ -213,6 +230,8 @@ export async function initializeStack(): Promise<void> {
     listingPublicId: listing.publicId,
     sellerStorage: SELLER_STORAGE,
     adminStorage: ADMIN_STORAGE,
+    buyerStorage: BUYER_STORAGE,
+    buyerTwoStorage: BUYER_TWO_STORAGE,
   }
   writeFileSync(FIXTURES_FILE, `${JSON.stringify(fixtures, null, 2)}\n`)
 }
