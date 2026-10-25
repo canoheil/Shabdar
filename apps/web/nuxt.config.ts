@@ -9,6 +9,15 @@ export default defineNuxtConfig({
     inlineStyles: true,
   },
 
+  nitro: {
+    // The production Node server must transfer the same compressed assets
+    // that the route budget measures; this is especially important on mobile.
+    compressPublicAssets: {
+      gzip: true,
+      brotli: true,
+    },
+  },
+
   app: {
     head: {
       // Persian RTL on every page (ARCHITECTURE.md §8).
