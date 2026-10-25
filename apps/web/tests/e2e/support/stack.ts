@@ -133,8 +133,8 @@ async function referenceIds(context: APIRequestContext): Promise<{ categoryId: n
 
 export async function createListing(input: CreateListingInput): Promise<{ publicId: string; slug: string }> {
   const imageCount = input.imageCount ?? 1
-  if (!Number.isInteger(imageCount) || imageCount < 1 || imageCount > 8) {
-    throw new Error('createListing imageCount must be an integer from 1 to 8')
+  if (!Number.isInteger(imageCount) || imageCount < 0 || imageCount > 8) {
+    throw new Error('createListing imageCount must be an integer from 0 to 8')
   }
   const seller = await apiAs('seller')
   const admin = input.state === 'active' ? await apiAs('admin') : null

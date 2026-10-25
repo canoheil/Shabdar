@@ -497,15 +497,15 @@ git commit -m "feat(web): refine accessible OTP login"
 - `fieldErrors: Ref<Record<string, string>>` receives the API's existing field keys for `AppField.error`; the alert still summarizes the first error. Map `required` → «این فیلد الزامی است.», `too_long` → «مقدار واردشده طولانی‌تر از حد مجاز است.», `invalid_price` → «قیمت معتبر نیست.», `unknown_category` → «دستهٔ انتخاب‌شده معتبر نیست.», `unknown_city` → «شهر انتخاب‌شده معتبر نیست.», and unknown field codes → «مقدار این فیلد معتبر نیست.».
 - `readyForReview: Ref<boolean>` becomes true only after the required save and all selected uploads succeed; a partial upload failure leaves a truthful draft/incomplete state and disables submit until retry succeeds.
 
-- [ ] **Step 1: Write failing post-form and URL-lifecycle tests**
+- [x] **Step 1: Write failing post-form and URL-lifecycle tests**
 
 Instrument `URL.createObjectURL`/`revokeObjectURL` with an init script. Select two, remove one, replace the rest, then leave the page; assert every created URL is revoked and previews render/remove correctly. Persistently fail one upload until error UI appears; assert no success message and preserved title/description/previews. Cover draft vs ready-for-review status and field-adjacent/server error presentation.
 
-- [ ] **Step 2: Implement grouped form and preview lifecycle**
+- [x] **Step 2: Implement grouped form and preview lifecycle**
 
 Use native fieldsets for listing details, price, and up-to-eight photos with shared primitives. Revoke before replacement/splice and on unmount; clearing the native input after a removal must not clear the remaining selected state. Populate/clear `fieldErrors` from each new response and set `readyForReview` only after the full save/upload sequence. Keep create→upload→submit ordering and server validation authoritative.
 
-- [ ] **Step 3: Run GREEN and real upload smoke**
+- [x] **Step 3: Run GREEN and real upload smoke**
 
 ```bash
 cd apps/web
@@ -515,7 +515,7 @@ npm run typecheck && npm run build
 
 Expected: object-URL ledger is empty after every path, real upload still succeeds, and failed upload never reports success or discards input.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/app/pages/post.vue apps/web/tests/e2e/post.spec.ts

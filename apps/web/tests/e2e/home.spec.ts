@@ -127,6 +127,7 @@ test('@home delayed feed exposes skeleton then filtered search empty state', asy
 })
 
 test('@home long titles, neutral no-cover media and one real high-priority cover', async ({ page }) => {
+  await createListing({ title: 'آگهی دارای تصویر اولویت‌دار', state: 'active' })
   const longTitle = 'آگهی بدون تصویر با عنوان بسیار طولانی برای بررسی شکستن متن و حفظ چیدمان کارت در شبدر'
   const created = await createListing({ title: longTitle, state: 'active' })
   await removeImagesForFixture(created.publicId)
@@ -149,13 +150,15 @@ test('@home long titles, neutral no-cover media and one real high-priority cover
 })
 
 test('@home broken covers use a neutral failure placeholder without retry loops', async ({ page }) => {
+  const title = 'آگهی با تصویر شکسته در Home'
+  await createListing({ title, state: 'active' })
   const mediaRequests: string[] = []
   await page.route('**/media/**', async (route) => {
     mediaRequests.push(route.request().url())
     await route.fulfill({ status: 404, body: '' })
   })
-  await page.goto('/')
-  const fixtureCard = page.locator('.listing-card').filter({ hasText: 'آگهی آزمون شبدر' })
+  await page.goto(`/?q=${encodeURIComponent(title)}`)
+  const fixtureCard = page.locator('.listing-card').filter({ hasText: title })
   await expect(fixtureCard.getByText('تصویر در دسترس نیست', { exact: true })).toBeVisible()
   await expect(fixtureCard.locator('img')).toHaveCount(0)
   expect(new Set(mediaRequests).size).toBe(mediaRequests.length)
