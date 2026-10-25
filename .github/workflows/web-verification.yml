@@ -130,11 +130,11 @@ jobs:
         working-directory: apps/web
         run: npm run test:e2e
 
-      - name: Collect three-run Lighthouse reports without legacy-UI assertions
+      - name: Assert three-run Lighthouse mobile medians
         working-directory: apps/web
         run: |
           export CHROME_PATH="$(node --input-type=module -e "import { chromium } from '@playwright/test'; process.stdout.write(chromium.executablePath())")"
-          npm run measure:lighthouse
+          npm run test:lighthouse
 
       - name: Measure production route client JS after the final Playwright fixture reset
         working-directory: apps/web
@@ -310,7 +310,9 @@ jobs:
           name: web-performance-${{ github.run_id }}
           path: |
             apps/web/test-results/client-js.json
+            apps/web/.lighthouseci/
             apps/web/lighthouse-report/
+            apps/web/quality-artifacts/
           if-no-files-found: error
           include-hidden-files: true
 

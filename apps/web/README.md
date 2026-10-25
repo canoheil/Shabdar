@@ -114,12 +114,28 @@ npm run typecheck
 npm run build
 npx playwright install chromium
 npm run test:fixtures  # reset and seed, then run the characterization smoke
-npm run test:e2e       # complete durable browser suite
+npm run test:e2e       # complete durable browser suite, including the quality matrix
+
+# Lighthouse and client measurement each reset fixtures. Keep this order so
+# the final client report is not removed by a later Playwright startup.
+export CHROME_PATH="$(node --input-type=module -e "import { chromium } from '@playwright/test'; process.stdout.write(chromium.executablePath())")"
+npm run test:lighthouse  # three mobile runs/route + enforced median budgets
+npm run measure:client
+npm run test:client-budget
 ```
 
-Reports and storage states are ignored. OTP codes, cookies, real phone
-numbers, and non-scratch database URLs must never be committed or printed in
-test output.
+The complete gate requires the supported Node version, MariaDB and its CLI,
+Playwright Chromium, the production Nuxt build, and the real Axum/MariaDB stack
+above. It is not a mocked-browser suite. `measure:lighthouse` remains available
+for collection-only diagnosis; `test:lighthouse` is the acceptance command and
+must keep LCP ≤2.5s, CLS ≤0.1, TBT ≤200ms, and Accessibility ≥95 as medians of
+three runs on both seeded Home and Detail.
+
+CI uploads raw `.lighthouseci` data, filesystem HTML/JSON Lighthouse reports,
+`test-results/client-js.json`, and the labelled responsive/theme screenshots in
+`quality-artifacts/`. Reports and storage states are ignored. OTP codes,
+cookies, real phone numbers, and non-scratch database URLs must never be
+committed or printed in test output.
 
 ## Rolldown / Android note
 

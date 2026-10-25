@@ -6,6 +6,7 @@ node_modules
 # Durable browser/performance verification outputs (not source fixtures).
 test-results/
 playwright-report/
+quality-artifacts/
 .lighthouseci/
 lighthouse-report/
 tests/e2e/.artifacts/
