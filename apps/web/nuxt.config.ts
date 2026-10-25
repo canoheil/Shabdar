@@ -65,5 +65,15 @@ export default defineNuxtConfig({
     '~/assets/css/main.css',
   ],
 
+  experimental: {
+    defaults: {
+      nuxtLink: {
+        // Do not make the current LCP compete with every visible destination.
+        // Pointer/keyboard intent still prefetches before actual navigation.
+        prefetchOn: { visibility: false, interaction: true },
+      },
+    },
+  },
+
   compatibilityDate: '2026-10-10',
 })
