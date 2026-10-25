@@ -18,22 +18,6 @@ export default defineNuxtConfig({
     },
   },
 
-  vite: {
-    $client: {
-      build: {
-        rollupOptions: {
-          output: {
-            manualChunks(id) {
-              // Keep route pages split, but avoid a separate HTTP request for
-              // every tiny shared control on the production HTTP/1.1 server.
-              if (/\/app\/(components|layouts|composables)\//.test(id)) return 'shell'
-            },
-          },
-        },
-      },
-    },
-  },
-
   app: {
     head: {
       // Persian RTL on every page (ARCHITECTURE.md §8).
