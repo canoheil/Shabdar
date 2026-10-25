@@ -28,6 +28,9 @@ export default defineNuxtConfig({
               // every tiny shared control on the production HTTP/1.1 server.
               if (id === '\0plugin-vue:export-helper') return 'shell'
               if (id.endsWith('/app/app.vue')) return 'shell'
+              // Detail-only engagement stays in the existing detail route chunk;
+              // putting its mutation UI in the shell penalizes every Home visit.
+              if (/\/app\/components\/ListingRating\.vue/.test(id)) return
               if (/\/app\/(components|layouts|composables)\//.test(id)) return 'shell'
             },
           },
