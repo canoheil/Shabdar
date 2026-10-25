@@ -15,7 +15,8 @@
         <h1>{{ listing.title }}</h1>
       </header>
       <div class="detail__layout">
-        <ListingGallery
+        <LazyListingGallery
+          hydrate-on-visible
           class="detail__gallery"
           :images="listing.images"
           :listing-title="listing.title"
