@@ -90,6 +90,7 @@ test('@theme native control, exact semantic tokens, local font, and quality gate
   await expectNoOverflow(page)
   await expectTouchTargets(page)
 
+  await page.waitForFunction(() => document.documentElement.classList.contains('fonts-enhanced'))
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
   expect(fontURLs.length).toBeGreaterThan(0)
   for (const fontURL of fontURLs) {

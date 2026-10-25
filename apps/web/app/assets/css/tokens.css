@@ -34,6 +34,7 @@
   --radius-card: 12px;
   --radius-dialog: 16px;
 
+  --font-family-fallback: Tahoma, Arial, sans-serif;
   --font-family-base: 'Vazirmatn Variable', Tahoma, Arial, sans-serif;
   --duration-fast: 120ms;
   --duration-normal: 180ms;
