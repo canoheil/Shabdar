@@ -157,7 +157,10 @@ export async function createListing(input: CreateListingInput): Promise<{ public
     if (!created.ok()) throw await responseError(created, 'Create listing fixture')
     const listing = await created.json() as ApiListingOut
     const cover = assertCover()
-    for (let index = 0; index < imageCount; index += 1) {
+    // Submission requires media. A zero-image fixture uploads one temporary
+    // cover, completes moderation, then removes it to exercise real no-cover UI.
+    const uploadCount = imageCount === 0 ? 1 : imageCount
+    for (let index = 0; index < uploadCount; index += 1) {
       const uploaded = await seller.post(`/api/v1/listings/${listing.public_id}/images`, {
         multipart: {
           file: { name: 'listing-cover.png', mimeType: 'image/png', buffer: cover },
@@ -171,6 +174,7 @@ export async function createListing(input: CreateListingInput): Promise<{ public
       const approved = await admin.post(`/api/v1/admin/listings/${listing.public_id}/approve`)
       if (!approved.ok()) throw await responseError(approved, 'Approve listing fixture')
     }
+    if (imageCount === 0) await removeImagesForFixture(listing.public_id)
     return { publicId: listing.public_id, slug: listing.slug }
   } finally {
     await seller.dispose()
