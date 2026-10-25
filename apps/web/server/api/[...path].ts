@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
   const headers: Record<string, string> = {}
   // Client IP forward (ARCHITECTURE.md §3). X-Forwarded-For is spoofable by
   // a direct client; accepted for this localhost-only phase (Review Focus 5).
-  const ip = getRequestIP(event, { xForwarded: true })
+  const ip = getRequestIP(event, { xForwardedFor: true })
   if (ip) headers['x-forwarded-for'] = ip
   // CSRF header injection (plan Task 9): on mutations, copy the shabdar_csrf
   // cookie value into X-CSRF-Token when the client did not send one — browser

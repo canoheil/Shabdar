@@ -1,72 +1,81 @@
-<!--
-  Seller dashboard (Phase 4 Task 6): the four summary counts and the owner's
-  own listings. Read-only page — active listings are immutable in v1, so the
-  only actions it offers are "post a listing" and links to public pages.
-  Responsive by grid auto-fit: one column on a phone, four tiles on desktop.
--->
 <template>
   <section class="dashboard">
-    <h1>داشبورد فروشنده</h1>
+    <header class="dashboard__header">
+      <div>
+        <h1>داشبورد فروشنده</h1>
+        <p class="meta">وضعیت آگهی‌ها و ذخیره‌های دریافتی را یک‌جا ببینید.</p>
+      </div>
+      <NuxtLink to="/post" class="btn">ثبت آگهی</NuxtLink>
+    </header>
 
-    <p v-if="mePending">در حال بارگذاری…</p>
+    <AppSkeleton v-if="mePending" variant="text" label="در حال بارگذاری…" />
 
-    <template v-else-if="!me">
-      <p>برای دیدن داشبورد وارد شوید.</p>
+    <AppEmptyState
+      v-else-if="authStatus === 'anonymous'"
+      title="برای دیدن داشبورد وارد شوید."
+    >
       <NuxtLink to="/login" class="btn">ورود</NuxtLink>
-    </template>
+    </AppEmptyState>
 
-    <template v-else>
-      <p class="dashboard__hello">
-        خوش آمدید، {{ me.user.display_name ?? 'کاربر شبدر' }}
-      </p>
-      <NuxtLink to="/me/favorites" class="btn btn--secondary dashboard__favorites">
-        علاقه‌مندی‌های من
-      </NuxtLink>
+    <template v-else-if="authStatus === 'authenticated' && me">
+      <div class="dashboard__welcome">
+        <p class="dashboard__hello">خوش آمدید، {{ me.display_name ?? 'کاربر شبدر' }}</p>
+        <NuxtLink to="/me/favorites" class="btn btn--secondary">علاقه‌مندی‌های من</NuxtLink>
+      </div>
 
-      <ul class="stats">
+      <ul class="stats" aria-label="خلاصهٔ آگهی‌ها">
         <li v-for="tile in tiles" :key="tile.label" class="stat">
           <span class="stat__value">{{ tile.value }}</span>
           <span class="stat__label">{{ tile.label }}</span>
         </li>
       </ul>
 
-      <h2>آگهی‌های من</h2>
-      <p v-if="listingsPending">در حال بارگذاری آگهی‌ها…</p>
-      <p v-else-if="listingsError" class="alert-error" role="alert">
-        خطا در خواندن آگهی‌ها؛ دوباره تلاش کنید.
-      </p>
-      <div v-else-if="myListings.length === 0" class="empty">
-        <p>هنوز آگهی‌ای ثبت نکرده‌اید.</p>
-        <NuxtLink to="/post" class="btn">ثبت آگهی</NuxtLink>
-      </div>
-      <ul v-else class="mine">
-        <li v-for="item in myListings" :key="item.public_id" class="mine__row">
-          <div class="mine__body">
-            <NuxtLink v-if="item.status === 'active'" :to="`/listings/${item.slug}`">
-              {{ item.title }}
-            </NuxtLink>
-            <span v-else class="mine__title">{{ item.title }}</span>
-            <p class="meta">{{ formatPrice(item.price_toman, item.price_type) }}</p>
-            <p v-if="item.status === 'rejected' && item.rejection_reason" class="meta">
-              دلیل رد: {{ item.rejection_reason }}
-            </p>
-          </div>
-          <span class="badge" :data-status="item.status">{{ statusLabel(item.status) }}</span>
-        </li>
-      </ul>
+      <section class="dashboard__listings" aria-labelledby="my-listings-title">
+        <h2 id="my-listings-title">آگهی‌های من</h2>
+        <AppSkeleton v-if="listingsPending" variant="text" :count="3" label="در حال بارگذاری آگهی‌ها…" />
+        <AppAlert v-else-if="listingsError" tone="error">
+          خطا در خواندن آگهی‌ها؛ دوباره تلاش کنید.
+        </AppAlert>
+        <AppEmptyState
+          v-else-if="myListings.length === 0"
+          title="هنوز آگهی‌ای ثبت نکرده‌اید."
+          description="اولین آگهی را ذخیره کنید و برای بررسی ارسال نمایید."
+        >
+          <NuxtLink to="/post" class="btn">ثبت آگهی</NuxtLink>
+        </AppEmptyState>
+        <ul v-else class="mine">
+          <li v-for="item in myListings" :key="item.public_id" class="mine__row">
+            <div class="mine__body">
+              <NuxtLink
+                v-if="item.status === 'active'"
+                :to="`/listings/${item.slug}`"
+                class="mine__title"
+              >
+                {{ item.title }}
+              </NuxtLink>
+              <span v-else class="mine__title">{{ item.title }}</span>
+              <p class="meta">{{ formatPrice(item.price_toman, item.price_type) }}</p>
+              <p v-if="item.status === 'rejected' && item.rejection_reason" class="mine__rejection">
+                دلیل رد: {{ item.rejection_reason }}
+              </p>
+            </div>
+            <span class="badge" :data-status="item.status">{{ statusLabel(item.status) }}</span>
+          </li>
+        </ul>
+      </section>
     </template>
   </section>
 </template>
 
 <script setup lang="ts">
-import type { ApiDashboardSummary, ApiListingOut, ApiPage, ApiUser } from '~/types'
+import type { ApiDashboardSummary, ApiListingOut, ApiPage } from '~/types'
 
-// Sessions ride SSR requests (ARCHITECTURE.md §3).
+const {
+  user: me,
+  status: authStatus,
+  pending: mePending,
+} = await useAuth()
 const authHeaders = useRequestHeaders(['cookie'])
-
-const { data: me, pending: mePending } = await useFetch<{ user: ApiUser }>('/api/v1/me', {
-  headers: authHeaders,
-})
 
 const { data: summary } = await useFetch<ApiDashboardSummary>('/api/v1/me/dashboard/summary', {
   headers: authHeaders,
@@ -83,10 +92,10 @@ const {
 const myListings = computed(() => listings.value?.data ?? [])
 
 const tiles = computed(() => [
-  { label: 'فعال', value: summary.value?.active_count ?? 0 },
-  { label: 'در انتظار تأیید', value: summary.value?.pending_count ?? 0 },
-  { label: 'فروخته‌شده', value: summary.value?.sold_count ?? 0 },
-  { label: 'ذخیرهٔ آگهی‌های من', value: summary.value?.favorite_count ?? 0 },
+  { label: 'فعال', value: formatNumber(summary.value?.active_count ?? 0) },
+  { label: 'در انتظار تأیید', value: formatNumber(summary.value?.pending_count ?? 0) },
+  { label: 'فروخته‌شده', value: formatNumber(summary.value?.sold_count ?? 0) },
+  { label: 'ذخیرهٔ آگهی‌های من', value: formatNumber(summary.value?.favorite_count ?? 0) },
 ])
 
 const STATUS_LABELS: Record<string, string> = {
@@ -108,24 +117,36 @@ function statusLabel(status: string): string {
 .dashboard {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  align-items: stretch;
+  gap: var(--space-6);
 }
 
+.dashboard__header,
+.dashboard__welcome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.dashboard__header h1,
+.dashboard__header p,
 .dashboard__hello {
   margin: 0;
 }
 
-.dashboard__favorites {
-  display: inline-flex;
-  align-items: center;
-  align-self: flex-start;
+.dashboard__header h1 {
+  font-size: 1.75rem;
+}
+
+.dashboard__hello {
+  font-weight: 600;
 }
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -134,43 +155,40 @@ function statusLabel(status: string): string {
 .stat {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.875rem;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  gap: var(--space-1);
+  min-inline-size: 0;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
 }
 
 .stat__value {
-  font-size: 1.5rem;
+  font-size: 1.65rem;
   font-weight: 700;
-  color: #1a5c2e;
+  color: var(--color-primary);
 }
 
 .stat__label {
+  color: var(--color-text-muted);
   font-size: 0.875rem;
-  color: #555;
 }
 
-.empty {
+.dashboard__listings {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 1.25rem;
-  background: #fff;
-  border: 1px dashed #cbd5e0;
-  border-radius: 12px;
+  gap: var(--space-4);
 }
 
-.empty p {
+.dashboard__listings h2 {
   margin: 0;
+  font-size: 1.25rem;
 }
 
 .mine {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -178,55 +196,74 @@ function statusLabel(status: string): string {
 
 .mine__row {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
 }
 
 .mine__body {
   display: flex;
+  flex: 1 1 16rem;
   flex-direction: column;
-  gap: 0.125rem;
+  gap: var(--space-1);
   min-inline-size: 0;
 }
 
+.mine__body p {
+  margin: 0;
+}
+
 .mine__title {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
   font-weight: 700;
+  color: var(--color-text);
   overflow-wrap: anywhere;
 }
 
-/* Persian status chip; colour alone never carries the meaning (the label
-   spells it out), which keeps it readable in greyscale. */
+.mine__rejection {
+  color: var(--color-error);
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
 .badge {
   flex: none;
-  padding-inline: 0.5rem;
-  padding-block: 0.125rem;
+  padding: var(--space-1) var(--space-3);
   font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text);
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  border: 1px solid #cbd5e0;
-  background: #f7fafc;
-  color: #333;
 }
 
 .badge[data-status='active'] {
-  border-color: #9ae6b4;
-  background: #f0fff4;
-  color: #276749;
+  color: var(--color-primary);
+  border-color: var(--color-primary);
 }
 
 .badge[data-status='pending'] {
-  border-color: #fbd38d;
-  background: #fffaf0;
-  color: #7b341e;
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning);
 }
 
 .badge[data-status='rejected'] {
-  border-color: #feb2b2;
-  background: #fff5f5;
-  color: #9b2c2c;
+  color: var(--color-error);
+  background: var(--color-error-bg);
+  border-color: var(--color-error);
+}
+
+@media (min-width: 768px) {
+  .stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 </style>

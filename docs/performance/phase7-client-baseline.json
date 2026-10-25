@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-10-24T19:21:25.950Z",
+  "measuredHead": "1be6df14f3845fbea5255f2c0292f5cd1f085ef6",
+  "productBaseline": "c07cdd9ef7df304acf665008a57e79c6c2597224",
+  "baseURL": "http://127.0.0.1:3000",
+  "node": "v26.12.1",
+  "nuxt": "4.6.2",
+  "playwright": "1.64.1",
+  "gzipLevel": 9,
+  "home": {
+    "totalGzip": 89027,
+    "scripts": [
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/9sFVPq4l.js",
+        "rawBytes": 79720,
+        "gzipBytes": 28636
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/BDudEzyZ.js",
+        "rawBytes": 5220,
+        "gzipBytes": 2353
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/Bf_-YPo7.js",
+        "rawBytes": 5675,
+        "gzipBytes": 2305
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/BLCBh6OG.js",
+        "rawBytes": 12055,
+        "gzipBytes": 4537
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/BpYtHwKS.js",
+        "rawBytes": 3214,
+        "gzipBytes": 1568
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/CIvKlCrB.js",
+        "rawBytes": 22778,
+        "gzipBytes": 9418
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/CkwfxrTB.js",
+        "rawBytes": 954,
+        "gzipBytes": 539
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/CzPdX2J2.js",
+        "rawBytes": 4022,
+        "gzipBytes": 1798
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/D1FXUDIK.js",
+        "rawBytes": 7765,
+        "gzipBytes": 3397
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/I2vZWojP.js",
+        "rawBytes": 83958,
+        "gzipBytes": 32052
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/R7I9pboK.js",
+        "rawBytes": 182,
+        "gzipBytes": 176
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/TheLe1BV.js",
+        "rawBytes": 5074,
+        "gzipBytes": 2248
+      }
+    ]
+  },
+  "detail": {
+    "totalGzip": 89027,
+    "scripts": [
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/9sFVPq4l.js",
+        "rawBytes": 79720,
+        "gzipBytes": 28636
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/BDudEzyZ.js",
+        "rawBytes": 5220,
+        "gzipBytes": 2353
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/Bf_-YPo7.js",
+        "rawBytes": 5675,
+        "gzipBytes": 2305
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/BLCBh6OG.js",
+        "rawBytes": 12055,
+        "gzipBytes": 4537
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/BpYtHwKS.js",
+        "rawBytes": 3214,
+        "gzipBytes": 1568
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/CIvKlCrB.js",
+        "rawBytes": 22778,
+        "gzipBytes": 9418
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/CkwfxrTB.js",
+        "rawBytes": 954,
+        "gzipBytes": 539
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/CzPdX2J2.js",
+        "rawBytes": 4022,
+        "gzipBytes": 1798
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/D1FXUDIK.js",
+        "rawBytes": 7765,
+        "gzipBytes": 3397
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/I2vZWojP.js",
+        "rawBytes": 83958,
+        "gzipBytes": 32052
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/R7I9pboK.js",
+        "rawBytes": 182,
+        "gzipBytes": 176
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/TheLe1BV.js",
+        "rawBytes": 5074,
+        "gzipBytes": 2248
+      }
+    ]
+  },
+  "fonts": {
+    "totalBytes": 0,
+    "files": []
+  }
+}

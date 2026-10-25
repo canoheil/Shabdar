@@ -3,11 +3,47 @@
 export default defineNuxtConfig({
   ssr: true,
 
+  // Keep the small, route-relevant CSS payload in the SSR document. This
+  // avoids conditional component stylesheets becoming render-blocking requests.
+  features: {
+    inlineStyles: true,
+  },
+
+  nitro: {
+    // The production Node server must transfer the same compressed assets
+    // that the route budget measures; this is especially important on mobile.
+    compressPublicAssets: {
+      gzip: true,
+      brotli: true,
+    },
+  },
+
+  vite: {
+    $client: {
+      build: {
+        rollupOptions: {
+          output: {
+            manualChunks(id) {
+              // Keep route pages split, but avoid a separate HTTP request for
+              // every tiny shared control on the production HTTP/1.1 server.
+              if (id === '\0plugin-vue:export-helper') return 'shell'
+              if (id.endsWith('/app/app.vue')) return 'shell'
+              if (/\/app\/(components|layouts|composables)\//.test(id)) return 'shell'
+            },
+          },
+        },
+      },
+    },
+  },
+
   app: {
     head: {
       // Persian RTL on every page (ARCHITECTURE.md §8).
       htmlAttrs: { lang: 'fa', dir: 'rtl' },
       title: 'شبدر',
+      link: [
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+      ],
     },
   },
 
@@ -16,7 +52,33 @@ export default defineNuxtConfig({
     apiBase: 'http://127.0.0.1:8080',
   },
 
-  css: ['~/assets/css/main.css'],
+  modules: ['@nuxtjs/color-mode'],
+
+  colorMode: {
+    preference: 'system',
+    fallback: 'light',
+    classSuffix: '',
+    disableTransition: true,
+  },
+
+  css: [
+    '@fontsource-variable/vazirmatn/wght.css',
+    '~/assets/css/tokens.css',
+    '~/assets/css/main.css',
+  ],
+
+  experimental: {
+    // No route rules or automatic route-manifest prefetching need the extra
+    // client manifest/runtime; interaction-only NuxtLink prefetch stays intact.
+    appManifest: false,
+    defaults: {
+      nuxtLink: {
+        // Do not make the current LCP compete with every visible destination.
+        // Pointer/keyboard intent still prefetches before actual navigation.
+        prefetchOn: { visibility: false, interaction: true },
+      },
+    },
+  },
 
   compatibilityDate: '2026-10-10',
 })

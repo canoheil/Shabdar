@@ -1,110 +1,99 @@
-<!--
-  OTP login (plan Task 7 — single component, local step state, no store).
-
-  States and their expected rendering (asserted in the WP 2 phone gate):
-  - step=phone, idle   : phone field + «ارسال کد», purpose toggle above.
-  - step=phone, loading: fields + button disabled.
-  - step=phone, error  : error banner (role=alert, focused) bound to error.code
-                         — invalid_phone / rate_limited (with the wait) / generic.
-  - step=code          : entered number + «ویرایش شماره» (back to phone, number
-                         preserved), code field + «تأیید» + resend button with
-                         a live countdown from resend_after_seconds.
-  - step=code, error   : banner bound to error.code — invalid_code /
-                         challenge_expired / challenge_locked / no_account /
-                         rate_limited / generic.
-  - verify 200         : navigateTo('/').
--->
 <template>
   <section class="login">
-    <h1>ورود به شبدر</h1>
+    <div class="login__panel">
+      <header class="login__header">
+        <BrandMascot pose="full" :decorative="true" class="login__mascot" />
+        <div>
+          <h1>{{ purpose === 'login' ? 'ورود به شبدر' : 'ثبت‌نام در شبدر' }}</h1>
+          <p>با شمارهٔ موبایل و کد یک‌بارمصرف ادامه دهید.</p>
+        </div>
+      </header>
 
-    <!-- Purpose toggle: ورود / ثبت‌نام (PRODUCT.md §3 — separate flows). -->
-    <div class="login__purpose" role="group" aria-label="نوع ورود">
-      <button
-        type="button"
-        class="btn"
-        :aria-pressed="purpose === 'login'"
-        @click="selectPurpose('login')"
+      <div class="login__purpose" role="group" aria-label="نوع ورود">
+        <AppButton
+          class="login__purpose-button"
+          :variant="purpose === 'login' ? 'primary' : 'secondary'"
+          :aria-pressed="purpose === 'login'"
+          @click="selectPurpose('login')"
+        >
+          ورود
+        </AppButton>
+        <AppButton
+          class="login__purpose-button"
+          :variant="purpose === 'register' ? 'primary' : 'secondary'"
+          :aria-pressed="purpose === 'register'"
+          @click="selectPurpose('register')"
+        >
+          ثبت‌نام
+        </AppButton>
+      </div>
+
+      <AppAlert
+        v-if="errorMessage"
+        id="login-error"
+        ref="errorBanner"
+        tone="error"
       >
-        ورود
-      </button>
-      <button
-        type="button"
-        class="btn"
-        :aria-pressed="purpose === 'register'"
-        @click="selectPurpose('register')"
-      >
-        ثبت‌نام
-      </button>
+        {{ errorMessage }}
+      </AppAlert>
+
+      <form v-if="step === 'phone'" class="login__form" @submit.prevent="requestCode">
+        <AppField id="login-phone" label="شمارهٔ موبایل" help="شماره را با پیش‌شمارهٔ کشور وارد کنید.">
+          <template #default="{ id, describedBy }">
+            <input
+              :id="id"
+              v-model="phone"
+              class="field__input login__input"
+              type="tel"
+              inputmode="tel"
+              autocomplete="tel"
+              dir="ltr"
+              :disabled="loading"
+              :aria-describedby="[describedBy, errorMessage ? 'login-error' : ''].filter(Boolean).join(' ') || undefined"
+              :aria-invalid="errorMessage ? 'true' : undefined"
+              required
+            >
+          </template>
+        </AppField>
+        <AppButton type="submit" :loading="loading">ارسال کد</AppButton>
+      </form>
+
+      <form v-else class="login__form" @submit.prevent="verifyCode">
+        <p class="login__phone">
+          <span>کد به شمارهٔ <span dir="ltr">{{ phone }}</span> ارسال شد.</span>
+          <button type="button" class="login__edit" :disabled="loading" @click="backToPhone">
+            ویرایش شماره
+          </button>
+        </p>
+        <AppField id="login-code" label="کد تأیید" help="کد شش‌رقمی ارسال‌شده را وارد کنید.">
+          <template #default="{ id, describedBy }">
+            <input
+              :id="id"
+              v-model="code"
+              class="field__input login__input"
+              type="text"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              maxlength="6"
+              dir="ltr"
+              :disabled="loading"
+              :aria-describedby="[describedBy, errorMessage ? 'login-error' : ''].filter(Boolean).join(' ') || undefined"
+              :aria-invalid="errorMessage ? 'true' : undefined"
+              required
+            >
+          </template>
+        </AppField>
+        <AppButton type="submit" :loading="loading">تأیید</AppButton>
+        <AppButton
+          variant="secondary"
+          :loading="loading"
+          :disabled="resendIn > 0"
+          @click="requestCode"
+        >
+          {{ resendIn > 0 ? `ارسال مجدد کد (${resendIn} ثانیه)` : 'ارسال مجدد کد' }}
+        </AppButton>
+      </form>
     </div>
-
-    <!-- Error banner: bound to error.code, focused after a failed submit. -->
-    <p
-      v-if="errorMessage"
-      id="login-error"
-      ref="errorBanner"
-      class="login__error"
-      role="alert"
-      tabindex="-1"
-    >
-      {{ errorMessage }}
-    </p>
-
-    <!-- Step: phone -->
-    <form v-if="step === 'phone'" class="login__form" @submit.prevent="requestCode">
-      <label class="field">
-        <span>شمارهٔ موبایل</span>
-        <input
-          v-model="phone"
-          class="field__input"
-          type="tel"
-          inputmode="tel"
-          autocomplete="tel"
-          dir="ltr"
-          :disabled="loading"
-          :aria-describedby="errorMessage ? 'login-error' : undefined"
-          required
-        >
-      </label>
-      <button type="submit" class="btn" :disabled="loading">
-        ارسال کد
-      </button>
-    </form>
-
-    <!-- Step: code -->
-    <form v-else class="login__form" @submit.prevent="verifyCode">
-      <p class="login__phone">
-        کد به شمارهٔ <span dir="ltr">{{ phone }}</span> ارسال شد.
-        <button type="button" class="login__edit" @click="backToPhone">
-          ویرایش شماره
-        </button>
-      </p>
-      <label class="field">
-        <span>کد تأیید</span>
-        <input
-          v-model="code"
-          class="field__input"
-          type="text"
-          inputmode="numeric"
-          autocomplete="one-time-code"
-          dir="ltr"
-          :disabled="loading"
-          :aria-describedby="errorMessage ? 'login-error' : undefined"
-          required
-        >
-      </label>
-      <button type="submit" class="btn" :disabled="loading">
-        تأیید
-      </button>
-      <button
-        type="button"
-        class="btn btn--secondary"
-        :disabled="loading || resendIn > 0"
-        @click="requestCode"
-      >
-        {{ resendIn > 0 ? `ارسال مجدد کد (${resendIn} ثانیه)` : 'ارسال مجدد کد' }}
-      </button>
-    </form>
   </section>
 </template>
 
@@ -114,6 +103,8 @@ import type { ApiErrorBody } from '~/types'
 type Step = 'phone' | 'code'
 type Purpose = 'login' | 'register'
 
+const { refresh: refreshAuth } = await useAuth()
+
 const purpose = ref<Purpose>('login')
 const step = ref<Step>('phone')
 const phone = ref('')
@@ -122,7 +113,7 @@ const loading = ref(false)
 const errorMessage = ref<string | null>(null)
 const challengeId = ref('')
 const resendIn = ref(0)
-const errorBanner = ref<HTMLElement | null>(null)
+const errorBanner = ref<{ focus: () => void } | null>(null)
 let resendTimer: ReturnType<typeof setInterval> | null = null
 
 onUnmounted(() => stopResendTimer())
@@ -149,7 +140,6 @@ function startResendTimer(seconds: number) {
 
 function selectPurpose(next: Purpose) {
   purpose.value = next
-  // A new purpose needs a fresh challenge: back to the phone step.
   backToPhone()
 }
 
@@ -160,7 +150,6 @@ function backToPhone() {
   errorMessage.value = null
 }
 
-// error.code → Persian message (frozen codes; unknown → generic).
 function persianError(code: string): string {
   switch (code) {
     case 'invalid_phone':
@@ -184,13 +173,11 @@ function showError(err: unknown) {
   const body = (err as { data?: ApiErrorBody }).data
   const code = body?.error?.code ?? ''
   if (code === 'rate_limited' && resendIn.value > 0) {
-    // rate_limited: show the wait when a countdown is known.
     errorMessage.value = `درخواست‌های زیاد؛ ${resendIn.value} ثانیهٔ دیگر دوباره تلاش کنید.`
   } else {
     errorMessage.value = persianError(code)
   }
-  // Move focus to the banner (ui-ux-pro-max: focusable error summary).
-  nextTick(() => errorBanner.value?.focus())
+  void nextTick(() => errorBanner.value?.focus())
 }
 
 async function requestCode() {
@@ -203,7 +190,6 @@ async function requestCode() {
       resend_after_seconds: number
     }>('/api/v1/auth/otp/request', {
       method: 'POST',
-      // Phone sent as typed — the API normalizes Persian digits (PRODUCT.md §5-D).
       body: { phone: phone.value, purpose: purpose.value },
     })
     challengeId.value = res.challenge_id
@@ -225,7 +211,7 @@ async function verifyCode() {
       method: 'POST',
       body: { challenge_id: challengeId.value, code: code.value },
     })
-    // Logged in — the session cookie is set; go home (plan Task 7).
+    await refreshAuth()
     await navigateTo('/')
   } catch (err) {
     showError(err)
@@ -238,52 +224,102 @@ async function verifyCode() {
 <style scoped>
 .login {
   display: flex;
+  justify-content: center;
+  inline-size: 100%;
+}
+
+.login__panel {
+  display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-4);
+  inline-size: min(100%, 28rem);
+  min-block-size: 580px;
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-dialog);
+}
+
+.login__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.login__mascot {
+  flex: 0 0 80px;
+  inline-size: 80px;
+  block-size: 80px;
+}
+
+.login__header h1,
+.login__header p,
+.login__phone {
+  margin: 0;
+}
+
+.login__header h1 {
+  font-size: 1.5rem;
+  line-height: 1.5;
+}
+
+.login__header p {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
 }
 
 .login__purpose {
-  display: flex;
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
 }
 
 .login__form {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: 1rem;
-  max-inline-size: 22rem;
+  gap: var(--space-4);
+}
+
+.login__input {
+  text-align: start;
 }
 
 .login__phone {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
-  margin: 0;
+  justify-content: space-between;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
 }
 
 .login__edit {
   min-block-size: 44px;
-  padding-inline: 0.5rem;
+  padding-inline: var(--space-2);
   font: inherit;
-  color: #2b6cb0;
-  background: none;
-  border: none;
+  color: var(--color-primary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
   cursor: pointer;
   text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
 
-.login__error {
-  margin: 0;
-  padding: 0.75rem 1rem;
-  color: #9b2c2c;
-  background: #fff5f5;
-  border: 1px solid #feb2b2;
-  border-radius: 8px;
-}
+@media (max-width: 420px) {
+  .login__panel {
+    padding: var(--space-4);
+  }
 
-.login__error:focus {
-  outline: 2px solid #9b2c2c;
-  outline-offset: 2px;
+  .login__header {
+    align-items: flex-start;
+  }
+
+  .login__mascot {
+    flex-basis: 64px;
+    inline-size: 64px;
+    block-size: 64px;
+  }
 }
 </style>

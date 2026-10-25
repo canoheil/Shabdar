@@ -1,18 +1,65 @@
-# Status — Phase 6 favorites
+# Status — Phase 7 web experience
 
-Updated 2026-10-24 on Arena.ai Agent Mode after the Phase 6 GitHub Actions gate
-(full API suite + Clippy + real Axum/Nuxt/MariaDB browser and OTP smoke).
+Updated 2026-10-25 on Arena.ai Agent Mode after the final enforcing GitHub
+Actions gate on the real Axum/Nuxt/MariaDB stack.
 
-- **Phase 6 is COMPLETE — favorites (Tasks 1–8).**
-- **Branch: `arena/8d80fa18-shabdar`.** Production implementation is in commit
-  range `0fd364c..a587a9b`; the measured final browser/OTP gate and contract
-  documentation are at `f229843`. The only later changes are this STATUS entry
-  and removal of the temporary `.github/phase6-browser*` harness. The approved
-  plan is `docs/PHASE6_PLAN.md` and the binding design is
-  `docs/superpowers/specs/2026-10-24-favorites-design.md`.
-- **Next: ratings/comments or the selected launch blocker.** The public-launch
-  blockers below remain open, including a real SMS provider, HTTPS, profanity
-  filtering, and the outstanding physical-phone checks.
+- **Phase 7 is COMPLETE — web experience (Tasks 1–13).**
+- **Branch: `arena/31e5990a-shabdar`.** The approved design/plan and measured
+  implementation are in `0d9b7df..85d63f0`; the final whole-product gate ran at
+  `85d63f0eaa3397b6bde80890d0cabd5d5631bb5a`. Later changes are only this
+  evidence entry, the performance record, MASTER status, and Task 13
+  checkboxes. No agent merge or PR close was performed.
+- **Next domain: Ratings & Comments.** Earlier public-launch blockers remain
+  separate; this UI PASS does not claim those launch requirements are done.
+
+## What Phase 7 built
+
+- Native semantic CSS/Vue design system, reusable controls/states, selective
+  flat-SVG Shabdarak branding, self-hosted Vazirmatn, SSR-safe
+  System/Light/Dark themes, RTL, reduced motion, and responsive navigation:
+  mobile bottom actions, two-row tablet header, and right RTL desktop sidebar.
+- Search-led Home and filters, listing cards/detail/gallery/favorites, OTP
+  login, posting with durable preview-revocation checks, dashboard/favorites,
+  base admin moderation, and sanitized 404/410/unexpected-error recovery.
+- Existing SSR, session/CSRF/admin/privacy and API/proxy contracts remain
+  intact. Dashboard `favorite_count` still means favorites received on the
+  seller's own listings; no Home-card favorite buttons were introduced.
+- Production optimization includes compressed static/SSR responses, three
+  initial scripts on each measured route, stable image dimensions/priority,
+  deferred same-origin font enhancement with `font-display: swap`, and
+  negotiated streaming gzip for PNG transport without changing decoded media.
+
+## Verification results (Phase 7 final gate — PASS)
+
+- **Final enforcing run `40182538514`**, head `85d63f0`: Nuxt production build,
+  `nuxi typecheck`, comparator unit tests, both independent route JS budgets,
+  and all Lighthouse median assertions passed. All **55/55** real-stack
+  Playwright tests passed, including Home/Detail/Login/Post/Dashboard/
+  Favorites/Admin at 375/768/1024/1440px in both themes, 844×390 landscape,
+  reduced motion, focus/target/overflow/axe/runtime-request checks, and real
+  404/410/500 recovery paths. Labelled screenshots and Lighthouse artifacts
+  uploaded successfully as `web-performance-40182538514`.
+- Initial JS is Home **93,008 gzip bytes (+3,981)** and Detail **91,796
+  (+2,769)** against the separate 114,627-byte ceilings. Self-hosted Arabic
+  and Latin WOFF2 total **80,832 bytes**, with no external font/icon request.
+- Enforced mobile medians of three: Home LCP **2406.0757ms**, CLS
+  **0.0066187523**, TBT **88ms**, Accessibility **100**; Detail LCP
+  **2403.8289ms**, CLS **0.0036143110**, TBT **84ms**, Accessibility **100**.
+  Every individual LCP run was below 2500ms. Exact provenance, decoded script
+  totals, commands, and artifact details are in `docs/PHASE7_PERFORMANCE.md`.
+- The final enforcing run supersedes collection-only performance precheck
+  `40182081339`; legacy baseline provenance is run `40124660239`. No red or
+  unrun required gate is being omitted from this result.
+
+## Phase 7 accepted ceilings
+
+- Image resize/thumbnail generation and modern-format conversion remain out of
+  scope. The checked-in 1200×900 PNG fixture is unchanged; gzip transport is
+  not represented as an image-processing pipeline.
+- Lighthouse used simulated mobile throttling in headless Chromium, not a
+  physical phone. Physical-device testing and RUM/field Core Web Vitals remain
+  open. Seeded Home/Detail lab results do not guarantee arbitrary production
+  media or hosting performance.
 
 ## What Phase 6 built
 

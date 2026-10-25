@@ -1,0 +1,331 @@
+name: Web verification
+
+on:
+  push:
+    branches:
+      - arena/31e5990a-shabdar
+    paths:
+      - apps/web/**
+      - .github/workflows/web-verification.yml
+      - docs/performance/**
+  pull_request:
+    branches:
+      - main
+    paths:
+      - apps/web/**
+      - .github/workflows/web-verification.yml
+      - docs/performance/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: shabdar_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: mysql://root:shabdar_test@127.0.0.1:3306/shabdar_test
+      E2E_DATABASE_URL: mysql://root:shabdar_test@127.0.0.1:3306/shabdar_test
+      BIND_ADDR: 127.0.0.1:8081
+      NUXT_API_BASE: http://127.0.0.1:8081
+      E2E_BASE_URL: http://127.0.0.1:3000
+      E2E_API_LOG: /tmp/shabdar-api.log
+      MEDIA_DIR: /tmp/shabdar-e2e-media
+      E2E_MEDIA_DIR: /tmp/shabdar-e2e-media
+      OTP_PEPPER: shabdar-e2e-only-pepper
+      OTP_DEV_MODE: 'true'
+      OTP_RESEND_SECS: '2'
+      TRUST_PROXY: 'true'
+      COOKIE_SECURE: 'false'
+      OTP_REQUEST_IP_LIMIT: '1000'
+      OTP_VERIFY_IP_LIMIT: '1000'
+      OTP_PHONE_DAILY_LIMIT: '1000'
+      OTP_SMS_GLOBAL_LIMIT: '1000'
+      PORT: '3000'
+      HOST: 127.0.0.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install MariaDB client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends mariadb-client
+
+      - name: Create scratch test database
+        run: |
+          mariadb --host=127.0.0.1 --user=root --password=shabdar_test \
+            --execute="CREATE DATABASE IF NOT EXISTS shabdar_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+
+      - name: Install locked web dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Build Axum debug binary
+        working-directory: apps/api
+        run: cargo build
+
+      - name: Typecheck web
+        working-directory: apps/web
+        run: npm run typecheck
+
+      - name: Build Nuxt production
+        working-directory: apps/web
+        run: npm run build
+
+      - name: Start Axum with scratch configuration
+        working-directory: apps/api
+        run: |
+          cargo run > "$E2E_API_LOG" 2>&1 &
+          echo $! > /tmp/shabdar-api.pid
+
+      - name: Start Nuxt production
+        working-directory: apps/web
+        run: |
+          node .output/server/index.mjs > /tmp/shabdar-web.log 2>&1 &
+          echo $! > /tmp/shabdar-web.pid
+
+      - name: Wait for the real stack through Nuxt
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent "$E2E_BASE_URL/api/v1/health"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/shabdar-web.log
+          cat "$E2E_API_LOG"
+          exit 1
+
+      - name: Install Chromium
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run real-stack Playwright
+        working-directory: apps/web
+        run: npm run test:e2e
+
+      - name: Assert three-run Lighthouse mobile medians
+        working-directory: apps/web
+        run: |
+          export CHROME_PATH="$(node --input-type=module -e "import { chromium } from '@playwright/test'; process.stdout.write(chromium.executablePath())")"
+          npm run test:lighthouse
+
+      - name: Measure production route client JS after the final Playwright fixture reset
+        working-directory: apps/web
+        run: npm run measure:client
+
+      - name: Check production route client JS budget
+        working-directory: apps/web
+        run: npm run test:client-budget
+
+      - name: Verify and publish performance report summary
+        working-directory: apps/web
+        run: |
+          node --input-type=module <<'EOF'
+          import { readFileSync } from 'node:fs'
+          const client = JSON.parse(readFileSync('test-results/client-js.json', 'utf8'))
+          const fixtures = JSON.parse(readFileSync('tests/e2e/.artifacts/fixtures.json', 'utf8'))
+          const detailPath = new URL(fixtures.detailPath, client.baseURL).pathname
+          const manifest = JSON.parse(readFileSync('lighthouse-report/manifest.json', 'utf8'))
+          const runs = manifest.map((entry) => {
+            const report = JSON.parse(readFileSync(entry.jsonPath, 'utf8'))
+            return {
+              url: report.requestedUrl,
+              fetchTime: report.fetchTime,
+              lighthouseVersion: report.lighthouseVersion,
+              fcp: report.audits['first-contentful-paint'].numericValue,
+              lcp: report.audits['largest-contentful-paint'].numericValue,
+              cls: report.audits['cumulative-layout-shift'].numericValue,
+              tbt: report.audits['total-blocking-time'].numericValue,
+              accessibility: report.categories.accessibility.score,
+            }
+          })
+          const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]
+          const summarize = (path) => {
+            const selected = runs.filter((run) => new URL(run.url).pathname === path)
+            return {
+              runs: selected,
+              median: {
+                fcp: median(selected.map((run) => run.fcp)),
+                lcp: median(selected.map((run) => run.lcp)),
+                cls: median(selected.map((run) => run.cls)),
+                tbt: median(selected.map((run) => run.tbt)),
+                accessibility: median(selected.map((run) => run.accessibility)),
+              },
+            }
+          }
+          const firstSettings = manifest.length ? JSON.parse(readFileSync(manifest[0].jsonPath, 'utf8')).configSettings : {}
+          const lighthouse = {
+            reportCount: runs.length,
+            settings: {
+              formFactor: firstSettings.formFactor,
+              throttlingMethod: firstSettings.throttlingMethod,
+              screenEmulation: firstSettings.screenEmulation,
+              onlyCategories: firstSettings.onlyCategories,
+            },
+            home: summarize('/'),
+            detail: summarize(detailPath),
+          }
+          const publish = (label, value) => {
+            const encoded = Buffer.from(JSON.stringify(value)).toString('base64')
+            if (encoded.length > 3500) throw new Error(`${label} annotation is too large: ${encoded.length}`)
+            console.log(`::notice title=Phase 7 ${label} JSON (base64)::${encoded}`)
+          }
+          if (runs.length !== 6) throw new Error(`Expected six Lighthouse reports, got ${runs.length}`)
+          if (lighthouse.home.runs.length !== 3 || lighthouse.detail.runs.length !== 3) throw new Error('Expected three reports for each route')
+          const diagnose = (entry) => {
+            const report = JSON.parse(readFileSync(entry.jsonPath, 'utf8'))
+            const audits = [
+              report.audits['largest-contentful-paint-element'],
+              report.audits['lcp-phases-insight'],
+            ]
+            const tables = audits.flatMap((audit) => audit?.details?.items ?? [])
+            const items = tables.flatMap((table) => table?.items ?? [])
+            const node = items.find((item) => item.node)?.node
+            return {
+              url: report.requestedUrl,
+              element: node ? { selector: node.selector, snippet: node.snippet } : null,
+              phases: items.filter((item) => item.phase).map((item) => ({
+                phase: item.phase,
+                timing: item.timing ?? item.duration,
+              })),
+              renderBlocking: (report.audits['render-blocking-resources']?.details?.items ?? []).map((item) => ({
+                url: item.url,
+                wastedMs: item.wastedMs,
+              })),
+            }
+          }
+          const detailEntry = manifest.find((entry) => new URL(JSON.parse(readFileSync(entry.jsonPath, 'utf8')).requestedUrl).pathname === detailPath)
+          const homeEntry = manifest.find((entry) => new URL(JSON.parse(readFileSync(entry.jsonPath, 'utf8')).requestedUrl).pathname === '/')
+          publish('LCP diagnostics', [homeEntry, detailEntry].filter(Boolean).map(diagnose))
+          const runtimeDiagnose = (entry) => {
+            const report = JSON.parse(readFileSync(entry.jsonPath, 'utf8'))
+            const metrics = report.audits.metrics?.details?.items?.[0] ?? {}
+            const observed = Object.fromEntries(Object.entries(metrics).filter(([key]) => /^observed(Lcp|Load|DomContentLoaded|FirstContentfulPaint|FirstPaint)$/.test(key)))
+            const bootup = (report.audits['bootup-time']?.details?.items ?? [])
+              .sort((a, b) => (b.scripting ?? 0) - (a.scripting ?? 0))
+              .slice(0, 2)
+              .map((item) => ({ url: item.url?.split('/').pop(), total: item.total, scripting: item.scripting, parse: item.scriptParseCompile }))
+            return {
+              url: report.requestedUrl,
+              observed,
+              mainThread: (report.audits['mainthread-work-breakdown']?.details?.items ?? []).map((item) => ({
+                group: item.groupLabel ?? item.group,
+                duration: item.duration,
+              })),
+              bootup,
+              longTasks: (report.audits['long-tasks']?.details?.items ?? []).slice(0, 3).map((item) => ({ duration: item.duration, startTime: item.startTime })),
+            }
+          }
+          publish('Runtime diagnostics', [homeEntry, detailEntry].filter(Boolean).map(runtimeDiagnose))
+          const networkDiagnose = (entry) => {
+            const report = JSON.parse(readFileSync(entry.jsonPath, 'utf8'))
+            const requests = report.audits['network-requests']?.details?.items ?? []
+            const compact = (item) => ({
+              url: item.url?.replace(client.baseURL, ''),
+              type: item.resourceType,
+              transfer: item.transferSize,
+              resource: item.resourceSize,
+              start: item.networkRequestTime,
+              end: item.networkEndTime,
+              priority: item.priority,
+            })
+            const scripts = requests.filter((item) => item.resourceType === 'Script')
+            const images = requests.filter((item) => item.resourceType === 'Image')
+            const chains = report.audits['critical-request-chains']?.details?.chains ?? {}
+            const flattenChain = (chain, prefix = []) => {
+              const label = chain.request?.url?.replace(client.baseURL, '') ?? 'unknown'
+              const path = [...prefix, label]
+              const children = Object.values(chain.children ?? {})
+              return children.length ? children.flatMap((child) => flattenChain(child, path)) : [path]
+            }
+            return {
+              url: report.requestedUrl,
+              metrics: {
+                fcp: report.audits['first-contentful-paint'].numericValue,
+                lcp: report.audits['largest-contentful-paint'].numericValue,
+                ttfb: report.audits['server-response-time'].numericValue,
+              },
+              document: requests.filter((item) => item.resourceType === 'Document').map(compact),
+              scripts: scripts.map(compact),
+              fonts: requests.filter((item) => item.resourceType === 'Font').map(compact),
+              images: {
+                count: images.length,
+                transfer: images.reduce((total, item) => total + (item.transferSize ?? 0), 0),
+                largest: images.sort((a, b) => (b.transferSize ?? 0) - (a.transferSize ?? 0)).slice(0, 2).map(compact),
+              },
+              criticalChains: Object.values(chains).flatMap((chain) => flattenChain(chain)),
+            }
+          }
+          publish('Home network diagnostics', networkDiagnose(homeEntry))
+          publish('Detail network diagnostics', networkDiagnose(detailEntry))
+          const clientSummary = {
+            schemaVersion: client.schemaVersion,
+            measuredAt: client.measuredAt,
+            measuredHead: client.measuredHead,
+            productBaseline: client.productBaseline,
+            baseURL: client.baseURL,
+            node: client.node,
+            nuxt: client.nuxt,
+            playwright: client.playwright,
+            gzipLevel: client.gzipLevel,
+            home: { totalGzip: client.home.totalGzip, scriptCount: client.home.scripts.length },
+            detail: { totalGzip: client.detail.totalGzip, scriptCount: client.detail.scripts.length },
+            fonts: client.fonts,
+          }
+          publish('client', clientSummary)
+          publish('Lighthouse', lighthouse)
+          EOF
+
+      - name: Upload performance reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-performance-${{ github.run_id }}
+          path: |
+            apps/web/test-results/client-js.json
+            apps/web/.lighthouseci/
+            apps/web/lighthouse-report/
+            apps/web/quality-artifacts/
+          if-no-files-found: error
+          include-hidden-files: true
+
+      - name: Show Nuxt log on failure
+        if: failure()
+        run: tail -n 100 /tmp/shabdar-web.log
+
+      - name: Upload browser failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-browser-failure-${{ github.run_id }}
+          path: |
+            apps/web/test-results/
+            apps/web/playwright-report/
+          if-no-files-found: ignore

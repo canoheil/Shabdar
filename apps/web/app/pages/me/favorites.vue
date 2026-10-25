@@ -1,78 +1,75 @@
-<!--
-  Personal favorites (Phase 6 Task 7): active saved listings only. The first
-  page may be SSR'd with the viewer's cookie; later pages and removals are
-  local, confirmed API operations. Pagination is forward-only by design.
--->
 <template>
   <section class="favorites">
-    <h1>علاقه‌مندی‌های من</h1>
-
-    <p v-if="mePending">در حال بارگذاری…</p>
-
-    <template v-else-if="!me">
-      <p>برای دیدن علاقه‌مندی‌های خود وارد شوید.</p>
-      <NuxtLink to="/login" class="btn">ورود</NuxtLink>
-    </template>
-
-    <template v-else>
+    <header class="favorites__header">
+      <div>
+        <h1>علاقه‌مندی‌های من</h1>
+        <p class="meta">آگهی‌های ذخیره‌شدهٔ خود را مرور و مدیریت کنید.</p>
+      </div>
       <NuxtLink to="/me" class="favorites__back">بازگشت به داشبورد</NuxtLink>
+    </header>
 
-      <p v-if="favoritesPending">در حال بارگذاری علاقه‌مندی‌ها…</p>
+    <AppSkeleton v-if="mePending" variant="text" label="در حال بارگذاری…" />
 
-      <template v-else-if="favoritesError">
-        <p class="alert-error" role="alert">
-          خواندن علاقه‌مندی‌ها ممکن نشد؛ دوباره تلاش کنید.
-        </p>
-        <button type="button" class="btn btn--secondary favorites__retry" @click="retryInitial">
-          تلاش دوباره
-        </button>
-      </template>
+    <AppEmptyState
+      v-else-if="authStatus === 'anonymous'"
+      title="برای دیدن علاقه‌مندی‌های خود وارد شوید."
+    >
+      <NuxtLink to="/login" class="btn">ورود</NuxtLink>
+    </AppEmptyState>
+
+    <template v-else-if="authStatus === 'authenticated'">
+      <AppSkeleton
+        v-if="favoritesPending"
+        variant="card"
+        :count="4"
+        label="در حال بارگذاری علاقه‌مندی‌ها…"
+      />
+
+      <AppAlert v-else-if="favoritesError" tone="error">
+        <div class="favorites__error">
+          <p>خواندن علاقه‌مندی‌ها ممکن نشد؛ دوباره تلاش کنید.</p>
+          <AppButton variant="secondary" @click="retryInitial">تلاش دوباره</AppButton>
+        </div>
+      </AppAlert>
 
       <template v-else>
-        <p v-if="items.length === 0 && !hasMore" class="favorites__empty">
-          هنوز آگهی‌ای ذخیره نکرده‌اید.
-        </p>
+        <AppEmptyState
+          v-if="items.length === 0 && !hasMore"
+          title="هنوز آگهی‌ای ذخیره نکرده‌اید."
+          description="از صفحهٔ آگهی‌ها، موارد دلخواه را برای مراجعهٔ بعدی ذخیره کنید."
+        >
+          <NuxtLink to="/" class="btn">مشاهده آگهی‌ها</NuxtLink>
+        </AppEmptyState>
 
-        <ul v-else-if="items.length > 0" class="cards">
-          <li v-for="item in items" :key="item.public_id" class="card">
-            <NuxtLink :to="`/listings/${item.slug}`">
-              <img
-                v-if="item.cover_image"
-                class="card__cover"
-                :src="item.cover_image"
-                :alt="item.title"
-                loading="lazy"
-              >
-              <span v-else class="card__cover" aria-hidden="true" />
-            </NuxtLink>
-            <p class="card__title">
-              <NuxtLink :to="`/listings/${item.slug}`">{{ item.title }}</NuxtLink>
-            </p>
-            <p class="card__price">{{ formatPrice(item.price_toman, item.price_type) }}</p>
-            <p class="meta">{{ item.city }} · {{ item.category }}</p>
-            <button
-              type="button"
-              class="btn btn--secondary"
-              :disabled="removingId !== null"
-              @click="removeFavorite(item)"
-            >
-              {{ removingId === item.public_id ? 'در حال حذف…' : 'حذف از علاقه‌مندی‌ها' }}
-            </button>
+        <ul v-else-if="items.length > 0" class="favorites__cards">
+          <li v-for="item in items" :key="item.public_id">
+            <ListingCard :listing="item">
+              <template #actions>
+                <AppButton
+                  variant="secondary"
+                  :disabled="removingId !== null"
+                  @click="removeFavorite(item)"
+                >
+                  {{ removingId === item.public_id ? 'در حال حذف…' : 'حذف از علاقه‌مندی‌ها' }}
+                </AppButton>
+              </template>
+            </ListingCard>
           </li>
         </ul>
 
-        <p v-if="actionError" class="alert-error" role="alert">{{ actionError }}</p>
-        <p v-if="loadMoreError" class="alert-error" role="alert">{{ loadMoreError }}</p>
+        <AppAlert v-if="actionError" tone="error">{{ actionError }}</AppAlert>
+        <AppAlert v-if="loadMoreError" tone="error">{{ loadMoreError }}</AppAlert>
 
-        <button
+        <AppButton
           v-if="hasMore"
-          type="button"
-          class="btn btn--secondary favorites__more"
-          :disabled="loadingMore || removingId !== null"
+          variant="secondary"
+          class="favorites__more"
+          :loading="loadingMore"
+          :disabled="removingId !== null"
           @click="loadMore"
         >
           {{ loadingMore ? 'در حال بارگذاری…' : 'نمایش موارد بیشتر' }}
-        </button>
+        </AppButton>
 
         <p class="meta" role="status" aria-live="polite" aria-atomic="true">{{ resultMessage }}</p>
       </template>
@@ -81,12 +78,13 @@
 </template>
 
 <script setup lang="ts">
-import type { ApiListingCard, ApiPage, ApiUser } from '~/types'
+import type { ApiListingCard, ApiPage } from '~/types'
 
+const {
+  status: authStatus,
+  pending: mePending,
+} = await useAuth()
 const authHeaders = useRequestHeaders(['cookie'])
-const { data: me, pending: mePending } = await useFetch<{ user: ApiUser }>('/api/v1/me', {
-  headers: authHeaders,
-})
 
 const {
   data: favorites,
@@ -172,32 +170,55 @@ useHead({ title: 'علاقه‌مندی‌های من | شبدر' })
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 1rem;
+  gap: var(--space-6);
 }
 
-.favorites .btn {
-  display: inline-flex;
+.favorites__header {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  align-self: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.favorites__header h1,
+.favorites__header p,
+.favorites__error p {
+  margin: 0;
+}
+
+.favorites__header h1 {
+  font-size: 1.75rem;
 }
 
 .favorites__back {
   display: inline-flex;
   align-items: center;
-  align-self: flex-start;
   min-block-size: 44px;
 }
 
-.favorites__empty {
+.favorites__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr));
+  gap: var(--space-4);
   margin: 0;
-  padding: 1.25rem;
-  background: #fff;
-  border: 1px dashed #cbd5e0;
-  border-radius: 12px;
+  padding: 0;
+  list-style: none;
 }
 
-.card .btn {
-  margin-block-start: auto;
+.favorites__cards > li {
+  min-inline-size: 0;
+}
+
+.favorites__error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.favorites__more {
+  align-self: center;
 }
 </style>
