@@ -33,7 +33,7 @@
         وضعیت ورود مشخص نیست؛ ثبت دیدگاه در دسترس نیست.
       </p>
       <form
-        v-else-if="authStatus === 'authenticated'"
+        v-if="authStatus === 'authenticated'"
         class="listing-comments__form"
         :aria-busy="createPending ? 'true' : 'false'"
         @submit.prevent="create"
