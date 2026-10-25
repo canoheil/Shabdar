@@ -197,6 +197,31 @@ jobs:
           }
           if (runs.length !== 6) throw new Error(`Expected six Lighthouse reports, got ${runs.length}`)
           if (lighthouse.home.runs.length !== 3 || lighthouse.detail.runs.length !== 3) throw new Error('Expected three reports for each route')
+          const diagnose = (entry) => {
+            const report = JSON.parse(readFileSync(entry.jsonPath, 'utf8'))
+            const audits = [
+              report.audits['largest-contentful-paint-element'],
+              report.audits['lcp-phases-insight'],
+            ]
+            const tables = audits.flatMap((audit) => audit?.details?.items ?? [])
+            const items = tables.flatMap((table) => table?.items ?? [])
+            const node = items.find((item) => item.node)?.node
+            return {
+              url: report.requestedUrl,
+              element: node ? { selector: node.selector, snippet: node.snippet } : null,
+              phases: items.filter((item) => item.phase).map((item) => ({
+                phase: item.phase,
+                timing: item.timing ?? item.duration,
+              })),
+              renderBlocking: (report.audits['render-blocking-resources']?.details?.items ?? []).map((item) => ({
+                url: item.url,
+                wastedMs: item.wastedMs,
+              })),
+            }
+          }
+          const detailEntry = manifest.find((entry) => new URL(JSON.parse(readFileSync(entry.jsonPath, 'utf8')).requestedUrl).pathname === detailPath)
+          const homeEntry = manifest.find((entry) => new URL(JSON.parse(readFileSync(entry.jsonPath, 'utf8')).requestedUrl).pathname === '/')
+          publish('LCP diagnostics', [homeEntry, detailEntry].filter(Boolean).map(diagnose))
           const clientSummary = {
             schemaVersion: client.schemaVersion,
             measuredAt: client.measuredAt,

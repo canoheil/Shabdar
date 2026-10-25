@@ -569,15 +569,15 @@ git commit -m "feat(web): unify dashboard and favorites experience"
 - Admin keeps `actionMessage` and adds `actionTone: Ref<'success' | 'error'>`; validation/transport failures must use `AppAlert tone="error"`, never the success style.
 - Detail maps 404/410/generic fetch failures to the error view while preserving public SEO data on success.
 
-- [ ] **Step 1: Write failing admin/error tests**
+- [x] **Step 1: Write failing admin/error tests**
 
 Cover admin Queue visibility, dense readable moderation controls, required reject reason with error tone, successful action tone, and absence of mascot. Visit an unknown route for 404 and client-navigate to Detail with a persistent API 500 to reach the unexpected view; assert sanitized copy, working Home/Retry, and 404-only mascot/search action.
 
-- [ ] **Step 2: Implement admin primitives and Nuxt error recovery**
+- [x] **Step 2: Implement admin primitives and Nuxt error recovery**
 
 Style the queue with the same tokens, `AppField`, `AppButton` (danger for reject), and `AppAlert`; set `actionTone` on every outcome so errors are never green. Do not alter audit/mutation logic. Add the top-level error view with token-based layout and `clearError` recovery. Convert detail fetch errors to the appropriate Nuxt error status without leaking response bodies.
 
-- [ ] **Step 3: Run GREEN**
+- [x] **Step 3: Run GREEN**
 
 ```bash
 cd apps/web
@@ -587,7 +587,7 @@ npm run typecheck && npm run build
 
 Expected: admin behavior, 404/410/500 recovery, sanitized errors, and existing detail success/privacy tests PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/app/pages/admin/queue.vue apps/web/app/pages/listings/'[slug].vue' apps/web/app/error.vue apps/web/tests/e2e/admin-error.spec.ts
