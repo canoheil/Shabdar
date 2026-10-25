@@ -84,7 +84,6 @@
         :auth-status="authStatus"
         :auth-expired="favoriteAuthExpired"
         :viewer="me"
-        @count-changed="applyCommentCount"
         @expired="favoriteAuthExpired = true"
       />
     </article>
@@ -219,10 +218,6 @@ function applyRatingState(state: ApiRatingState): void {
   listing.value.rating_average = state.rating_average
   listing.value.rating_count = state.rating_count
   myStars.value = state.my_stars
-}
-
-function applyCommentCount(count: number): void {
-  if (listing.value) listing.value.comment_count = count
 }
 
 onMounted(() => {

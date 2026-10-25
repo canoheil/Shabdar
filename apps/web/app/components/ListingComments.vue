@@ -7,7 +7,7 @@
   >
     <div class="listing-comments__heading">
       <h2 id="listing-comments-title">دیدگاه‌ها</h2>
-      <p class="listing-comments__count">{{ formatNumber(count) }} دیدگاه</p>
+      <p class="listing-comments__count">{{ formatNumber(visibleCount) }} دیدگاه</p>
     </div>
 
     <template v-if="readError">
@@ -153,7 +153,6 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'count-changed': [count: number]
   expired: []
 }>()
 
@@ -161,6 +160,7 @@ const hydrated = ref(false)
 const root = ref<HTMLElement | null>(null)
 const formErrorAlert = ref<AlertControl | null>(null)
 const deleteErrorAlert = ref<AlertControl | null>(null)
+const visibleCount = ref(props.count)
 const comments = ref<ApiComment[]>(props.initialPage?.data ?? [])
 const nextCursor = ref(props.initialPage?.page.next_cursor ?? null)
 const hasMore = ref(props.initialPage?.page.has_more ?? false)
@@ -234,7 +234,7 @@ async function create(): Promise<void> {
       created,
       ...comments.value.filter((comment) => comment.public_id !== created.public_id),
     ]
-    emit('count-changed', props.count + 1)
+    visibleCount.value += 1
     draft.value = ''
     createError.value = ''
     notice.value = 'دیدگاه شما ثبت شد.'
@@ -270,7 +270,7 @@ async function removeComment(comment: ApiComment): Promise<void> {
   try {
     await $fetch(`/api/v1/comments/${comment.public_id}`, { method: 'DELETE' })
     comments.value = comments.value.filter((item) => item.public_id !== comment.public_id)
-    emit('count-changed', props.count - 1)
+    visibleCount.value -= 1
     deleteAttempt.value = null
     notice.value = 'دیدگاه حذف شد.'
     await nextTick()
