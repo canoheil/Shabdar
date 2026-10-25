@@ -103,7 +103,22 @@ jobs:
 
       - name: Run the full API suite against MariaDB
         working-directory: apps/api
-        run: cargo test
+        run: |
+          set +e
+          cargo test > /tmp/shabdar-api-tests.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            python - <<'PY'
+          import base64
+          from pathlib import Path
+
+          payload = Path('/tmp/shabdar-api-tests.log').read_bytes()[-16000:]
+          encoded = base64.b64encode(payload).decode()
+          for offset in range(0, len(encoded), 3500):
+              print(f'::error::API_TEST_LOG_BASE64={encoded[offset:offset + 3500]}')
+          PY
+          fi
+          exit "$status"
 
       - name: Typecheck web
         working-directory: apps/web
