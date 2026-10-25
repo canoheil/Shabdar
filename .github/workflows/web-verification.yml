@@ -222,6 +222,26 @@ jobs:
           const detailEntry = manifest.find((entry) => new URL(JSON.parse(readFileSync(entry.jsonPath, 'utf8')).requestedUrl).pathname === detailPath)
           const homeEntry = manifest.find((entry) => new URL(JSON.parse(readFileSync(entry.jsonPath, 'utf8')).requestedUrl).pathname === '/')
           publish('LCP diagnostics', [homeEntry, detailEntry].filter(Boolean).map(diagnose))
+          const runtimeDiagnose = (entry) => {
+            const report = JSON.parse(readFileSync(entry.jsonPath, 'utf8'))
+            const metrics = report.audits.metrics?.details?.items?.[0] ?? {}
+            const observed = Object.fromEntries(Object.entries(metrics).filter(([key]) => /^observed(Lcp|Load|DomContentLoaded|FirstContentfulPaint|FirstPaint)$/.test(key)))
+            const bootup = (report.audits['bootup-time']?.details?.items ?? [])
+              .sort((a, b) => (b.scripting ?? 0) - (a.scripting ?? 0))
+              .slice(0, 2)
+              .map((item) => ({ url: item.url?.split('/').pop(), total: item.total, scripting: item.scripting, parse: item.scriptParseCompile }))
+            return {
+              url: report.requestedUrl,
+              observed,
+              mainThread: (report.audits['mainthread-work-breakdown']?.details?.items ?? []).map((item) => ({
+                group: item.groupLabel ?? item.group,
+                duration: item.duration,
+              })),
+              bootup,
+              longTasks: (report.audits['long-tasks']?.details?.items ?? []).slice(0, 3).map((item) => ({ duration: item.duration, startTime: item.startTime })),
+            }
+          }
+          publish('Runtime diagnostics', [homeEntry, detailEntry].filter(Boolean).map(runtimeDiagnose))
           const clientSummary = {
             schemaVersion: client.schemaVersion,
             measuredAt: client.measuredAt,
