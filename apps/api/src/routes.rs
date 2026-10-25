@@ -44,6 +44,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/me/listings", get(my_listings))
         .route("/api/v1/me/dashboard/summary", get(dashboard_summary))
         .route("/api/v1/listings", post(create_listing).get(feed_listings))
+        .route(
+            "/api/v1/listings/{slug}/rating",
+            put(put_rating).delete(delete_rating),
+        )
         // One template for all single-listing methods (axum rejects two
         // registrations of the same shape under different capture names).
         .route(
@@ -244,6 +248,55 @@ async fn unsave_favorite(
     crate::csrf::check_csrf(&headers)?;
     crate::favorites::unsave(&state.pool, user.user_id, &public_id).await?;
     Ok(Json(serde_json::json!({ "favorited": false })))
+}
+
+#[derive(Deserialize)]
+struct RatingBody {
+    stars: Option<serde_json::Value>,
+}
+
+/// PUT /api/v1/listings/{slug}/rating — create or update one current rating.
+async fn put_rating(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(slug): Path<String>,
+    ApiJson(body): ApiJson<RatingBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    let stars = crate::ratings::validate_stars(body.stars.as_ref())?;
+    state
+        .limiter
+        .hit(
+            &format!("rating:user:{}", user.user_id),
+            state.config.rating_user_limit,
+            Duration::from_secs(u64::from(state.config.rating_user_window_secs)),
+        )
+        .into_result()?;
+    Ok(Json(
+        crate::ratings::put(&state.pool, user.user_id, &slug, stars).await?,
+    ))
+}
+
+/// DELETE /api/v1/listings/{slug}/rating — idempotently remove own rating.
+async fn delete_rating(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(slug): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    state
+        .limiter
+        .hit(
+            &format!("rating:user:{}", user.user_id),
+            state.config.rating_user_limit,
+            Duration::from_secs(u64::from(state.config.rating_user_window_secs)),
+        )
+        .into_result()?;
+    Ok(Json(
+        crate::ratings::delete(&state.pool, user.user_id, &slug).await?,
+    ))
 }
 
 /// GET /api/v1/me/listings — the seller's own listings (Phase 3 Task 3).

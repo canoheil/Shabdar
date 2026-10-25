@@ -87,13 +87,15 @@ GREEN evidence: run `40227980308` passed the full MariaDB API suite after the sc
 
 **Files:** `ratings.rs`, `routes.rs`, `listings.rs`, `config.rs`, `lib.rs`, `tests/ratings.rs`, `tests/common.rs`.
 
-- [ ] **Step 1: Write failing API tests**
+- [x] **Step 1: Write failing API tests**
 
 Cover session/CSRF, required/integer/range validation, self-rating 403, target 404/410, create/update/same/delete idempotency, distinct users, exact average/count, repeated timestamps, and concurrent writers. Add limiter isolation/Retry-After tests with small test-only limits.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Expected: rating routes return 404; no rating rows exist.
+
+RED evidence: run `40228529100` passed compile, fmt, and Clippy, then ran the real `ratings` suite against MariaDB: 0 passed / 8 failed. The failures were the expected 404 responses from the unimplemented rating routes (including 404 instead of the expected 400/401/403/410 contracts), not skipped tests or compilation failures.
 
 - [ ] **Step 3: Implement config and transactions**
 
