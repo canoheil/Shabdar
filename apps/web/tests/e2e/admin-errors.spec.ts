@@ -82,7 +82,7 @@ test('@errors only 404 uses the mascot and Home and Search actions recover', asy
   await page.getByRole('button', { name: 'جست‌وجو در آگهی‌ها', exact: true }).click()
   await expect(page).toHaveURL(/\/#search$/)
   await expect(page.locator('#search')).toBeVisible()
-  await expect(page.getByRole('textbox', { name: 'جست‌وجو', exact: true })).toBeVisible()
+  await expect(page.getByRole('searchbox', { name: 'جستجو', exact: true })).toBeVisible()
 })
 
 test('@errors removed detail returns sanitized 410 with working Home recovery', async ({ page }) => {

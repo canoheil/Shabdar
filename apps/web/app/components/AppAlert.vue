@@ -3,6 +3,7 @@
     ref="root"
     class="app-alert"
     :class="`app-alert--${tone}`"
+    :data-tone="tone"
     :role="tone === 'error' ? 'alert' : 'status'"
     tabindex="-1"
   >

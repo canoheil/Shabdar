@@ -5,7 +5,7 @@
       <p>از میان آگهی‌های تازهٔ گیلان، مورد مناسب را پیدا کنید.</p>
     </header>
 
-    <form class="home__search" role="search" @submit.prevent="applyNow">
+    <form id="search" class="home__search" role="search" @submit.prevent="applyNow">
       <AppField id="listing-search" label="جستجو" class="home__search-field">
         <template #default="{ id, describedBy, ariaInvalid }">
           <input
