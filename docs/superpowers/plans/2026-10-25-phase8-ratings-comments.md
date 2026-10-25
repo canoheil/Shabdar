@@ -59,13 +59,15 @@ docs/{API.md,DATABASE.md,STATUS.md}
 
 **Files:** migration, migration/reset tests, web reset helper, workflow, test config boilerplate as needed.
 
-- [ ] **Step 1: Add failing schema tests and CI commands**
+- [x] **Step 1: Add failing schema tests and CI commands**
 
 Expect the two new tables, rating PK/check, comment public ID/indexes, listing cascade, author restrict, and clean migration reapplication. Add `listing_comments` and `listing_ratings` before their parents in every drop/reset list. Add job `TEST_DATABASE_URL`, `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test` to CI.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run the schema suite locally if MariaDB/Rust are available; otherwise push the focused test commit and record the expected CI failure. Expected: missing tables, not a skipped suite.
+
+RED evidence: GitHub Actions run `40227759083` reached the real MariaDB suite after fmt and Clippy passed. `db_migrations` reported 6 passed / 2 failed; both failures were MySQL 1146 (`42S02`) because `shabdar_test.listing_ratings` did not exist. No schema test was skipped.
 
 - [ ] **Step 3: Implement migration 0008**
 
