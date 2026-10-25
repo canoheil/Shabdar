@@ -261,6 +261,7 @@ useHead(() => ({
 }
 
 .detail__summary {
+  contain: layout style;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -287,6 +288,7 @@ useHead(() => ({
 }
 
 .detail__body {
+  contain: layout style;
   max-inline-size: 70ch;
 }
 

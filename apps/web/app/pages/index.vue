@@ -577,6 +577,7 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
 }
 
 .home__account {
+  contain: layout style;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
