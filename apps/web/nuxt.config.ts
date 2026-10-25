@@ -68,6 +68,9 @@ export default defineNuxtConfig({
   ],
 
   experimental: {
+    // No route rules or automatic route-manifest prefetching need the extra
+    // client manifest/runtime; interaction-only NuxtLink prefetch stays intact.
+    appManifest: false,
     defaults: {
       nuxtLink: {
         // Do not make the current LCP compete with every visible destination.

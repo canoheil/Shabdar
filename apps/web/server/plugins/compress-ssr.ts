@@ -36,6 +36,12 @@ export default defineNitroPlugin((nitroApp) => {
     if (!contentTypeKey || !headers[contentTypeKey].includes('text/html')) return
     if (headerKey(headers, 'content-encoding')) return
 
+    // Preserve useful SSR/FCP while the LCP image and deferred font are not
+    // competing with eager module execution at the same network priority.
+    response.body = response.body
+      .replaceAll('<link rel="modulepreload"', '<link fetchpriority="low" rel="modulepreload"')
+      .replaceAll('<script type="module" src=', '<script fetchpriority="low" type="module" src=')
+
     const accepted = getRequestHeader(event, 'accept-encoding')
     let body: Buffer
     let encoding: 'br' | 'gzip'
