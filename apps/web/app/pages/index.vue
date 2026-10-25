@@ -585,6 +585,8 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
   padding: var(--space-4);
   background: var(--color-surface-muted);
   border-radius: var(--radius-card);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 12rem;
 }
 
 @media (min-width: 768px) {
