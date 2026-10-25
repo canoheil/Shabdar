@@ -11,7 +11,8 @@
           width="480"
           height="360"
           :loading="imagePriority ? 'eager' : 'lazy'"
-          :fetchpriority="imagePriority ? 'high' : 'auto'"
+          :fetchpriority="imagePriority ? 'high' : 'low'"
+          decoding="async"
           @error="markImageFailed"
         >
         <span v-else class="listing-card__placeholder" aria-hidden="true">

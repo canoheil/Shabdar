@@ -11,6 +11,7 @@
         height="900"
         loading="eager"
         fetchpriority="high"
+        decoding="async"
         :data-index="selectedIndex"
         @error="markImageFailed(selectedIndex)"
       >
@@ -37,6 +38,8 @@
           width="160"
           height="120"
           loading="lazy"
+          fetchpriority="low"
+          decoding="async"
           :data-index="index"
           @error="markImageFailed(index)"
         >
