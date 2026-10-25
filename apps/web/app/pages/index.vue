@@ -108,6 +108,7 @@
     </div>
 
     <dialog
+      v-if="filterDialogReady"
       ref="filterDialog"
       class="home__filter-dialog"
       aria-labelledby="mobile-filter-title"
@@ -330,19 +331,25 @@ watch(() => route.hash, () => {
 
 const filterDialog = ref<HTMLDialogElement | null>(null)
 const filterButton = ref<HTMLButtonElement | null>(null)
+const filterDialogReady = ref(false)
 const draftCategory = ref('')
 const draftCity = ref('')
 const draftSort = ref('newest')
-function openMobileFilters(): void {
+async function openMobileFilters(): Promise<void> {
   draftCategory.value = category.value
   draftCity.value = city.value
   draftSort.value = sort.value
+  // A closed dialog is not interactive or visible, so do not duplicate and
+  // hydrate its complete option lists in the initial mobile document.
+  filterDialogReady.value = true
+  await nextTick()
   filterDialog.value?.showModal()
 }
 function cancelMobileFilters(): void {
   filterDialog.value?.close()
 }
 function returnFilterFocus(): void {
+  filterDialogReady.value = false
   filterButton.value?.focus()
 }
 function applyMobileFilters(): void {
