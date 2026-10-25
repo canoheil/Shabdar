@@ -36,13 +36,6 @@ export default defineNitroPlugin((nitroApp) => {
     if (!contentTypeKey || !headers[contentTypeKey].includes('text/html')) return
     if (headerKey(headers, 'content-encoding')) return
 
-    // The SSR document and its high-priority LCP image are useful before Vue
-    // hydrates. Keep modulepreload/execution intact without making those scripts
-    // compete at the same network priority as the image and self-hosted fonts.
-    response.body = response.body
-      .replaceAll('<link rel="modulepreload"', '<link fetchpriority="low" rel="modulepreload"')
-      .replaceAll('<script type="module" src=', '<script fetchpriority="low" type="module" src=')
-
     const accepted = getRequestHeader(event, 'accept-encoding')
     let body: Buffer
     let encoding: 'br' | 'gzip'
