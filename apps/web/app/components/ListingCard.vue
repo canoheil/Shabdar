@@ -3,7 +3,7 @@
     <NuxtLink :to="`/listings/${listing.slug}`" class="listing-card__link">
       <span class="listing-card__media">
         <img
-          v-if="showImage"
+          v-if="listing.cover_image && !imageFailed"
           ref="imageElement"
           class="listing-card__image"
           :src="listing.cover_image ?? undefined"
@@ -12,7 +12,6 @@
           height="360"
           :loading="imagePriority ? 'eager' : 'lazy'"
           :fetchpriority="imagePriority ? 'high' : 'low'"
-          decoding="async"
           @error="markImageFailed"
         >
         <span v-else class="listing-card__placeholder" aria-hidden="true">
@@ -39,10 +38,10 @@ const props = withDefaults(defineProps<{
   imagePriority: false,
 })
 
-const failedImageId = ref<string | null>(null)
+const imageFailed = ref(false)
 const imageElement = ref<HTMLImageElement | null>(null)
 watch(() => props.listing.public_id, () => {
-  failedImageId.value = null
+  imageFailed.value = false
 })
 
 function checkHydratedImage(): void {
@@ -52,9 +51,7 @@ function checkHydratedImage(): void {
 }
 onMounted(checkHydratedImage)
 
-const imageFailed = computed(() => failedImageId.value === props.listing.public_id)
-const showImage = computed(() => Boolean(props.listing.cover_image) && !imageFailed.value)
 function markImageFailed(): void {
-  failedImageId.value = props.listing.public_id
+  imageFailed.value = true
 }
 </script>
