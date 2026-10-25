@@ -97,15 +97,17 @@ Expected: rating routes return 404; no rating rows exist.
 
 RED evidence: run `40228529100` passed compile, fmt, and Clippy, then ran the real `ratings` suite against MariaDB: 0 passed / 8 failed. The failures were the expected 404 responses from the unimplemented rating routes (including 404 instead of the expected 400/401/403/410 contracts), not skipped tests or compilation failures.
 
-- [ ] **Step 3: Implement config and transactions**
+- [x] **Step 3: Implement config and transactions**
 
 Add the four rating/comment limit settings and update every Config constructor/test. Implement `PUT|DELETE /listings/{slug}/rating` with listing `FOR UPDATE`, seller check, old-row delta arithmetic, exact response shapes, and `my_stars:null` on delete. Same-star writes are no-ops.
 
-- [ ] **Step 4: Run GREEN plus Popular integration**
+- [x] **Step 4: Run GREEN plus Popular integration**
 
 Prove Popular ordering uses counters written through real rating mutations and existing Bayesian behavior is unchanged. Run full API tests and Clippy.
 
-- [ ] **Step 5: Commit**
+GREEN evidence: run `40229057555` passed all eight rating tests, including concurrent-writer invariants and Popular ordering from API-written counters, plus full API tests, Clippy, all 56 browser tests, typecheck/build, JS budgets, and enforcing Lighthouse. Run `40228832275` had already passed 7/8; its sole failure was a test-side JSON `5.0` versus integer-literal comparison, corrected without changing the API contract.
+
+- [x] **Step 5: Commit**
 
 `feat(api): add atomic listing ratings`
 
