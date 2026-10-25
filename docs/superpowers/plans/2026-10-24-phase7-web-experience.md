@@ -104,7 +104,7 @@ No API file, server proxy file, global store, test-only page, or new business-do
 - Produces `readFixtures(): { detailPath: string; listingPublicId: string; sellerStorage: string; adminStorage: string }` and `apiAs(role: 'seller' | 'admin'): Promise<APIRequestContext>`.
 - Produces `createListing(input: { title: string; description?: string; priceToman?: number | null; priceType?: 'fixed' | 'negotiable' | 'free'; imageCount?: number; state: 'active' | 'pending' }): Promise<{ publicId: string; slug: string }>` using seller writes and admin approval only when `state === 'active'`.
 
-- [ ] **Step 1: Pin the approved toolchain without touching application code**
+- [x] **Step 1: Pin the approved toolchain without touching application code**
 
 Run the two installs with exact versions, then add the three scripts and generated lockfile:
 
@@ -116,11 +116,11 @@ npm install --save-exact --save-dev @playwright/test@1.64.1 @axe-core/playwright
 
 Ignore test artifacts, reports, and `.artifacts/`; do not ignore or omit `package-lock.json`.
 
-- [ ] **Step 2: Add real fixtures and the characterization smoke test**
+- [x] **Step 2: Add real fixtures and the characterization smoke test**
 
 Global setup deletes dynamic rows in FK-safe order in the scratch DB, guards media cleanup to the exact basename `shabdar-e2e-media`, registers seller/admin through Nuxt OTP while reading only newly appended masked debug-log codes, promotes the admin by test phone, and creates one active listing with the stable fixture title. Assert the checked-in PNG's IHDR is 1200×900 and its size is 100–250KB before upload; retain API storage states. `@fixture-smoke` asserts Home SSR and Detail contain that listing and no unexpected console/page error.
 
-- [ ] **Step 3: Run the existing UI through the new harness**
+- [x] **Step 3: Run the existing UI through the new harness**
 
 With Axum debug and Nuxt production running:
 
@@ -134,7 +134,7 @@ npm run test:e2e
 
 Expected: existing build and characterization smoke PASS. This is not a feature RED test; any failure blocks all baseline claims.
 
-- [ ] **Step 4: Add the CI job and reproducible commands**
+- [x] **Step 4: Add the CI job and reproducible commands**
 
 Create a Node 26 + MariaDB 11 workflow triggered on pushes to this branch and pull requests to `main` for web/workflow/baseline paths. It installs with `npm ci`, builds Axum debug and Nuxt, starts them with the scratch env below, waits on health through Nuxt, runs `npx playwright install --with-deps chromium`, and runs typecheck/build/e2e. Document the same local stack env and commands; never print OTP codes or session cookies in test output.
 
@@ -158,7 +158,7 @@ OTP_PHONE_DAILY_LIMIT=1000
 OTP_SMS_GLOBAL_LIMIT=1000
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web .github/workflows/web-verification.yml
@@ -608,11 +608,11 @@ git commit -m "feat(web): unify admin and error experiences"
 - Reuses all previous fixtures/helpers and `expectNoSeriousA11y`, `expectNoOverflow`, `expectTouchTargets`; screenshots are output artifacts, never golden comparisons.
 - CI final commands are `npm run test:e2e`, `npm run measure:client && npm run test:client-budget`, and `npm run test:lighthouse` after production build/stack startup.
 
-- [ ] **Step 1: Add the whole-product quality matrix**
+- [x] **Step 1: Add the whole-product quality matrix**
 
 For Home, Detail, Login, Post, Dashboard, Favorites, and Admin at 375/768/1024/1440px, exercise both themes in each test, run axe (no serious/critical), overflow, target-size, and console/page-error assertions, and save labelled screenshots. Add 844×390 phone-landscape and reduced-motion checks, keyboard focus not obscured by fixed UI, and no external runtime requests. Include 404/error separately with their real recovery paths.
 
-- [ ] **Step 2: Run the complete production browser/type/build gate**
+- [x] **Step 2: Run the complete production browser/type/build gate**
 
 ```bash
 cd apps/web
@@ -626,15 +626,15 @@ npm run test:client-budget
 
 Expected: entire matrix and all earlier behavior suites PASS; Home and Detail each remain within +25,600 bytes of their baseline. Any regression is fixed and rerun, not hidden by narrowing the matrix.
 
-- [ ] **Step 3: Enable and run final Lighthouse assertions**
+- [x] **Step 3: Enable and run final Lighthouse assertions**
 
 Add `npm run test:lighthouse` and artifact upload to CI. Locally/in CI run the same command with `CHROME_PATH` pointing to Playwright Chromium. Expected: median of three runs per route meets LCP ≤2.5s, CLS ≤0.1, TBT ≤200ms, Accessibility ≥95. Save `.lighthouseci`, filesystem HTML reports, route JSON, and screenshots as CI artifacts.
 
-- [ ] **Step 4: Record measured evidence and documentation**
+- [x] **Step 4: Record measured evidence and documentation**
 
 Update README with `npm ci`, stack env, test/budget/Lighthouse commands and accepted local requirements. Append actual final route bytes/deltas, font bytes, Lighthouse medians, environment, and CI run ID to `docs/PHASE7_PERFORMANCE.md`. Update STATUS once with the task commit range, verification run IDs, Phase 7 result, and remaining image-pipeline/physical-phone/RUM ceilings; next domain is Ratings & Comments. Mark MASTER implemented only for what actually passed.
 
-- [ ] **Step 5: Commit and push the fixed session branch**
+- [x] **Step 5: Commit and push the fixed session branch**
 
 ```bash
 git add apps/web .github/workflows/web-verification.yml docs/PHASE7_PERFORMANCE.md docs/STATUS.md design-system/shabdar/MASTER.md

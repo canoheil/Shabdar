@@ -1,6 +1,6 @@
 # Shabdar Design System — Master
 
-**Status:** Approved visual direction and written spec. Implementation remains gated by user approval of the written implementation plan.
+**Status:** Implemented and verified in Phase 7 on 2026-10-25. The measured head is `85d63f0eaa3397b6bde80890d0cabd5d5631bb5a`; [final enforcing run 40182538514](https://github.com/canoheil/Shabdar/actions/runs/40182538514) passed all 55 real-stack browser tests, responsive/theme quality checks, type/build and route budgets, and enforced Lighthouse medians. Physical-phone/RUM and image resize/thumbnail work remain outside this implementation claim.
 
 - **Project:** Shabdar — Persian RTL classifieds marketplace
 - **Pattern:** Marketplace / Directory
@@ -78,6 +78,7 @@ Normal text must remain ≥4.5:1. Meaningful control boundaries, icons, and focu
 
 - Use self-hosted `@fontsource-variable/vazirmatn`; no Google Fonts or remote font request.
 - Load only selected variable files/subsets and use `font-display: swap`.
+- Protect the LCP image with system fallback on the initial render, then enable same-origin Vazirmatn after initial load/paint; no-JavaScript rendering applies it immediately. The resulting swap remains inside the enforced CLS budget.
 - Body: 16px with Persian-appropriate line height; use real hierarchy rather than many sizes.
 - Usual weights: 400 body, 500 secondary emphasis, 600 controls/headings, 700 strong price/title where needed.
 - No Playfair, Inter, or display serif for the Persian product UI.
