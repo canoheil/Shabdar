@@ -69,15 +69,17 @@ Run the schema suite locally if MariaDB/Rust are available; otherwise push the f
 
 RED evidence: GitHub Actions run `40227759083` reached the real MariaDB suite after fmt and Clippy passed. `db_migrations` reported 6 passed / 2 failed; both failures were MySQL 1146 (`42S02`) because `shabdar_test.listing_ratings` did not exist. No schema test was skipped.
 
-- [ ] **Step 3: Implement migration 0008**
+- [x] **Step 3: Implement migration 0008**
 
 Use InnoDB/`utf8mb4_unicode_ci`, exact columns/FKs/PK/check/indexes from the spec. Do not edit old migrations or backfill counters.
 
-- [ ] **Step 4: Run GREEN and older reset suites**
+- [x] **Step 4: Run GREEN and older reset suites**
 
 Required: migration, listings, favorites, session/auth, image/admin suites and web fixture initialization. All must pass with the new FKs present.
 
-- [ ] **Step 5: Commit**
+GREEN evidence: run `40227980308` passed the full MariaDB API suite after the schema RED, plus all 56 real-stack Playwright tests, Nuxt typecheck/build, independent JS budgets, and enforcing Lighthouse. This run also proved web fixture initialization with migration 0008.
+
+- [x] **Step 5: Commit**
 
 `feat(api): add ratings and comments schema`
 
