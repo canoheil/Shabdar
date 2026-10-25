@@ -22,6 +22,8 @@ static DB_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// reference provinces (dropping users first fails with error 1451/3730).
 async fn reset_db(pool: &sqlx::MySqlPool) {
     for table in [
+        "listing_comments",
+        "listing_ratings",
         "favorites",
         "listing_images",
         "listings",

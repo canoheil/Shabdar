@@ -15,6 +15,8 @@ static UPLOAD_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// Same child-first reset as the other suites (see tests/db_migrations.rs).
 async fn reset_db(pool: &sqlx::MySqlPool) {
     for table in [
+        "listing_comments",
+        "listing_ratings",
         "favorites",
         "listing_images",
         "listings",
