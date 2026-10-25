@@ -153,7 +153,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  countChanged: [count: number]
+  'count-changed': [count: number]
   expired: []
 }>()
 
@@ -234,7 +234,7 @@ async function create(): Promise<void> {
       created,
       ...comments.value.filter((comment) => comment.public_id !== created.public_id),
     ]
-    emit('countChanged', props.count + 1)
+    emit('count-changed', props.count + 1)
     draft.value = ''
     createError.value = ''
     notice.value = 'دیدگاه شما ثبت شد.'
@@ -270,7 +270,7 @@ async function removeComment(comment: ApiComment): Promise<void> {
   try {
     await $fetch(`/api/v1/comments/${comment.public_id}`, { method: 'DELETE' })
     comments.value = comments.value.filter((item) => item.public_id !== comment.public_id)
-    emit('countChanged', props.count - 1)
+    emit('count-changed', props.count - 1)
     deleteAttempt.value = null
     notice.value = 'دیدگاه حذف شد.'
     await nextTick()

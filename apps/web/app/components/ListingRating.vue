@@ -24,7 +24,7 @@
         <p v-if="viewerPending" class="meta">در حال بررسی امتیاز شما…</p>
         <template v-else-if="viewerError">
           <AppAlert tone="error">خواندن امتیاز شما ممکن نشد؛ دوباره تلاش کنید.</AppAlert>
-          <AppButton variant="secondary" @click="emit('retryViewer')">تلاش دوباره</AppButton>
+          <AppButton variant="secondary" @click="emit('retry-viewer')">تلاش دوباره</AppButton>
         </template>
         <template v-else-if="myStars !== undefined">
           <div
@@ -94,7 +94,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   updated: [state: ApiRatingState]
-  retryViewer: []
+  'retry-viewer': []
   expired: []
 }>()
 
