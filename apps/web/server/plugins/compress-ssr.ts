@@ -1,6 +1,6 @@
 import { promisify } from 'node:util'
 import { brotliCompress, constants, gzip } from 'node:zlib'
-import { getRequestHeader } from 'h3'
+import { getRequestHeader, getResponseStatus } from 'h3'
 
 const compressBrotli = promisify(brotliCompress)
 const compressGzip = promisify(gzip)
@@ -21,6 +21,14 @@ function acceptsEncoding(header: string | undefined, encoding: string) {
 /** Compress rendered HTML only; API proxying and precompressed public assets are untouched. */
 export default defineNitroPlugin((nitroApp) => {
   nitroApp.hooks.hook('render:response', async (response, { event }) => {
+    // Nuxt's error renderer can re-enter this hook. Leave all error bodies and
+    // their carefully sanitized status responses on the original code path.
+    const status = response.statusCode ?? getResponseStatus(event)
+    if (status < 200 || status >= 300) return
+    // The outer error handler fetches /__nuxt_error as text and forwards its
+    // headers. Compressing that internal response would make it forward compressed
+    // bytes as a string; the outer response must remain on Nuxt's original path.
+    if (event.context.nuxt?.['~rendering-error']) return
     if (typeof response.body !== 'string' || Buffer.byteLength(response.body) < 1024) return
 
     const headers = response.headers as Record<string, string>
