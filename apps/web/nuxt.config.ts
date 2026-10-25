@@ -3,6 +3,12 @@
 export default defineNuxtConfig({
   ssr: true,
 
+  // Keep the small, route-relevant CSS payload in the SSR document. This
+  // avoids conditional component stylesheets becoming render-blocking requests.
+  features: {
+    inlineStyles: true,
+  },
+
   app: {
     head: {
       // Persian RTL on every page (ARCHITECTURE.md §8).

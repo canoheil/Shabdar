@@ -186,7 +186,20 @@ useHead(() => ({
         { property: 'og:url', content: `/listings/${listing.value.slug}` },
       ]
     : [],
-  link: listing.value ? [{ rel: 'canonical', href: `/listings/${listing.value.slug}` }] : [],
+  link: listing.value
+    ? [
+        { rel: 'canonical', href: `/listings/${listing.value.slug}` },
+        ...(listing.value.images[0]
+          ? [{
+              key: 'detail-lcp-image',
+              rel: 'preload' as const,
+              as: 'image' as const,
+              href: listing.value.images[0].url,
+              fetchpriority: 'high' as const,
+            }]
+          : []),
+      ]
+    : [],
   script: listing.value
     ? [
         {

@@ -367,9 +367,22 @@ const {
   query: computed(() => requestedFeedQuery()),
 })
 
-const priorityImageId = computed(() => (
-  feed.value?.data.find((item) => Boolean(item.cover_image))?.public_id ?? null
+const priorityListing = computed(() => (
+  feed.value?.data.find((item) => Boolean(item.cover_image)) ?? null
 ))
+const priorityImageId = computed(() => priorityListing.value?.public_id ?? null)
+
+useHead(() => ({
+  link: priorityListing.value?.cover_image
+    ? [{
+        key: 'home-lcp-image',
+        rel: 'preload',
+        as: 'image',
+        href: priorityListing.value.cover_image,
+        fetchpriority: 'high',
+      }]
+    : [],
+}))
 
 const {
   user: me,
