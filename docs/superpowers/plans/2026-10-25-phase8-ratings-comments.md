@@ -177,11 +177,13 @@ RED evidence: run `40231234357` passed all 57 other browser tests, including pop
 
 Reuse the existing private Detail request for favorite + stars. Use labelled native controls, confirmed responses only, local summary updates, and existing design tokens/RTL/reduced motion. Add `aggregateRating` only at count ≥3.
 
-- [ ] **Step 3: Run browser GREEN and quality checks**
+- [x] **Step 3: Run browser GREEN and quality checks**
 
 Run engagement/detail suites plus responsive/theme/axe/target/overflow checks. Typecheck and production build must pass.
 
-- [ ] **Step 4: Commit**
+GREEN evidence: run `40233194867` passed all 61 browser tests and every API/web/performance gate at `f1331ee`. Keeping the detail-only rating component out of the shared shell restored Home to 93,032 gzip bytes, 2407.70 ms median LCP, and 77 ms median TBT; Detail used 93,440 gzip bytes with 2403.83 ms LCP and 72.5 ms TBT.
+
+- [x] **Step 4: Commit**
 
 `feat(web): add accessible listing ratings`
 
