@@ -269,8 +269,6 @@ useHead(() => ({
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  content-visibility: auto;
-  contain-intrinsic-size: auto 20rem;
 }
 
 .detail__price {
@@ -290,8 +288,6 @@ useHead(() => ({
 
 .detail__body {
   max-inline-size: 70ch;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 16rem;
 }
 
 .detail__body h2 {
