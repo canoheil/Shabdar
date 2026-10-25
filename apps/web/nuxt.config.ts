@@ -44,6 +44,12 @@ export default defineNuxtConfig({
       link: [
         { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
       ],
+      // This belongs in document head, not a Vue client template: Vue rejects
+      // side-effect tags there. With JS disabled, retain immediate Vazirmatn;
+      // with JS enabled, font-enhancement.client.ts controls the later swap.
+      noscript: [
+        { innerHTML: '<style>body { font-family: var(--font-family-base); }</style>' },
+      ],
     },
   },
 

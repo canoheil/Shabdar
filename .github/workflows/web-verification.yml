@@ -3,7 +3,7 @@ name: Web verification
 on:
   push:
     branches:
-      - arena/31e5990a-shabdar
+      - arena/4fdc08a7-shabdar
     paths:
       - apps/web/**
       - .github/workflows/web-verification.yml
