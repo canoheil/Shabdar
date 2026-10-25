@@ -414,7 +414,7 @@ async fn create_update_repeat_and_delete_keep_exact_counters() {
 
     let (status, _, body) = put_rating(t.app.clone(), &listing, &first, serde_json::json!(5)).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["rating_average"], 5);
+    assert_eq!(body["rating_average"].as_f64(), Some(5.0));
     assert_eq!(body["rating_count"], 1);
     assert_eq!(body["my_stars"], 5);
     assert_eq!(
@@ -464,7 +464,7 @@ async fn create_update_repeat_and_delete_keep_exact_counters() {
     tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     let (status, _, body) = put_rating(t.app.clone(), &listing, &first, serde_json::json!(2)).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["rating_average"], 2);
+    assert_eq!(body["rating_average"].as_f64(), Some(2.0));
     assert_eq!(body["rating_count"], 1);
     assert_eq!(body["my_stars"], 2);
     assert_eq!(
@@ -495,7 +495,7 @@ async fn create_update_repeat_and_delete_keep_exact_counters() {
     let (status, _, body) =
         put_rating(t.app.clone(), &listing, &second, serde_json::json!(4)).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["rating_average"], 3);
+    assert_eq!(body["rating_average"].as_f64(), Some(3.0));
     assert_eq!(body["rating_count"], 2);
     assert_eq!(body["my_stars"], 4);
     assert_eq!(
@@ -506,7 +506,7 @@ async fn create_update_repeat_and_delete_keep_exact_counters() {
     for _ in 0..2 {
         let (status, _, body) = delete_rating(t.app.clone(), &listing, &first).await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["rating_average"], 4);
+        assert_eq!(body["rating_average"].as_f64(), Some(4.0));
         assert_eq!(body["rating_count"], 1);
         assert!(body["my_stars"].is_null());
         assert_eq!(
@@ -516,7 +516,7 @@ async fn create_update_repeat_and_delete_keep_exact_counters() {
     }
     let (status, _, body) = delete_rating(t.app.clone(), &listing, &second).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["rating_average"], 0);
+    assert_eq!(body["rating_average"].as_f64(), Some(0.0));
     assert_eq!(body["rating_count"], 0);
     assert!(body["my_stars"].is_null());
     assert_eq!(
