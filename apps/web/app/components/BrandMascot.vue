@@ -51,14 +51,3 @@ withDefaults(defineProps<{
   label: 'شبدرُک',
 })
 </script>
-
-<style scoped>
-.brand-mascot {
-  display: block;
-  flex: none;
-  inline-size: 48px;
-  block-size: 48px;
-  color: var(--color-primary);
-  overflow: visible;
-}
-</style>

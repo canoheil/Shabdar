@@ -601,3 +601,260 @@ a {
 .app-skeleton__line--short {
   inline-size: 48%;
 }
+
+/* components/AppField.vue: shared inline style. */
+.app-field__label {
+  font-weight: 600;
+}
+
+.app-field__help,
+.app-field__error {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.app-field__help {
+  color: var(--color-text-muted);
+}
+
+.app-field__error {
+  color: var(--color-error);
+}
+
+/* components/AppThemeToggle.vue: shared inline style. */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.theme-toggle__label {
+  font-weight: 500;
+}
+
+.theme-toggle__select {
+  min-block-size: 44px;
+  min-inline-size: 6.5rem;
+  padding-inline: var(--space-3);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+/* components/BrandMascot.vue: shared inline style. */
+.brand-mascot {
+  display: block;
+  flex: none;
+  inline-size: 48px;
+  block-size: 48px;
+  color: var(--color-primary);
+  overflow: visible;
+}
+
+/* components/ListingCard.vue: shared inline style. */
+.listing-card {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  block-size: 100%;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+
+.listing-card__link {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-inline-size: 0;
+  color: var(--color-text);
+  text-decoration: none;
+  border-radius: var(--radius-control);
+}
+
+.listing-card__media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  text-align: center;
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-control);
+}
+
+.listing-card__image {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.listing-card__placeholder {
+  padding: var(--space-3);
+  font-size: 0.875rem;
+}
+
+.listing-card__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.listing-card__link:hover .listing-card__title {
+  color: var(--color-primary);
+}
+
+.listing-card__price {
+  margin: var(--space-3) 0 0;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.listing-card__meta {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.listing-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block-start: var(--space-3);
+}
+
+/* components/ListingGallery.vue: shared inline style. */
+.listing-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
+.listing-gallery__main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  text-align: center;
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-card);
+}
+
+.listing-gallery__main-image {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.listing-gallery__main-placeholder {
+  padding: var(--space-4);
+}
+
+.listing-gallery__thumbnails {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.listing-gallery__thumbnail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  padding: 2px;
+  color: var(--color-text-muted);
+  background: var(--color-surface-muted);
+  border: 2px solid transparent;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.listing-gallery__thumbnail--selected {
+  border-color: var(--color-primary);
+}
+
+.listing-gallery__thumbnail-image {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  border-radius: calc(var(--radius-control) - 4px);
+}
+
+.listing-gallery__thumbnail-placeholder {
+  font-size: 0.75rem;
+}
+
+/* layouts/default.vue: shared inline style. */
+.shell__brand .brand-mascot {
+  inline-size: 36px;
+  block-size: 36px;
+  flex: 0 0 auto;
+}
+
+.shell__nav-action svg {
+  flex: 0 0 auto;
+}
+
+/* error.vue: shared inline style. */
+.error-page {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  max-inline-size: 42rem;
+  margin-inline: auto;
+  padding-block: var(--space-10);
+}
+
+.error-page__mascot {
+  block-size: 96px;
+  inline-size: 96px;
+}
+
+.error-page__status {
+  margin: 0;
+  color: var(--color-primary);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.error-page h1,
+.error-page__description {
+  margin: 0;
+}
+
+.error-page h1 {
+  font-size: calc(clamp(1.65rem, 4vw, 2.25rem));
+  line-height: 1.5;
+}
+
+.error-page__description {
+  color: var(--color-text-muted);
+  line-height: 1.9;
+}
+
+.error-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}

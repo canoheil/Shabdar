@@ -93,15 +93,3 @@ async function focusHomeSearch(): Promise<void> {
   document.getElementById('listing-search')?.focus()
 }
 </script>
-
-<style scoped>
-.shell__brand .brand-mascot {
-  inline-size: 36px;
-  block-size: 36px;
-  flex: 0 0 auto;
-}
-
-.shell__nav-action svg {
-  flex: 0 0 auto;
-}
-</style>

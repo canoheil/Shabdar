@@ -24,23 +24,3 @@ const describedBy = computed(() => {
 })
 const ariaInvalid = computed<'true' | undefined>(() => props.error ? 'true' : undefined)
 </script>
-
-<style scoped>
-.app-field__label {
-  font-weight: 600;
-}
-
-.app-field__help,
-.app-field__error {
-  margin: 0;
-  font-size: 0.875rem;
-}
-
-.app-field__help {
-  color: var(--color-text-muted);
-}
-
-.app-field__error {
-  color: var(--color-error);
-}
-</style>
