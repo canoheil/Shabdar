@@ -1,16 +1,119 @@
-# Status — Phase 7 web experience
+# Status — Phase 8 ratings & comments
 
 Updated 2026-10-25 on Arena.ai Agent Mode after the final enforcing GitHub
 Actions gate on the real Axum/Nuxt/MariaDB stack.
 
-- **Phase 7 is COMPLETE — web experience (Tasks 1–13).**
-- **Branch: `arena/31e5990a-shabdar`.** The approved design/plan and measured
-  implementation are in `0d9b7df..85d63f0`; the final whole-product gate ran at
-  `85d63f0eaa3397b6bde80890d0cabd5d5631bb5a`. Later changes are only this
-  evidence entry, the performance record, MASTER status, and Task 13
-  checkboxes. No agent merge or PR close was performed.
-- **Next domain: Ratings & Comments.** Earlier public-launch blockers remain
-  separate; this UI PASS does not claim those launch requirements are done.
+- **Phase 8 is COMPLETE — lean Ratings & Comments (Tasks 1–8).**
+- **Branch: `arena/4fdc08a7-shabdar`.** The approved design/plan is in
+  `0fe4c36`; schema, API, privacy, UI, and fixes are in `c65f69d..c8e39fa`.
+  The final code gate ran at `c8e39fab653eeb242e6c39ae2d79973bac35308b`.
+  `ff6339d` records the whole-stack evidence; Task 8 then updates the API,
+  database, README, plan, and this status entry. No agent merge or PR close was
+  performed.
+- **Next product domain: Reports & Blocks / trust and safety, after separate
+  scope approval.** Profanity filtering and the other public-launch blockers
+  remain independent requirements, not consequences of this PASS.
+
+## What Phase 8 built
+
+- DB — migration `0008_ratings_comments.sql` creates `listing_ratings` with a
+  composite user/listing primary key and 1–5 CHECK, and `listing_comments`
+  with public ULIDs, visible/hidden/removed states, and both feed/author
+  indexes. Listing rows cascade; comment authors are restricted. Every older
+  reset/drop helper includes the new tables in FK-safe order.
+- API — `PUT|DELETE /listings/{slug}/rating` requires session + CSRF and JSON
+  integer stars 1–5. One rating per user/listing supports create, update,
+  same-star no-op, and idempotent delete. Self-rating is 403; unknown or
+  non-public targets are 404; removed/deleted targets are 410. DELETE returns
+  `my_stars:null`. Listing-row-locked old-row deltas keep `rating_sum`,
+  `rating_count`, and the returned average exact, including concurrent writes.
+- API — public `GET /listings/{slug}/comments` returns visible, non-deleted
+  comments newest-first with default 20 / maximum 50 keyset pages. POST trims
+  and validates 1–1000 Unicode characters, publishes immediately, and permits
+  seller self-comments. Author-only DELETE sets `deleted_at`, returns
+  `{ok:true}` idempotently, and changes the visible count only once. Equal
+  timestamps and deleted cursor anchors retain complete, duplicate-free
+  pagination.
+- API — per-user process-local windows default to 60 rating mutations and 20
+  new comments per 600 seconds, with four env overrides and `Retry-After` on
+  429. Comment deletion does not consume the creation allowance.
+- Privacy — anonymous and stale-session Detail responses omit both
+  `favorited` and `my_stars`. A valid viewer receives both from the existing
+  private Detail request with `Cache-Control: private, no-store`; another
+  viewer's stars never enter public SSR. Public comment pages contain no
+  viewer-specific `can_delete` data.
+- Web — Detail SSR exposes the public rating summary and first comments page
+  or empty state. Hydrated RTL controls provide keyboard rating
+  create/update/delete, authenticated comment creation, author deletion,
+  pending/announcement states, failure retry, 401 recovery, draft preservation,
+  and forward pagination. Only confirmed responses change ratings, comments,
+  or visible counts; failed reads/mutations preserve confirmed state and
+  cursors. Comment bodies render as safe text with newlines, and UTC-stable
+  Persian dates avoid hydration timezone drift.
+- SEO/discovery — JSON-LD `AggregateRating` is absent at 0–2 ratings and uses
+  truthful average/count values at 3 or more. Popular ordering is tested with
+  counters written through real rating mutations, not direct counter-only
+  fixtures. Reports, blocks, notifications, editing/replies/reactions, seller
+  reviews, and report-driven admin queues were not added.
+
+## Verification results (Phase 8 final gate — PASS)
+
+| Vertical slice | Canonical RED run | GREEN run |
+|---|---:|---:|
+| Migration + older reset suites | `40227759083` | `40227980308` |
+| Atomic ratings + limits + Popular | `40228529100` | `40229057555` |
+| Comments + cursor pagination | `40229627813` | `40229899339` |
+| Viewer privacy / Detail contract | `40230394088` | `40230631445` |
+| Rating UI + truthful JSON-LD | `40231234357` | `40233194867` |
+| SSR comments + interactions | `40234559334` | `40236444619` |
+
+- **Final enforcing run `40236444619`**, job `121298947109`, head `c8e39fa`:
+  `cargo fmt --check`, full MariaDB `cargo test`, Clippy with warnings denied,
+  Nuxt typecheck, production build, both independent route JS budgets, and all
+  Lighthouse assertions passed. No required database or browser suite was
+  skipped. The same job ran all **66/66 real-stack Playwright tests**, including
+  the 61 older contracts and five new comments contracts, plus responsive
+  375/768/1024/1440px checks in both themes, landscape, reduced motion,
+  keyboard/focus/targets, axe, overflow, runtime-request guards, and older
+  favorites/auth/admin/error recovery.
+- The comments RED run had exactly five expected failures and 61 older passes.
+  Candidate fixes were not accepted until the final rerun: two runs exposed
+  confirmed-count synchronization bugs and the next exposed draft-form removal
+  after a 401. The final implementation keeps counters local and
+  confirmed-only and retains the draft form beside the login recovery link.
+  Tests and budgets were not narrowed or weakened.
+- Initial production JS is Home **93,101 gzip bytes / 3 scripts** and Detail
+  **95,474 gzip bytes / 3 scripts**, against their separate 114,627-byte
+  ceilings. Detail-only rating/comment components remain excluded from the
+  shared Home shell chunk. The client-budget assertion passed independently.
+- Enforced mobile medians of three Lighthouse runs: Home FCP **697.14ms**, LCP
+  **2404.29ms**, CLS **0.0066187523**, TBT **176.5ms**, Accessibility **100**;
+  Detail FCP **701.68ms**, LCP **2405.92ms**, CLS **0.0036143110**, TBT
+  **129ms**, Accessibility **100**. All six individual LCP runs were below
+  2500ms. Normal fixture reset left measured engagement empty for comparable
+  results. Raw reports and the client manifest uploaded as
+  `web-performance-40236444619`.
+
+## Phase 8 accepted ceilings and remaining work
+
+- Rating/comment limiters are process-local, reset on restart, and are not a
+  distributed abuse-control system. Move them to a shared store before running
+  multiple API replicas; the documented defaults are not a substitute for
+  production abuse monitoring.
+- Comments have no Persian profanity filter. This remains a **public-launch
+  blocker**. Reports, blocks, report-driven hiding/restoration, and their admin
+  queues are deferred to the separately approved trust-and-safety domain.
+- Logged-in Detail still uses one private browser request after public SSR;
+  the first comments read is a separate nonfatal public request. Own rating,
+  favorite, and delete/form controls are never embedded in anonymous HTML.
+- Counter consistency covers current application flows. A future user
+  hard-delete workflow must reconcile every affected listing's rating,
+  favorite, and comment counters before any cascading deletion; current user
+  deletion is soft and comment-author hard delete is restricted.
+- Lighthouse used simulated mobile throttling in headless Chromium, not a
+  physical phone. Physical-device testing and RUM/field Core Web Vitals remain
+  open. Image resize/thumbnail generation and modern-format conversion also
+  remain open; gzip transport is not an image-processing pipeline.
 
 ## What Phase 7 built
 
@@ -363,14 +466,14 @@ lives outside the repo; the durable form of those assertions is
   **UNVERIFIED** regardless of confidence. Self-review and static analysis are
   not verification.
 - Web items are verified by running the real stack (Nuxt + Axum + MariaDB)
-  and driving it with Playwright — first on the Railway VM and, for Phase 6,
-  in GitHub Actions (2026-10-24), browser e2e only. A physical-phone pass is
-  still the final word; `vue-tsc` is not installed, so type errors are caught
-  by the dev server/build, not a typechecker.
+  and driving it with Playwright—first on the Railway VM and, from Phase 6
+  onward, in GitHub Actions. The committed gate also runs `nuxi typecheck`
+  with `vue-tsc`, a production build, independent route budgets, and enforced
+  Lighthouse medians. A physical-phone pass remains separate.
 - API items were verified against scratch `*_test` databases on MariaDB 11 in
-  Docker (Railway VM for earlier phases, GitHub Actions for Phase 6), not the
-  user's own database; re-run `cargo test` with the real `TEST_DATABASE_URL`
-  before release.
+  Docker (Railway VM for earlier phases, GitHub Actions for Phases 6–8), not
+  the user's own database; re-run `cargo test` with the real
+  `TEST_DATABASE_URL` before release.
 
 ## Must do before public launch
 
@@ -387,9 +490,8 @@ lives outside the repo; the durable form of those assertions is
   the shared-store upgrade noted in `src/ratelimit.rs`.
 - Node/npm versions: **Node v26.3.1, npm 11.17.0** (recorded 2026-10-10).
 - npm install cost: wall time **to record**; `apps/web/node_modules` measured
-  **224 MB** on the Railway VM (2026-10-24). `package-lock.json` is generated
-  but intentionally not committed yet — deciding to pin the web tree is its
-  own change.
+  **224 MB** on the Railway VM (2026-10-24). `package-lock.json` is committed;
+  use `npm ci` for reproducible installs.
 - Persian profanity filter, image-moderation decision, privacy/terms,
   backup/restore test (unchanged).
 - Phone-browser smoke of the Phase 3 pages (`/`, `/post`, `/listings/[slug]`,
@@ -412,6 +514,13 @@ lives outside the repo; the durable form of those assertions is
   tests + clippy clean + smoke of every limit and the envelope.**
 - **Phase 6 — COMPLETE (Tasks 1–8) on `arena/8d80fa18-shabdar`: 174/174 API
   tests + clippy clean + real-stack Chromium and OTP/API smoke at `f229843`.**
-- **Next: ratings/comments or the selected launch blocker.** Physical-phone
+- **Phase 7 — COMPLETE (Tasks 1–13) on `arena/31e5990a-shabdar`: 55/55 browser
+  tests + typecheck/build + independent JS budgets + enforcing Lighthouse at
+  `85d63f0` / run `40182538514`.**
+- **Phase 8 — COMPLETE (Tasks 1–8) on `arena/4fdc08a7-shabdar`: full MariaDB
+  API suite + 66/66 browser tests + typecheck/build + independent JS budgets +
+  enforcing Lighthouse at `c8e39fa` / run `40236444619`.**
+- **Next: Reports & Blocks / trust and safety after scope approval, or a
+  selected public-launch blocker.** Physical-phone
   verification, profanity filtering, real SMS, HTTPS, and the other recorded
   public-launch blockers remain open in their recorded order.

@@ -231,17 +231,23 @@ Candidate runs `40235218240` and `40235657903` exposed confirmed-count synchroni
 
 ## Task 8: Contracts and honest phase evidence
 
-- [ ] **Step 1: Update API/database/readmes**
+- [x] **Step 1: Update API/database/readmes**
 
 Document exact routes, shapes, validation, limits, cursor, visibility/privacy, counter semantics, and curl reproduction. Mark migration 0008 built and reports/blocks/profanity still deferred.
 
-- [ ] **Step 2: Update STATUS once**
+Evidence: `docs/API.md`, `docs/DATABASE.md`, `apps/api/README.md`, and `apps/web/README.md` now describe the implemented Phase 8 contracts, migration, hydrated UI, four env overrides, and curl flows; deferred report/block/filter behavior is labelled rather than presented as built.
+
+- [x] **Step 2: Update STATUS once**
 
 Record task commit range, actual API/web run IDs and measured results, then name the next domain. Retain process-local limiter scaling, profanity launch blocker, physical-phone/RUM, and Reports/Blocks as honest remaining work.
 
-- [ ] **Step 3: Final review and push**
+Evidence: `docs/STATUS.md` records the six canonical RED/GREEN pairs, final run `40236444619` / job `121298947109` at `c8e39fa`, 66/66 browser tests, JS/Lighthouse measurements, implementation range, next domain, and every accepted ceiling.
+
+- [x] **Step 3: Final review and push**
 
 Inspect diff for secrets, unscoped artifacts, dependency changes, and unchecked claims. Commit `docs: record phase 8 verification` and push only the active session branch. Open a PR when requested; never merge automatically.
+
+Review evidence: the cumulative diff contains only the approved Phase 8 implementation, tests, workflow, and documentation. No dependency manifest, credential file, generated test artifact, or performance-report artifact changed; `git diff --check` passed. The final code gate remains run `40236444619`, and its `web-performance-40236444619` artifact exists.
 
 ---
 

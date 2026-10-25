@@ -12,8 +12,8 @@ Public listing photos (`/media/**`) proxy to Axum the same way — the browser
 never talks to :8080 for images either.
 
 Pages: `/` (active feed + search/category/city/sort + auth block), `/login`
-(OTP flow), `/listings/[slug]` (SSR detail with canonical + JSON-LD,
-no `AggregateRating` until the ratings phase), `/post` (create/edit/submit
+(OTP flow), `/listings/[slug]` (SSR detail with canonical + JSON-LD, public
+rating summaries/comments, and hydrated rating/comment controls), `/post` (create/edit/submit
 with photo uploads; login-gated), `/me` (seller dashboard: four counts and the
 seller's own listings, login-gated, responsive one-to-four column stat grid),
 `/me/favorites` (the current user's saved active listings), and `/admin/queue`
@@ -47,6 +47,30 @@ loaded cards and the cursor so retry cannot create a gap or duplicate.
 The dashboard link to `/me/favorites` means listings saved by the current
 user. Its separate «ذخیرهٔ آگهی‌های من» tile is the sum of favorites
 **received on the seller's own listings**, not that personal saved-list count.
+
+### Ratings and comments (Phase 8)
+
+Listing Detail SSR includes the truthful public rating average/count and the
+first public comments page (or an honest empty state). Anonymous HTML never
+contains `favorited`, `my_stars`, rating controls, a comment form, or
+own-comment delete controls. After hydration, the existing private Detail
+request loads favorite + rating state with `private, no-store`; comment read
+failure is nonfatal and has its own retry.
+
+Five native, labelled rating controls support keyboard create/update/delete.
+Sellers cannot rate their own listing. Authenticated users can publish a
+comment, preserve a draft across validation/network/session-expiry failures,
+and retry confirmed create/delete operations. Comment text is interpolated
+safely with preserved newlines, never injected as HTML. New comments prepend
+and visible counts change only after confirmed responses; failed deletion
+keeps the item, and failed load-more preserves loaded items and the cursor.
+UTC-stable Persian dates avoid server/client timezone hydration drift.
+
+`AggregateRating` appears in JSON-LD only at `rating_count >= 3`, using the
+current average/count; it is absent below that threshold. The components use
+local state and existing design tokens—no dependency or global store was
+added. Both detail-only components stay out of the shared Home shell chunk so
+the independent route budgets remain meaningful.
 
 ## Node toolchain (Termux)
 
@@ -102,6 +126,7 @@ export OTP_DEV_MODE=true OTP_RESEND_SECS=2
 export TRUST_PROXY=true COOKIE_SECURE=false
 export OTP_REQUEST_IP_LIMIT=1000 OTP_VERIFY_IP_LIMIT=1000
 export OTP_PHONE_DAILY_LIMIT=1000 OTP_SMS_GLOBAL_LIMIT=1000
+export RATING_USER_LIMIT=1000 COMMENT_USER_LIMIT=1000
 ```
 
 The MariaDB CLI must be installed. Run Axum from `apps/api` so it finds the
