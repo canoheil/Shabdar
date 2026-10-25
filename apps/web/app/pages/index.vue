@@ -205,7 +205,11 @@
       </AppEmptyState>
       <ul v-else class="home__cards">
         <li v-for="item in feed?.data ?? []" :key="item.public_id">
-          <ListingCard :listing="item" :image-priority="item.public_id === priorityImageId" />
+          <LazyListingCard
+            hydrate-on-idle
+            :listing="item"
+            :image-priority="item.public_id === priorityImageId"
+          />
         </li>
       </ul>
     </section>
