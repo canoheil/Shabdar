@@ -159,6 +159,7 @@ jobs:
               url: report.requestedUrl,
               fetchTime: report.fetchTime,
               lighthouseVersion: report.lighthouseVersion,
+              fcp: report.audits['first-contentful-paint'].numericValue,
               lcp: report.audits['largest-contentful-paint'].numericValue,
               cls: report.audits['cumulative-layout-shift'].numericValue,
               tbt: report.audits['total-blocking-time'].numericValue,
@@ -171,6 +172,7 @@ jobs:
             return {
               runs: selected,
               median: {
+                fcp: median(selected.map((run) => run.fcp)),
                 lcp: median(selected.map((run) => run.lcp)),
                 cls: median(selected.map((run) => run.cls)),
                 tbt: median(selected.map((run) => run.tbt)),
@@ -242,6 +244,47 @@ jobs:
             }
           }
           publish('Runtime diagnostics', [homeEntry, detailEntry].filter(Boolean).map(runtimeDiagnose))
+          const networkDiagnose = (entry) => {
+            const report = JSON.parse(readFileSync(entry.jsonPath, 'utf8'))
+            const requests = report.audits['network-requests']?.details?.items ?? []
+            const compact = (item) => ({
+              url: item.url?.replace(client.baseURL, ''),
+              type: item.resourceType,
+              transfer: item.transferSize,
+              resource: item.resourceSize,
+              start: item.networkRequestTime,
+              end: item.networkEndTime,
+              priority: item.priority,
+            })
+            const scripts = requests.filter((item) => item.resourceType === 'Script')
+            const images = requests.filter((item) => item.resourceType === 'Image')
+            const chains = report.audits['critical-request-chains']?.details?.chains ?? {}
+            const flattenChain = (chain, prefix = []) => {
+              const label = chain.request?.url?.replace(client.baseURL, '') ?? 'unknown'
+              const path = [...prefix, label]
+              const children = Object.values(chain.children ?? {})
+              return children.length ? children.flatMap((child) => flattenChain(child, path)) : [path]
+            }
+            return {
+              url: report.requestedUrl,
+              metrics: {
+                fcp: report.audits['first-contentful-paint'].numericValue,
+                lcp: report.audits['largest-contentful-paint'].numericValue,
+                ttfb: report.audits['server-response-time'].numericValue,
+              },
+              document: requests.filter((item) => item.resourceType === 'Document').map(compact),
+              scripts: scripts.map(compact),
+              fonts: requests.filter((item) => item.resourceType === 'Font').map(compact),
+              images: {
+                count: images.length,
+                transfer: images.reduce((total, item) => total + (item.transferSize ?? 0), 0),
+                largest: images.sort((a, b) => (b.transferSize ?? 0) - (a.transferSize ?? 0)).slice(0, 2).map(compact),
+              },
+              criticalChains: Object.values(chains).flatMap((chain) => flattenChain(chain)),
+            }
+          }
+          publish('Home network diagnostics', networkDiagnose(homeEntry))
+          publish('Detail network diagnostics', networkDiagnose(detailEntry))
           const clientSummary = {
             schemaVersion: client.schemaVersion,
             measuredAt: client.measuredAt,
