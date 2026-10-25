@@ -533,15 +533,15 @@ git commit -m "feat(web): improve posting flow and image previews"
 - Reuses `ListingCard` with its actions slot for confirmed-only removal; no changes to cursor, summary, or favorite API shapes.
 - Keeps `items`, `nextCursor`, `hasMore`, `removingId`, `loadingMore`, and the existing summary labels.
 
-- [ ] **Step 1: Write failing account consistency and presentation tests**
+- [x] **Step 1: Write failing account consistency and presentation tests**
 
 Cover four stat tiles with Persian digits and «ذخیرهٔ آگهی‌های من», readable status chips/rejection reason, empty states, and shared favorite cards. Create 21+ active fixtures to pin forward pagination, anchor removal, unique cards, persistent load-more/delete failure with old cards/cursor retained, and retry. Verify another viewer's save changes the seller received count but not that viewer's received tile.
 
-- [ ] **Step 2: Implement the visual composition only**
+- [x] **Step 2: Implement the visual composition only**
 
 Use responsive stat/list rows, `formatNumber` for tile values, semantic status chips, `AppEmptyState`, and `ListingCard` actions. Preserve successful-response-only removal, cursor assignment, deduplication, live result messages, and all summary values. No Home favorite action is introduced.
 
-- [ ] **Step 3: Run GREEN and regression checks**
+- [x] **Step 3: Run GREEN and regression checks**
 
 ```bash
 cd apps/web
@@ -551,7 +551,7 @@ npm run typecheck && npm run build
 
 Expected: personal/received semantics, 20+1 cursor behavior, failed-write preservation, and all prior favorite flows PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/app/pages/me apps/web/app/utils/format.ts apps/web/tests/e2e/account.spec.ts
