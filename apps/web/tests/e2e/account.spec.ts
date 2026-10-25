@@ -103,9 +103,12 @@ test('@account favorites preserve cursor and cards through failures and anchor r
   await expect(cards).toHaveCount(20)
   await more.click()
   await expect(cards).toHaveCount(20)
-  expect(cursors).toHaveLength(2)
+  // ofetch may retry a failed GET; every transport attempt must reuse the
+  // same cursor and leave all confirmed cards in place.
+  expect(cursors.length).toBeGreaterThanOrEqual(2)
   expect(cursors[0]).toBeTruthy()
-  expect(cursors[1]).toBe(cursors[0])
+  expect(new Set(cursors).size).toBe(1)
+  const attemptsAfterFailures = cursors.length
 
   failDeletes = true
   const anchor = cards.filter({ hasText: anchorTitle })
@@ -122,8 +125,8 @@ test('@account favorites preserve cursor and cards through failures and anchor r
   await more.click()
   await expect(cards).toHaveCount(20)
   await expect(more).toHaveCount(0)
-  expect(cursors).toHaveLength(3)
-  expect(cursors[2]).toBe(cursors[0])
+  expect(cursors.length).toBeGreaterThan(attemptsAfterFailures)
+  expect(new Set(cursors).size).toBe(1)
   const finalTitles = await cards.locator('h3').allTextContents()
   expect(new Set(finalTitles).size).toBe(20)
   expect(finalTitles).not.toContain(anchorTitle)

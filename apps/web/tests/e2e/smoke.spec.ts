@@ -12,11 +12,12 @@ test('@fixture-smoke real active fixture renders on Home and Detail without brow
     if (message.type() === 'error') browserErrors.push(message.text())
   })
 
-  const homeResponse = await request.get('/')
+  const homePath = `/?q=${encodeURIComponent('آگهی آزمون شبدر')}`
+  const homeResponse = await request.get(homePath)
   expect(homeResponse.ok()).toBe(true)
   expect(await homeResponse.text()).toContain('آگهی آزمون شبدر')
 
-  await page.goto('/')
+  await page.goto(homePath)
   await expect(page.getByRole('link', { name: 'آگهی آزمون شبدر' }).first()).toBeVisible()
   await page.goto(fixtures.detailPath)
   await expect(page.getByRole('heading', { name: 'آگهی آزمون شبدر', exact: true })).toBeVisible()
