@@ -201,25 +201,31 @@ RED evidence: run `40234559334` passed typecheck, production build, and all 61 o
 
 Fetch the initial public page without making comments failure fatal to listing detail. Render text safely and dates consistently. Hydrate form/delete controls; create/delete/load-more update only on confirmed responses and preserve confirmed state on failures.
 
-- [ ] **Step 3: Run full browser/type/build gate**
+- [x] **Step 3: Run full browser/type/build gate**
 
 Include both themes, mobile/desktop, keyboard/focus, axe, overflow, reduced motion, and all older favorites/error/admin tests.
 
-- [ ] **Step 4: Commit**
+GREEN evidence: run `40236444619`, job `121298947109`, head `c8e39fa`, passed all 66 real-stack browser tests (61 older contracts plus five comments contracts), the full MariaDB API suite, fmt, Clippy, Nuxt typecheck/build, both independent route JS budgets, and all six enforcing Lighthouse runs. Home used 93,101 gzip bytes with 2404.29 ms median LCP / 176.5 ms TBT; Detail used 95,474 gzip bytes with 2405.92 ms LCP / 129 ms TBT. Accessibility was 1 on both routes.
+
+- [x] **Step 4: Commit**
 
 `feat(web): add listing comments experience`
 
 ## Task 7: Whole-stack regression and performance gate
 
-- [ ] **Step 1: Run every required check in CI**
+- [x] **Step 1: Run every required check in CI**
 
 `cargo fmt --check`, full `cargo test`, `cargo clippy --all-targets -- -D warnings`, `nuxi typecheck`, production build, all Playwright tests, independent route JS budgets, and `test:lighthouse` with enforced medians.
 
-- [ ] **Step 2: Fix and rerun any regression**
+Evidence: run `40236444619` passed every listed step at `c8e39fa`; no required suite was skipped. Its normal fixture reset left Lighthouse rating/comment engagement empty for comparable measurements.
+
+- [x] **Step 2: Fix and rerun any regression**
 
 No narrowing tests, weakening budgets, hiding reset failures, or accepting skipped DB suites. Keep Lighthouse fixture comments/ratings empty through normal fixture reset so measurements remain comparable.
 
-- [ ] **Step 3: Commit**
+Candidate runs `40235218240` and `40235657903` exposed confirmed-count synchronization failures; `40236064237` then passed 65 tests and exposed draft-form removal after a 401. The fixes kept counters local and confirmed-only and preserved the authenticated draft form beside the login recovery link. The complete rerun `40236444619` is green; tests and budgets were not weakened.
+
+- [x] **Step 3: Commit**
 
 `test: verify ratings and comments across the stack`
 
