@@ -77,6 +77,14 @@ const detailUrl = `/api/v1/listings/${encodeURIComponent(slug)}`
 // Keep this original read public: personal state is fetched after hydration.
 const { data: listing, pending, error } = await useFetch<ApiListingDetail>(detailUrl)
 
+if (error.value) {
+  const statusCode = [404, 410].includes(error.value.statusCode ?? 0)
+    ? error.value.statusCode!
+    : 500
+  // The public error view receives only a status, never the API body or stack.
+  throw createError({ statusCode, fatal: true })
+}
+
 const {
   user: me,
   status: authStatus,
