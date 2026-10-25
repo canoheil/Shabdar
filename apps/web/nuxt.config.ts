@@ -26,6 +26,7 @@ export default defineNuxtConfig({
             manualChunks(id) {
               // Keep route pages split, but avoid a separate HTTP request for
               // every tiny shared control on the production HTTP/1.1 server.
+              if (id === '\0plugin-vue:export-helper') return 'shell'
               if (id.endsWith('/app/app.vue')) return 'shell'
               if (/\/app\/(components|layouts|composables)\//.test(id)) return 'shell'
             },
