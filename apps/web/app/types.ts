@@ -86,6 +86,13 @@ export interface ApiRatingState {
   my_stars: number | null
 }
 
+export interface ApiComment {
+  public_id: string
+  body: string
+  author: { public_id: string; display_name: string | null }
+  created_at: string
+}
+
 export interface ApiListingOut {
   public_id: string
   slug: string

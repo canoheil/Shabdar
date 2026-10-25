@@ -76,13 +76,24 @@
         @retry-viewer="loadFavoriteState"
         @expired="favoriteAuthExpired = true"
       />
+      <ListingComments
+        :slug="listing.slug"
+        :count="listing.comment_count"
+        :initial-page="initialComments ?? null"
+        :initial-error="commentsReadFailed"
+        :auth-status="authStatus"
+        :auth-expired="favoriteAuthExpired"
+        :viewer="me"
+        @count-changed="applyCommentCount"
+        @expired="favoriteAuthExpired = true"
+      />
     </article>
     <AppAlert v-else tone="error">خطایی رخ داد؛ دوباره تلاش کنید.</AppAlert>
   </section>
 </template>
 
 <script setup lang="ts">
-import type { ApiListingDetail, ApiRatingState } from '~/types'
+import type { ApiComment, ApiListingDetail, ApiPage, ApiRatingState } from '~/types'
 
 const route = useRoute()
 const slug = route.params.slug as string
@@ -98,6 +109,15 @@ if (error.value) {
   // The public error view receives only a status, never the API body or stack.
   throw createError({ statusCode, fatal: true })
 }
+
+// The first public comment page is crawlable, but its failure never replaces
+// the successfully loaded listing with a fatal error page.
+const commentsUrl = `/api/v1/listings/${encodeURIComponent(slug)}/comments`
+const { data: initialComments, error: initialCommentsError } = await useFetch<ApiPage<ApiComment>>(
+  commentsUrl,
+  { key: `listing-comments:${slug}` },
+)
+const commentsReadFailed = computed(() => Boolean(initialCommentsError.value))
 
 const {
   user: me,
@@ -199,6 +219,10 @@ function applyRatingState(state: ApiRatingState): void {
   listing.value.rating_average = state.rating_average
   listing.value.rating_count = state.rating_count
   myStars.value = state.my_stars
+}
+
+function applyCommentCount(count: number): void {
+  if (listing.value) listing.value.comment_count = count
 }
 
 onMounted(() => {

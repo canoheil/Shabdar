@@ -191,11 +191,13 @@ GREEN evidence: run `40233194867` passed all 61 browser tests and every API/web/
 
 **Files:** Detail page, `ListingComments.vue`, types/formatting, browser tests.
 
-- [ ] **Step 1: Write browser RED coverage**
+- [x] **Step 1: Write browser RED coverage**
 
 Cover SSR first page/empty state, no own controls in anonymous HTML, escaped text/newlines, login, draft preservation, successful prepend/count, delete failure/success, 401, load-more retry, equal timestamp/deleted-anchor behavior, and no unexpected runtime requests.
 
-- [ ] **Step 2: Implement public SSR read and domain UI**
+RED evidence: run `40234559334` passed typecheck, production build, and all 61 older browser tests. Exactly the five new comment tests failed because SSR/list/create/delete/pagination/read-retry UI did not exist yet.
+
+- [x] **Step 2: Implement public SSR read and domain UI**
 
 Fetch the initial public page without making comments failure fatal to listing detail. Render text safely and dates consistently. Hydrate form/delete controls; create/delete/load-more update only on confirmed responses and preserve confirmed state on failures.
 
