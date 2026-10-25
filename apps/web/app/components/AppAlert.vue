@@ -24,31 +24,3 @@ function focus(): void {
 }
 defineExpose({ focus })
 </script>
-
-<style scoped>
-.app-alert {
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid currentColor;
-  border-radius: var(--radius-control);
-}
-
-.app-alert--error {
-  color: var(--color-error);
-  background: var(--color-error-bg);
-}
-
-.app-alert--success {
-  color: var(--color-primary);
-  background: var(--color-surface-muted);
-}
-
-.app-alert--info {
-  color: var(--color-info);
-  background: var(--color-info-bg);
-}
-
-.app-alert--warning {
-  color: var(--color-warning);
-  background: var(--color-warning-bg);
-}
-</style>

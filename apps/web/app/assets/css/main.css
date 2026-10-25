@@ -491,3 +491,113 @@ a {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* AppAlert: shared inline primitive styles (no render-blocking fallback). */
+.app-alert {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-control);
+}
+
+.app-alert--error {
+  color: var(--color-error);
+  background: var(--color-error-bg);
+}
+
+.app-alert--success {
+  color: var(--color-primary);
+  background: var(--color-surface-muted);
+}
+
+.app-alert--info {
+  color: var(--color-info);
+  background: var(--color-info-bg);
+}
+
+.app-alert--warning {
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+
+/* AppEmptyState: shared inline primitive styles (no render-blocking fallback). */
+.app-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  background: var(--color-surface);
+  border: 1px dashed var(--color-control-border);
+  border-radius: var(--radius-card);
+}
+
+.app-empty-state__mascot {
+  inline-size: 88px;
+  block-size: 88px;
+}
+
+.app-empty-state__title {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.app-empty-state__description {
+  max-inline-size: 34rem;
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.app-empty-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+/* AppSkeleton: shared inline primitive styles (no render-blocking fallback). */
+.app-skeleton {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.app-skeleton--card {
+  grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr));
+}
+
+.app-skeleton__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+
+.app-skeleton__media {
+  inline-size: 100%;
+  aspect-ratio: 4 / 3;
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-control);
+}
+
+.app-skeleton--detail .app-skeleton__media {
+  aspect-ratio: 4 / 3;
+}
+
+.app-skeleton__line {
+  inline-size: 100%;
+  block-size: 1rem;
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-control);
+}
+
+.app-skeleton__line--title {
+  inline-size: 78%;
+  block-size: 1.25rem;
+}
+
+.app-skeleton__line--short {
+  inline-size: 48%;
+}
