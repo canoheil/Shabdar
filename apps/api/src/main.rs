@@ -48,11 +48,14 @@ async fn main() {
 
     // Connect info gives handlers the socket peer, which is the rate-limit key
     // when TRUST_PROXY is off (docs/PHASE5_PLAN.md).
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
-        .with_graceful_shutdown(async {
-            // ctrl-c only; add SIGTERM when a deployment actually sends it.
-            tokio::signal::ctrl_c().await.expect("ctrl-c handler");
-        })
-        .await
-        .expect("server error");
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(async {
+        // ctrl-c only; add SIGTERM when a deployment actually sends it.
+        tokio::signal::ctrl_c().await.expect("ctrl-c handler");
+    })
+    .await
+    .expect("server error");
 }

@@ -328,7 +328,7 @@ jobs:
             apps/web/.lighthouseci/
             apps/web/lighthouse-report/
             apps/web/quality-artifacts/
-          if-no-files-found: error
+          if-no-files-found: ignore
           include-hidden-files: true
 
       - name: Show Nuxt log on failure

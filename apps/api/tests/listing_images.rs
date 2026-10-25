@@ -130,7 +130,8 @@ async fn upload(
     let mut body = Vec::new();
     body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
     body.extend_from_slice(
-        format!("Content-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\n").as_bytes(),
+        format!("Content-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\n")
+            .as_bytes(),
     );
     body.extend_from_slice(format!("Content-Type: {content_type}\r\n\r\n").as_bytes());
     body.extend_from_slice(bytes);
@@ -138,12 +139,18 @@ async fn upload(
     let mut builder = Request::builder()
         .method(Method::POST)
         .uri(format!("/api/v1/listings/{public_id}/images"))
-        .header("content-type", format!("multipart/form-data; boundary={boundary}"))
+        .header(
+            "content-type",
+            format!("multipart/form-data; boundary={boundary}"),
+        )
         .header("cookie", cookie);
     if let Some(t) = csrf {
         builder = builder.header("x-csrf-token", t);
     }
-    let resp = app.oneshot(builder.body(Body::from(body)).unwrap()).await.unwrap();
+    let resp = app
+        .oneshot(builder.body(Body::from(body)).unwrap())
+        .await
+        .unwrap();
     let status = resp.status();
     let bytes = BodyExt::collect(resp.into_body()).await.unwrap().to_bytes();
     (status, serde_json::from_slice(&bytes).expect("JSON body"))
@@ -176,7 +183,11 @@ async fn get_raw(app: axum::Router, path: &str) -> (StatusCode, Vec<u8>, Option<
         .get("content-type")
         .and_then(|v| v.to_str().ok())
         .map(str::to_string);
-    let bytes = BodyExt::collect(resp.into_body()).await.unwrap().to_bytes().to_vec();
+    let bytes = BodyExt::collect(resp.into_body())
+        .await
+        .unwrap()
+        .to_bytes()
+        .to_vec();
     (status, bytes, content_type)
 }
 
@@ -193,7 +204,16 @@ async fn uploaded_file_is_served_back_with_bytes() {
     let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
     let public_id = create_draft(&app, &cookie, &csrf).await;
 
-    let (status, body) = upload(app.clone(), &public_id, &cookie, Some(&csrf), "a.png", "image/png", &png_bytes()).await;
+    let (status, body) = upload(
+        app.clone(),
+        &public_id,
+        &cookie,
+        Some(&csrf),
+        "a.png",
+        "image/png",
+        &png_bytes(),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     let key = body["storage_key"].as_str().expect("storage_key");
     assert_eq!(body["url"], serde_json::json!(format!("/media/{key}")));
@@ -202,8 +222,16 @@ async fn uploaded_file_is_served_back_with_bytes() {
         "file must exist under MEDIA_DIR: {key}"
     );
     // WebP rides the same path (third accepted signature).
-    let (status, body) =
-        upload(app.clone(), &public_id, &cookie, Some(&csrf), "a.webp", "image/webp", &webp_bytes()).await;
+    let (status, body) = upload(
+        app.clone(),
+        &public_id,
+        &cookie,
+        Some(&csrf),
+        "a.webp",
+        "image/webp",
+        &webp_bytes(),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert!(body["url"].as_str().unwrap().ends_with(".webp"));
 
@@ -245,8 +273,13 @@ async fn upload_rejects_exe_bytes_and_wrong_owner_and_active_listing() {
 
     // MZ bytes are not an image.
     let (status, body) = upload(
-        app.clone(), &public_id, &cookie, Some(&csrf),
-        "evil.exe", "application/octet-stream", b"MZ\x90\x00",
+        app.clone(),
+        &public_id,
+        &cookie,
+        Some(&csrf),
+        "evil.exe",
+        "application/octet-stream",
+        b"MZ\x90\x00",
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -254,8 +287,13 @@ async fn upload_rejects_exe_bytes_and_wrong_owner_and_active_listing() {
 
     // Another seller's listing → 403, no file written.
     let (status, body) = upload(
-        app.clone(), &public_id, &other_cookie, Some(&other_csrf),
-        "a.png", "image/png", &png_bytes(),
+        app.clone(),
+        &public_id,
+        &other_cookie,
+        Some(&other_csrf),
+        "a.png",
+        "image/png",
+        &png_bytes(),
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
@@ -267,7 +305,16 @@ async fn upload_rejects_exe_bytes_and_wrong_owner_and_active_listing() {
         .execute(&pool)
         .await
         .expect("activate");
-    let (status, _) = upload(app, &public_id, &cookie, Some(&csrf), "a.png", "image/png", &png_bytes()).await;
+    let (status, _) = upload(
+        app,
+        &public_id,
+        &cookie,
+        Some(&csrf),
+        "a.png",
+        "image/png",
+        &png_bytes(),
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -288,18 +335,45 @@ async fn upload_enforces_size_and_count_limits() {
     let public_id = create_draft(&app, &cookie, &csrf).await;
 
     // 17 bytes > 16-byte limit → 400.
-    let big = vec![0x89, b'P', b'N', b'G', 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-    let (status, _) = upload(app.clone(), &public_id, &cookie, Some(&csrf), "a.png", "image/png", &big).await;
+    let big = vec![
+        0x89, b'P', b'N', b'G', 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+    ];
+    let (status, _) = upload(
+        app.clone(),
+        &public_id,
+        &cookie,
+        Some(&csrf),
+        "a.png",
+        "image/png",
+        &big,
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
     // Two small uploads fill the quota; the third → 400.
     for name in ["one.png", "two.png"] {
-        let (status, _) =
-            upload(app.clone(), &public_id, &cookie, Some(&csrf), name, "image/png", &png_bytes()).await;
+        let (status, _) = upload(
+            app.clone(),
+            &public_id,
+            &cookie,
+            Some(&csrf),
+            name,
+            "image/png",
+            &png_bytes(),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
     }
-    let (status, body) =
-        upload(app, &public_id, &cookie, Some(&csrf), "three.png", "image/png", &png_bytes()).await;
+    let (status, body) = upload(
+        app,
+        &public_id,
+        &cookie,
+        Some(&csrf),
+        "three.png",
+        "image/png",
+        &png_bytes(),
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"]["code"], "validation_error");
     let _ = std::fs::remove_dir_all(dir);
@@ -318,11 +392,27 @@ async fn reorder_with_foreign_id_is_rejected_and_delete_removes_file() {
     let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
     let public_id = create_draft(&app, &cookie, &csrf).await;
 
-    let (_, first) =
-        upload(app.clone(), &public_id, &cookie, Some(&csrf), "one.png", "image/png", &png_bytes()).await;
+    let (_, first) = upload(
+        app.clone(),
+        &public_id,
+        &cookie,
+        Some(&csrf),
+        "one.png",
+        "image/png",
+        &png_bytes(),
+    )
+    .await;
     let id1: u64 = first["id"].as_u64().expect("image id");
-    let (_, second) =
-        upload(app.clone(), &public_id, &cookie, Some(&csrf), "two.jpg", "image/jpeg", &jpeg_bytes()).await;
+    let (_, second) = upload(
+        app.clone(),
+        &public_id,
+        &cookie,
+        Some(&csrf),
+        "two.jpg",
+        "image/jpeg",
+        &jpeg_bytes(),
+    )
+    .await;
     let id2: u64 = second["id"].as_u64().expect("image id");
 
     // Reorder with a foreign id mixed in → 400.
@@ -332,7 +422,9 @@ async fn reorder_with_foreign_id_is_rejected_and_delete_removes_file() {
         .header("content-type", "application/json")
         .header("cookie", &cookie)
         .header("x-csrf-token", &csrf)
-        .body(Body::from(serde_json::json!({ "image_ids": [id2, 999_999] }).to_string()))
+        .body(Body::from(
+            serde_json::json!({ "image_ids": [id2, 999_999] }).to_string(),
+        ))
         .unwrap();
     let resp = app.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
@@ -345,7 +437,9 @@ async fn reorder_with_foreign_id_is_rejected_and_delete_removes_file() {
         .header("content-type", "application/json")
         .header("cookie", &cookie)
         .header("x-csrf-token", &csrf)
-        .body(Body::from(serde_json::json!({ "image_ids": [id2, id1] }).to_string()))
+        .body(Body::from(
+            serde_json::json!({ "image_ids": [id2, id1] }).to_string(),
+        ))
         .unwrap();
     let resp = app.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
@@ -359,9 +453,6 @@ async fn reorder_with_foreign_id_is_rejected_and_delete_removes_file() {
         .unwrap();
     let resp = app.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    assert!(
-        !dir.join(&key2).exists(),
-        "delete must remove the file too"
-    );
+    assert!(!dir.join(&key2).exists(), "delete must remove the file too");
     let _ = std::fs::remove_dir_all(dir);
 }

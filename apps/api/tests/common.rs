@@ -14,7 +14,11 @@ pub fn db_name_from_url(url: &str) -> Option<&str> {
     let after_scheme = url.strip_prefix("mysql://")?;
     let path = after_scheme.split('/').nth(1)?; // skip "user:pass@host:port"
     let name = path.split(['?', '#']).next()?;
-    if name.is_empty() { None } else { Some(name) }
+    if name.is_empty() {
+        None
+    } else {
+        Some(name)
+    }
 }
 
 /// Destructive test setup is allowed only on a *_test database.

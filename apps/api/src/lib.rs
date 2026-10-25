@@ -1,12 +1,12 @@
 //! Library surface of the Shabdar API: the application itself. main.rs only
 //! wires the process; integration tests in tests/ import from here.
 
+pub mod admin;
 pub mod api_json;
-pub mod config;
 pub mod client_ip;
+pub mod config;
 pub mod csrf;
 pub mod db;
-pub mod admin;
 pub mod error;
 pub mod favorites;
 pub mod listing_images;

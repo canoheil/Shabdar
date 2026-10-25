@@ -39,10 +39,7 @@ async fn send(
 
 /// Collect a response body into parsed JSON.
 async fn json_body(resp: axum::response::Response) -> serde_json::Value {
-    let bytes = BodyExt::collect(resp.into_body())
-        .await
-        .unwrap()
-        .to_bytes();
+    let bytes = BodyExt::collect(resp.into_body()).await.unwrap().to_bytes();
     serde_json::from_slice(&bytes).expect("JSON body")
 }
 
@@ -64,7 +61,10 @@ fn assert_not_found_envelope(body: &serde_json::Value) {
         "`fields` must be absent on not_found: {body}"
     );
     let id = body["request_id"].as_str().expect("request_id is a string");
-    assert!(is_crockford_ulid(id), "request_id must be a 26-char ULID: {id}");
+    assert!(
+        is_crockford_ulid(id),
+        "request_id must be a 26-char ULID: {id}"
+    );
 }
 
 #[tokio::test]
@@ -102,5 +102,8 @@ async fn known_routes_still_answer_the_404_fallback_replaced_nothing() {
     let resp = send(app, Method::GET, "/api/v1/health", None).await;
     assert_eq!(resp.status(), StatusCode::OK);
     let body = json_body(resp).await;
-    assert_eq!(body, serde_json::json!({ "status": "ok", "database": "ok" }));
+    assert_eq!(
+        body,
+        serde_json::json!({ "status": "ok", "database": "ok" })
+    );
 }

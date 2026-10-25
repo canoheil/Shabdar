@@ -125,8 +125,8 @@ impl FromRequestParts<AppState> for CurrentUser {
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
         // Missing Cookie header or missing COOKIE_NAME entry → generic 401.
-        let token =
-            cookie_value(&parts.headers, &state.config.cookie_name).ok_or(ApiError::Unauthorized)?;
+        let token = cookie_value(&parts.headers, &state.config.cookie_name)
+            .ok_or(ApiError::Unauthorized)?;
         let token_hash = hash_token(&token);
         // One joined lookup (plan Task 1): session + user in a single query.
         let row = sqlx::query(
@@ -155,7 +155,9 @@ impl FromRequestParts<AppState> for CurrentUser {
             session_id: row.try_get("session_id").map_err(|_| ApiError::Internal)?,
             user_id: row.try_get("user_id").map_err(|_| ApiError::Internal)?,
             public_id: row.try_get("public_id").map_err(|_| ApiError::Internal)?,
-            display_name: row.try_get("display_name").map_err(|_| ApiError::Internal)?,
+            display_name: row
+                .try_get("display_name")
+                .map_err(|_| ApiError::Internal)?,
             is_admin: row.try_get("is_admin").map_err(|_| ApiError::Internal)?,
         })
     }

@@ -16,12 +16,16 @@ use axum::Json;
 #[derive(Debug)]
 pub enum ApiError {
     /// 400 with per-field detail, e.g. `{"phone": "required"}`.
-    Validation { fields: BTreeMap<String, String> },
+    Validation {
+        fields: BTreeMap<String, String>,
+    },
     InvalidPhone,
     InvalidPurpose,
     /// HTTP 429. `retry_after_secs` becomes the `Retry-After` header when
     /// known; both the resend cooldown and every Phase 5 abuse limit know it.
-    RateLimited { retry_after_secs: Option<u64> },
+    RateLimited {
+        retry_after_secs: Option<u64>,
+    },
     InvalidCode,
     ChallengeExpired,
     ChallengeLocked,
@@ -42,7 +46,9 @@ pub enum ApiError {
     /// 400 for a request body axum could not accept (Phase 5, `invalid_request`).
     /// `body` becomes `fields.body`: malformed_json, invalid_json,
     /// unsupported_content_type or unreadable_body.
-    InvalidRequest { body: &'static str },
+    InvalidRequest {
+        body: &'static str,
+    },
     /// 413 for a body past the extractor's length limit (Phase 5,
     /// `payload_too_large`).
     PayloadTooLarge,
@@ -183,11 +189,17 @@ mod tests {
     async fn status_and_code_match_contract_for_every_variant() {
         let cases: [(super::ApiError, StatusCode, &str); 16] = [
             (
-                super::ApiError::Validation { fields: fields(&[]) },
+                super::ApiError::Validation {
+                    fields: fields(&[]),
+                },
                 StatusCode::BAD_REQUEST,
                 "validation_error",
             ),
-            (super::ApiError::InvalidPhone, StatusCode::BAD_REQUEST, "invalid_phone"),
+            (
+                super::ApiError::InvalidPhone,
+                StatusCode::BAD_REQUEST,
+                "invalid_phone",
+            ),
             (
                 super::ApiError::InvalidPurpose,
                 StatusCode::BAD_REQUEST,
@@ -200,7 +212,11 @@ mod tests {
                 StatusCode::TOO_MANY_REQUESTS,
                 "rate_limited",
             ),
-            (super::ApiError::InvalidCode, StatusCode::UNAUTHORIZED, "invalid_code"),
+            (
+                super::ApiError::InvalidCode,
+                StatusCode::UNAUTHORIZED,
+                "invalid_code",
+            ),
             (
                 super::ApiError::ChallengeExpired,
                 StatusCode::UNAUTHORIZED,
@@ -211,14 +227,22 @@ mod tests {
                 StatusCode::UNAUTHORIZED,
                 "challenge_locked",
             ),
-            (super::ApiError::NoAccount, StatusCode::UNAUTHORIZED, "no_account"),
+            (
+                super::ApiError::NoAccount,
+                StatusCode::UNAUTHORIZED,
+                "no_account",
+            ),
             (
                 super::ApiError::Internal,
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internal_error",
             ),
             // Phase 2 additions (docs/PHASE2_PLAN.md "Error contract additions").
-            (super::ApiError::NotFound, StatusCode::NOT_FOUND, "not_found"),
+            (
+                super::ApiError::NotFound,
+                StatusCode::NOT_FOUND,
+                "not_found",
+            ),
             (
                 super::ApiError::Unauthorized,
                 StatusCode::UNAUTHORIZED,

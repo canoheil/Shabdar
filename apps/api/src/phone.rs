@@ -113,7 +113,10 @@ mod tests {
 
     #[test]
     fn rejects_too_short_number() {
-        assert_eq!(normalize_iranian_mobile("0912345"), Err(PhoneError::Invalid));
+        assert_eq!(
+            normalize_iranian_mobile("0912345"),
+            Err(PhoneError::Invalid)
+        );
     }
 
     #[test]

@@ -72,8 +72,7 @@ pub async fn queue(
     limit_raw: Option<&str>,
 ) -> Result<serde_json::Value, ApiError> {
     let limit = page_limit(limit_raw);
-    let anchor: Option<(chrono::DateTime<Utc>, u64)> =
-        cursor.map(decode_cursor).transpose()?;
+    let anchor: Option<(chrono::DateTime<Utc>, u64)> = cursor.map(decode_cursor).transpose()?;
     let mut sql = "SELECT l.*, c.name_fa AS city, cat.name_fa AS category, \
          u.public_id AS seller_public_id, u.display_name AS seller_name \
          FROM listings l JOIN cities c ON c.id = l.city_id \
@@ -94,8 +93,9 @@ pub async fn queue(
     let mut data = Vec::with_capacity(rows.len().min(limit));
     let mut last: Option<(chrono::DateTime<Utc>, u64)> = None;
     for row in rows.iter().take(limit) {
-        let submitted_at: Option<chrono::DateTime<Utc>> =
-            row.try_get("submitted_at").map_err(|_| ApiError::Internal)?;
+        let submitted_at: Option<chrono::DateTime<Utc>> = row
+            .try_get("submitted_at")
+            .map_err(|_| ApiError::Internal)?;
         let id: u64 = row.try_get("id").map_err(|_| ApiError::Internal)?;
         last = submitted_at.map(|ts| (ts, id));
         data.push(serde_json::json!({
@@ -114,7 +114,11 @@ pub async fn queue(
         }));
     }
     let has_more = rows.len() > limit;
-    let next_cursor = if has_more { last.map(|(ts, id)| encode_cursor(&ts, id)) } else { None };
+    let next_cursor = if has_more {
+        last.map(|(ts, id)| encode_cursor(&ts, id))
+    } else {
+        None
+    };
     Ok(serde_json::json!({
         "data": data,
         "page": { "next_cursor": next_cursor, "has_more": has_more },
@@ -124,7 +128,10 @@ pub async fn queue(
 /// GET /admin/listings/{public_id} — full listing with seller info (phone
 /// included: admin eyes only) and report history (empty until the reports
 /// phase owns that table).
-pub async fn admin_detail(pool: &MySqlPool, public_id: &str) -> Result<serde_json::Value, ApiError> {
+pub async fn admin_detail(
+    pool: &MySqlPool,
+    public_id: &str,
+) -> Result<serde_json::Value, ApiError> {
     let row = sqlx::query(
         "SELECT l.*, c.name_fa AS city, p.name_fa AS province, cat.name_fa AS category, \
          u.public_id AS seller_public_id, u.display_name AS seller_name, \
@@ -140,11 +147,15 @@ pub async fn admin_detail(pool: &MySqlPool, public_id: &str) -> Result<serde_jso
     .map_err(|_| ApiError::Internal)?
     .ok_or(ApiError::NotFound)?;
     let mut listing = serde_json::to_value(listing_out(&row)?).map_err(|_| ApiError::Internal)?;
-    listing["city"] = serde_json::json!(row.try_get::<String, _>("city").map_err(|_| ApiError::Internal)?);
-    listing["province"] =
-        serde_json::json!(row.try_get::<String, _>("province").map_err(|_| ApiError::Internal)?);
-    listing["category"] =
-        serde_json::json!(row.try_get::<String, _>("category").map_err(|_| ApiError::Internal)?);
+    listing["city"] = serde_json::json!(row
+        .try_get::<String, _>("city")
+        .map_err(|_| ApiError::Internal)?);
+    listing["province"] = serde_json::json!(row
+        .try_get::<String, _>("province")
+        .map_err(|_| ApiError::Internal)?);
+    listing["category"] = serde_json::json!(row
+        .try_get::<String, _>("category")
+        .map_err(|_| ApiError::Internal)?);
     listing["seller"] = serde_json::json!({
         "public_id": row.try_get::<String, _>("seller_public_id").map_err(|_| ApiError::Internal)?,
         "display_name": row.try_get::<Option<String>, _>("seller_name").map_err(|_| ApiError::Internal)?,

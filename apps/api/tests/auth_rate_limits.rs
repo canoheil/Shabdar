@@ -19,7 +19,9 @@ static DB_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 async fn prepare(pool: &sqlx::MySqlPool) {
     static INIT: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
     INIT.get_or_init(|| async {
-        shabdar_api::db::run_migrations(pool).await.expect("migrations");
+        shabdar_api::db::run_migrations(pool)
+            .await
+            .expect("migrations");
     })
     .await;
     sqlx::query("DELETE FROM otp_challenges")
@@ -53,10 +55,7 @@ async fn send(app: axum::Router, req: Request<Body>) -> (StatusCode, HeaderMap, 
     let resp = app.oneshot(req).await.unwrap();
     let status = resp.status();
     let headers = resp.headers().clone();
-    let bytes = BodyExt::collect(resp.into_body())
-        .await
-        .unwrap()
-        .to_bytes();
+    let bytes = BodyExt::collect(resp.into_body()).await.unwrap().to_bytes();
     let body = if bytes.is_empty() {
         serde_json::Value::Null
     } else {
@@ -71,12 +70,7 @@ fn code(body: &serde_json::Value) -> &str {
 
 /// The `Retry-After` value as seconds, if the header exists.
 fn retry_after(headers: &HeaderMap) -> Option<u64> {
-    headers
-        .get("retry-after")?
-        .to_str()
-        .ok()?
-        .parse()
-        .ok()
+    headers.get("retry-after")?.to_str().ok()?.parse().ok()
 }
 
 fn otp_req(phone: &str) -> serde_json::Value {
@@ -185,7 +179,11 @@ async fn otp_request_ip_limit_is_per_ip() {
         ),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "another ip has its own window: {body}");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "another ip has its own window: {body}"
+    );
 }
 
 #[tokio::test]
@@ -207,23 +205,25 @@ async fn otp_request_phone_daily_cap_is_429() {
 
     for i in 0..2 {
         let ip = format!("203.0.113.{}", 20 + i);
-        let (status, _, body) =
-            send(app.clone(), request("/api/v1/auth/otp/request", &otp_req(phone), &ip)).await;
+        let (status, _, body) = send(
+            app.clone(),
+            request("/api/v1/auth/otp/request", &otp_req(phone), &ip),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "request {i}: {body}");
     }
 
     let (status, headers, body) = send(
         app,
-        request(
-            "/api/v1/auth/otp/request",
-            &otp_req(phone),
-            "203.0.113.29",
-        ),
+        request("/api/v1/auth/otp/request", &otp_req(phone), "203.0.113.29"),
     )
     .await;
     assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
     assert_eq!(code(&body), "rate_limited");
-    assert!(retry_after(&headers).is_some(), "phone cap explains when to retry");
+    assert!(
+        retry_after(&headers).is_some(),
+        "phone cap explains when to retry"
+    );
 }
 
 #[tokio::test]
@@ -245,8 +245,11 @@ async fn otp_request_global_sms_cap_is_429() {
     for i in 0..2 {
         let phone = format!("0912200{i:04}");
         let ip = format!("203.0.113.{}", 40 + i);
-        let (status, _, body) =
-            send(app.clone(), request("/api/v1/auth/otp/request", &otp_req(&phone), &ip)).await;
+        let (status, _, body) = send(
+            app.clone(),
+            request("/api/v1/auth/otp/request", &otp_req(&phone), &ip),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
     }
 
@@ -316,7 +319,8 @@ async fn otp_verify_per_ip_limit_is_429() {
         cfg.otp_verify_ip_window_secs = 600;
     });
     let app = common::spawn_app(config).await;
-    let bogus = serde_json::json!({ "challenge_id": "01HN00000000000000000000AA", "code": "123456" });
+    let bogus =
+        serde_json::json!({ "challenge_id": "01HN00000000000000000000AA", "code": "123456" });
 
     for _ in 0..2 {
         let (status, _, _) = send(
@@ -366,8 +370,11 @@ async fn otp_request_without_trust_proxy_ignores_forwarded_header() {
     for i in 0..2 {
         let phone = format!("0912400{i:04}");
         let ip = format!("198.51.100.{i}");
-        let (status, _, body) =
-            send(app.clone(), request("/api/v1/auth/otp/request", &otp_req(&phone), &ip)).await;
+        let (status, _, body) = send(
+            app.clone(),
+            request("/api/v1/auth/otp/request", &otp_req(&phone), &ip),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
     }
     let (status, _, body) = send(
@@ -405,7 +412,11 @@ async fn malformed_json_returns_the_envelope() {
     assert_eq!(code(&body), "invalid_request");
     assert_eq!(body["error"]["fields"]["body"], "malformed_json");
     let request_id = body["request_id"].as_str().expect("request_id");
-    assert_eq!(request_id.len(), 26, "request_id must be a ULID: {request_id}");
+    assert_eq!(
+        request_id.len(),
+        26,
+        "request_id must be a ULID: {request_id}"
+    );
     assert!(
         body["error"]["message"]
             .as_str()

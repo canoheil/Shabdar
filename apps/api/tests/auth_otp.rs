@@ -61,10 +61,7 @@ async fn post_json(
 
 /// Collect a response body into parsed JSON.
 async fn json_body(resp: axum::response::Response) -> serde_json::Value {
-    let bytes = BodyExt::collect(resp.into_body())
-        .await
-        .unwrap()
-        .to_bytes();
+    let bytes = BodyExt::collect(resp.into_body()).await.unwrap().to_bytes();
     serde_json::from_slice(&bytes).expect("JSON body")
 }
 
@@ -113,7 +110,10 @@ async fn request_valid_returns_the_exact_response_shape() {
         ["challenge_id", "expires_in_seconds", "resend_after_seconds"]
     );
     let challenge_id = body["challenge_id"].as_str().expect("challenge_id");
-    assert!(is_crockford_ulid(challenge_id), "not a ULID: {challenge_id}");
+    assert!(
+        is_crockford_ulid(challenge_id),
+        "not a ULID: {challenge_id}"
+    );
     assert_eq!(body["expires_in_seconds"], 120);
     assert_eq!(body["resend_after_seconds"], 60);
 }
@@ -225,15 +225,10 @@ async fn service_stores_the_hmac_of_the_code_never_the_plaintext() {
     // (plan: "tests call generate_code() themselves and pass the plaintext
     // in — real code paths, no mocks").
     let code = shabdar_api::otp::generate_code();
-    let created = shabdar_api::otp_service::create_challenge(
-        &pool,
-        &cfg,
-        "+989123456789",
-        "register",
-        &code,
-    )
-    .await
-    .expect("create challenge");
+    let created =
+        shabdar_api::otp_service::create_challenge(&pool, &cfg, "+989123456789", "register", &code)
+            .await
+            .expect("create challenge");
 
     let row = sqlx::query("SELECT code_hash FROM otp_challenges WHERE public_id = ?")
         .bind(&created.public_id)
@@ -302,7 +297,12 @@ async fn verify_register_happy_path_creates_user_and_session() {
     let app = common::spawn_app(cfg.clone()).await;
     let (challenge_id, code) = challenge_with_code(&pool, &cfg, "+989123456789", "register").await;
 
-    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&challenge_id, &code)).await;
+    let resp = post_json(
+        app,
+        "/api/v1/auth/otp/verify",
+        verify_body(&challenge_id, &code),
+    )
+    .await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     // Set-Cookie: the exact approved flags; the token is 64 hex chars.
@@ -329,18 +329,19 @@ async fn verify_register_happy_path_creates_user_and_session() {
     let body = json_body(resp).await;
     assert_eq!(body["is_new_user"], true);
     let user = &body["user"];
-    assert!(is_crockford_ulid(user["public_id"].as_str().expect("public_id")));
+    assert!(is_crockford_ulid(
+        user["public_id"].as_str().expect("public_id")
+    ));
     assert!(user["display_name"].is_null());
     assert_eq!(user["is_admin"], false);
 
     // users row: normalized phone, active, no display name.
-    let row = sqlx::query(
-        "SELECT id, phone_e164, display_name, status FROM users WHERE phone_e164 = ?",
-    )
-    .bind("+989123456789")
-    .fetch_one(&pool)
-    .await
-    .expect("user row");
+    let row =
+        sqlx::query("SELECT id, phone_e164, display_name, status FROM users WHERE phone_e164 = ?")
+            .bind("+989123456789")
+            .fetch_one(&pool)
+            .await
+            .expect("user row");
     let user_id: u64 = row.try_get("id").expect("id");
     assert_eq!(
         row.try_get::<String, _>("phone_e164").expect("phone"),
@@ -350,7 +351,10 @@ async fn verify_register_happy_path_creates_user_and_session() {
         .try_get::<Option<String>, _>("display_name")
         .expect("display_name")
         .is_none());
-    assert_eq!(row.try_get::<String, _>("status").expect("status"), "active");
+    assert_eq!(
+        row.try_get::<String, _>("status").expect("status"),
+        "active"
+    );
 
     // sessions row: only the token's hash, ~30-day expiry, linked to the user.
     let row = sqlx::query("SELECT token_hash, expires_at, user_id FROM sessions")
@@ -361,8 +365,7 @@ async fn verify_register_happy_path_creates_user_and_session() {
     assert_eq!(stored_hash.as_slice(), sha256(token.as_bytes()).as_slice());
     assert_ne!(stored_hash.as_slice(), token.as_bytes());
     assert_eq!(row.try_get::<u64, _>("user_id").expect("user_id"), user_id);
-    let expires_at: chrono::DateTime<chrono::Utc> =
-        row.try_get("expires_at").expect("expires_at");
+    let expires_at: chrono::DateTime<chrono::Utc> = row.try_get("expires_at").expect("expires_at");
     let expected = chrono::Utc::now() + chrono::Duration::seconds(cfg.session_ttl_secs as i64);
     assert!(
         (expires_at - expected).num_seconds().abs() < 60,
@@ -389,7 +392,12 @@ async fn verify_replayed_code_is_401_invalid_code() {
     .await;
     assert_eq!(first.status(), StatusCode::OK);
 
-    let replay = post_json(app, "/api/v1/auth/otp/verify", verify_body(&challenge_id, &code)).await;
+    let replay = post_json(
+        app,
+        "/api/v1/auth/otp/verify",
+        verify_body(&challenge_id, &code),
+    )
+    .await;
     assert_eq!(replay.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(error_code(&json_body(replay).await), "invalid_code");
 }
@@ -406,7 +414,12 @@ async fn verify_wrong_code_is_401_and_increments_attempt_count() {
     let (challenge_id, code) = challenge_with_code(&pool, &cfg, "+989123456789", "register").await;
     let wrong = wrong_code(&code);
 
-    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&challenge_id, &wrong)).await;
+    let resp = post_json(
+        app,
+        "/api/v1/auth/otp/verify",
+        verify_body(&challenge_id, &wrong),
+    )
+    .await;
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(error_code(&json_body(resp).await), "invalid_code");
 
@@ -450,7 +463,12 @@ async fn verify_locks_after_max_wrong_attempts() {
     }
 
     // Even the correct code is now locked out.
-    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&challenge_id, &code)).await;
+    let resp = post_json(
+        app,
+        "/api/v1/auth/otp/verify",
+        verify_body(&challenge_id, &code),
+    )
+    .await;
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(error_code(&json_body(resp).await), "challenge_locked");
 }
@@ -474,7 +492,12 @@ async fn verify_expired_challenge_is_401_challenge_expired() {
         .await
         .expect("force expiry");
 
-    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&challenge_id, &code)).await;
+    let resp = post_json(
+        app,
+        "/api/v1/auth/otp/verify",
+        verify_body(&challenge_id, &code),
+    )
+    .await;
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(error_code(&json_body(resp).await), "challenge_expired");
 }
@@ -489,7 +512,12 @@ async fn verify_unknown_challenge_id_is_401_invalid_code() {
     let app = common::spawn_app(common::test_config()).await;
 
     let unknown = ulid::Ulid::new().to_string();
-    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&unknown, "123456")).await;
+    let resp = post_json(
+        app,
+        "/api/v1/auth/otp/verify",
+        verify_body(&unknown, "123456"),
+    )
+    .await;
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(error_code(&json_body(resp).await), "invalid_code");
 }
@@ -524,7 +552,12 @@ async fn verify_register_on_existing_phone_is_not_a_new_user() {
 
     let (second_id, second_code) =
         challenge_with_code(&pool, &cfg, "+989123456789", "register").await;
-    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&second_id, &second_code)).await;
+    let resp = post_json(
+        app,
+        "/api/v1/auth/otp/verify",
+        verify_body(&second_id, &second_code),
+    )
+    .await;
     assert_eq!(resp.status(), StatusCode::OK);
     let body = json_body(resp).await;
     assert_eq!(body["is_new_user"], false);
@@ -554,7 +587,12 @@ async fn verify_login_without_account_is_401_no_account() {
     let app = common::spawn_app(cfg.clone()).await;
     let (challenge_id, code) = challenge_with_code(&pool, &cfg, "+989123456789", "login").await;
 
-    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&challenge_id, &code)).await;
+    let resp = post_json(
+        app,
+        "/api/v1/auth/otp/verify",
+        verify_body(&challenge_id, &code),
+    )
+    .await;
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(error_code(&json_body(resp).await), "no_account");
 
@@ -580,10 +618,14 @@ async fn verify_persian_digit_phone_creates_the_e164_user() {
     reset_db(&pool).await;
     let cfg = common::test_config();
     let app = common::spawn_app(cfg.clone()).await;
-    let (challenge_id, code) =
-        challenge_with_code(&pool, &cfg, "۰۹۱۲۳۴۵۶۷۸۹", "register").await;
+    let (challenge_id, code) = challenge_with_code(&pool, &cfg, "۰۹۱۲۳۴۵۶۷۸۹", "register").await;
 
-    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&challenge_id, &code)).await;
+    let resp = post_json(
+        app,
+        "/api/v1/auth/otp/verify",
+        verify_body(&challenge_id, &code),
+    )
+    .await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let row = sqlx::query("SELECT phone_e164 FROM users")

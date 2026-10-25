@@ -55,7 +55,8 @@ pub fn client_ip(trust_proxy: bool, peer: Option<SocketAddr>, headers: &HeaderMa
 /// ignored (never a free-form string in a limiter key).
 fn forwarded_ip(headers: &HeaderMap) -> Option<IpAddr> {
     let raw = headers.get("x-forwarded-for")?.to_str().ok()?;
-    raw.rsplit(',').find_map(|part| part.trim().parse::<IpAddr>().ok())
+    raw.rsplit(',')
+        .find_map(|part| part.trim().parse::<IpAddr>().ok())
 }
 
 #[cfg(test)]
@@ -76,7 +77,10 @@ mod tests {
     #[test]
     fn ignores_forwarded_header_without_trust() {
         let ip = client_ip(false, peer("198.51.100.7"), &headers_with("203.0.113.9"));
-        assert_eq!(ip, "198.51.100.7", "peer address must win when not trusting the proxy");
+        assert_eq!(
+            ip, "198.51.100.7",
+            "peer address must win when not trusting the proxy"
+        );
     }
 
     #[test]
@@ -100,9 +104,10 @@ mod tests {
         // The extractor is exercised end-to-end through the router in
         // tests/auth_rate_limits.rs; here we pin the Option mapping only.
         let mut parts = axum::http::Request::new(()).into_parts().0;
-        parts
-            .extensions
-            .insert(ConnectInfo(SocketAddr::new("203.0.113.5".parse().unwrap(), 9000)));
+        parts.extensions.insert(ConnectInfo(SocketAddr::new(
+            "203.0.113.5".parse().unwrap(),
+            9000,
+        )));
         let peer = parts
             .extensions
             .get::<ConnectInfo<SocketAddr>>()

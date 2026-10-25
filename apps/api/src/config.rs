@@ -177,7 +177,10 @@ mod tests {
     fn locked_required_env() -> (MutexGuard<'static, ()>, EnvGuard) {
         let lock = ENV_MUTEX.lock().unwrap();
         let env = EnvGuard::cleared();
-        env.set("DATABASE_URL", "mysql://user:pass@127.0.0.1:3306/shabdar_test");
+        env.set(
+            "DATABASE_URL",
+            "mysql://user:pass@127.0.0.1:3306/shabdar_test",
+        );
         env.set("OTP_PEPPER", "test-pepper");
         (lock, env)
     }
@@ -277,7 +280,10 @@ mod tests {
     fn missing_otp_pepper_errors_and_names_the_variable() {
         let _lock = ENV_MUTEX.lock().unwrap();
         let env = EnvGuard::cleared();
-        env.set("DATABASE_URL", "mysql://user:pass@127.0.0.1:3306/shabdar_test");
+        env.set(
+            "DATABASE_URL",
+            "mysql://user:pass@127.0.0.1:3306/shabdar_test",
+        );
         match super::Config::from_env() {
             Ok(_) => panic!("OTP_PEPPER missing must be an error"),
             Err(e) => assert!(
