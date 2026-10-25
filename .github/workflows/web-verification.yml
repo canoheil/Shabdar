@@ -191,11 +191,14 @@ jobs:
         run: npm run test:client-budget
 
       - name: Verify and publish performance report summary
+        if: always() && hashFiles('apps/web/lighthouse-report/manifest.json') != ''
         working-directory: apps/web
         run: |
           node --input-type=module <<'EOF'
-          import { readFileSync } from 'node:fs'
-          const client = JSON.parse(readFileSync('test-results/client-js.json', 'utf8'))
+          import { existsSync, readFileSync } from 'node:fs'
+          const client = existsSync('test-results/client-js.json')
+            ? JSON.parse(readFileSync('test-results/client-js.json', 'utf8'))
+            : { baseURL: process.env.E2E_BASE_URL }
           const fixtures = JSON.parse(readFileSync('tests/e2e/.artifacts/fixtures.json', 'utf8'))
           const detailPath = new URL(fixtures.detailPath, client.baseURL).pathname
           const manifest = JSON.parse(readFileSync('lighthouse-report/manifest.json', 'utf8'))
@@ -331,21 +334,23 @@ jobs:
           }
           publish('Home network diagnostics', networkDiagnose(homeEntry))
           publish('Detail network diagnostics', networkDiagnose(detailEntry))
-          const clientSummary = {
-            schemaVersion: client.schemaVersion,
-            measuredAt: client.measuredAt,
-            measuredHead: client.measuredHead,
-            productBaseline: client.productBaseline,
-            baseURL: client.baseURL,
-            node: client.node,
-            nuxt: client.nuxt,
-            playwright: client.playwright,
-            gzipLevel: client.gzipLevel,
-            home: { totalGzip: client.home.totalGzip, scriptCount: client.home.scripts.length },
-            detail: { totalGzip: client.detail.totalGzip, scriptCount: client.detail.scripts.length },
-            fonts: client.fonts,
+          if (client.home && client.detail) {
+            const clientSummary = {
+              schemaVersion: client.schemaVersion,
+              measuredAt: client.measuredAt,
+              measuredHead: client.measuredHead,
+              productBaseline: client.productBaseline,
+              baseURL: client.baseURL,
+              node: client.node,
+              nuxt: client.nuxt,
+              playwright: client.playwright,
+              gzipLevel: client.gzipLevel,
+              home: { totalGzip: client.home.totalGzip, scriptCount: client.home.scripts.length },
+              detail: { totalGzip: client.detail.totalGzip, scriptCount: client.detail.scripts.length },
+              fonts: client.fonts,
+            }
+            publish('client', clientSummary)
           }
-          publish('client', clientSummary)
           publish('Lighthouse', lighthouse)
           EOF
 
