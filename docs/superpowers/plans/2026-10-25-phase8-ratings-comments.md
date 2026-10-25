@@ -143,11 +143,13 @@ GREEN evidence: run `40229899339` passed all nine comment tests (including equal
 
 **Files:** listings detail mapper/routes, ratings/favorites/detail integration tests.
 
-- [ ] **Step 1: Write privacy RED tests**
+- [x] **Step 1: Write privacy RED tests**
 
 Anonymous/stale detail omits `my_stars` and `favorited`; valid viewer receives their own values plus `private, no-store`; another viewer's stars never leak. Public comment pages remain viewer-independent and contain no `can_delete` field.
 
-- [ ] **Step 2: Implement one shared viewer read**
+RED evidence: run `40230394088` executed nine rating tests; eight passed and only the new privacy test failed because valid-viewer Detail returned `my_stars: null` instead of that viewer's 4 stars. Anonymous/stale omission assertions and all nine viewer-independent comment tests passed in the same run.
+
+- [x] **Step 2: Implement one shared viewer read**
 
 Extend the existing valid-viewer detail lookup to load favorite and stars efficiently. Do not add another browser endpoint or include own state in anonymous SSR.
 

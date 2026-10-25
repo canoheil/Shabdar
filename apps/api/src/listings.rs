@@ -1012,17 +1012,23 @@ pub async fn detail(
         return Err(ApiError::NotFound);
     }
     let id: u64 = row.try_get("id").map_err(|_| ApiError::Internal)?;
-    let favorited = match viewer_user_id {
+    let viewer_state = match viewer_user_id {
         Some(viewer_user_id) => {
-            let exists: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM favorites WHERE user_id = ? AND listing_id = ?)",
+            let state = sqlx::query(
+                "SELECT \
+                 EXISTS(SELECT 1 FROM favorites WHERE user_id = ? AND listing_id = ?) AS favorited, \
+                 (SELECT stars FROM listing_ratings WHERE user_id = ? AND listing_id = ?) AS my_stars",
             )
+            .bind(viewer_user_id)
+            .bind(id)
             .bind(viewer_user_id)
             .bind(id)
             .fetch_one(pool)
             .await
             .map_err(|_| ApiError::Internal)?;
-            Some(exists)
+            let favorited: bool = state.try_get("favorited").map_err(|_| ApiError::Internal)?;
+            let my_stars: Option<u8> = state.try_get("my_stars").map_err(|_| ApiError::Internal)?;
+            Some((favorited, my_stars))
         }
         None => None,
     };
@@ -1068,8 +1074,9 @@ pub async fn detail(
         "comment_count": row.try_get::<u32, _>("comment_count").map_err(|_| ApiError::Internal)?,
         "published_at": published_at.to_rfc3339(),
     });
-    if let Some(favorited) = favorited {
+    if let Some((favorited, my_stars)) = viewer_state {
         body["favorited"] = serde_json::json!(favorited);
+        body["my_stars"] = serde_json::json!(my_stars);
     }
     Ok(body)
 }
