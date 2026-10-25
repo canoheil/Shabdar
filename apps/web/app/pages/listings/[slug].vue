@@ -62,13 +62,27 @@
         <h2 id="detail-description-title">توضیحات</h2>
         <p class="detail__description">{{ listing.description }}</p>
       </section>
+      <ListingRating
+        :slug="listing.slug"
+        :average="listing.rating_average"
+        :count="listing.rating_count"
+        :my-stars="myStars"
+        :auth-status="authStatus"
+        :owner="me?.public_id === listing.seller.public_id"
+        :viewer-pending="viewerPending"
+        :viewer-error="viewerReadFailed"
+        :auth-expired="favoriteAuthExpired"
+        @updated="applyRatingState"
+        @retry-viewer="loadFavoriteState"
+        @expired="favoriteAuthExpired = true"
+      />
     </article>
     <AppAlert v-else tone="error">خطایی رخ داد؛ دوباره تلاش کنید.</AppAlert>
   </section>
 </template>
 
 <script setup lang="ts">
-import type { ApiListingDetail } from '~/types'
+import type { ApiListingDetail, ApiRatingState } from '~/types'
 
 const route = useRoute()
 const slug = route.params.slug as string
@@ -97,6 +111,9 @@ const missing = computed(() => error.value?.statusCode === 404)
 const saveLabel = 'ذخیره در علاقه‌مندی‌ها'
 const removeLabel = 'حذف از علاقه‌مندی‌ها'
 const favorited = ref<boolean>()
+const myStars = ref<number | null>()
+const viewerPending = ref(false)
+const viewerReadFailed = ref(false)
 const favoritePending = ref(false)
 const favoriteAuthExpired = ref(false)
 const favoriteError = ref('')
@@ -115,14 +132,18 @@ function requestStatus(error: unknown): number | undefined {
 }
 
 async function loadFavoriteState() {
-  if (favoritePending.value || authStatus.value !== 'authenticated' || !me.value || !listing.value) return
-  favoritePending.value = true
+  if (viewerPending.value || authStatus.value !== 'authenticated' || !me.value || !listing.value) return
+  viewerPending.value = true
+  viewerReadFailed.value = false
   favoriteError.value = ''
   favoriteNotice.value = ''
   try {
     const detail = await $fetch<ApiListingDetail>(detailUrl, { cache: 'no-store' })
-    if (typeof detail.favorited === 'boolean') {
+    const validStars = detail.my_stars === null
+      || (Number.isInteger(detail.my_stars) && (detail.my_stars ?? 0) >= 1 && (detail.my_stars ?? 0) <= 5)
+    if (typeof detail.favorited === 'boolean' && validStars) {
       favorited.value = detail.favorited
+      myStars.value = detail.my_stars ?? null
       favoriteAuthExpired.value = false
     } else {
       favoriteAuthExpired.value = true
@@ -132,10 +153,11 @@ async function loadFavoriteState() {
       favoriteAuthExpired.value = true
       favoriteNotice.value = 'نشست شما منقضی شده است؛ دوباره وارد شوید.'
     } else {
+      viewerReadFailed.value = true
       favoriteError.value = 'خواندن وضعیت علاقه‌مندی ممکن نشد؛ دوباره تلاش کنید.'
     }
   } finally {
-    favoritePending.value = false
+    viewerPending.value = false
   }
 }
 
@@ -170,6 +192,13 @@ async function toggleFavorite() {
 async function retryFavorite() {
   if (favorited.value === undefined) await loadFavoriteState()
   else await toggleFavorite()
+}
+
+function applyRatingState(state: ApiRatingState): void {
+  if (!listing.value) return
+  listing.value.rating_average = state.rating_average
+  listing.value.rating_count = state.rating_count
+  myStars.value = state.my_stars
 }
 
 onMounted(() => {
@@ -216,7 +245,18 @@ useHead(() => ({
               priceCurrency: 'IRT',
               availability: 'https://schema.org/InStock',
             },
-          }),
+            ...(listing.value.rating_count >= 3
+              ? {
+                  aggregateRating: {
+                    '@type': 'AggregateRating',
+                    ratingValue: listing.value.rating_average,
+                    ratingCount: listing.value.rating_count,
+                    bestRating: 5,
+                    worstRating: 1,
+                  },
+                }
+              : {}),
+          }).replace(/</g, '\\u003c'),
         },
       ]
     : [],

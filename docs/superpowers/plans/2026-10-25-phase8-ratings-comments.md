@@ -167,11 +167,13 @@ GREEN evidence: run `40230631445` passed the complete API and web workflow at `a
 
 **Files:** Detail page, types/format helper, engagement/detail browser tests.
 
-- [ ] **Step 1: Write browser RED coverage**
+- [x] **Step 1: Write browser RED coverage**
 
 Prove public SSR average/empty state, no own-state before hydration, login path, five keyboard controls, create/update/delete, pending announcements, self-rating exclusion, 401/failure retry, and no optimistic update. Assert JSON-LD absence at 0–2 and exact presence at 3.
 
-- [ ] **Step 2: Implement rating summary and hydrated controls**
+RED evidence: run `40231234357` passed all 57 other browser tests, including popular sort driven by real rating mutations, and failed only the four new rating UI/JSON-LD tests: missing AggregateRating, missing keyboard controls, missing retryable controls, and missing seller exclusion.
+
+- [x] **Step 2: Implement rating summary and hydrated controls**
 
 Reuse the existing private Detail request for favorite + stars. Use labelled native controls, confirmed responses only, local summary updates, and existing design tokens/RTL/reduced motion. Add `aggregateRating` only at count ≥3.
 
