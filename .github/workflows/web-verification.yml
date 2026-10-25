@@ -166,7 +166,21 @@ jobs:
         working-directory: apps/web
         run: |
           export CHROME_PATH="$(node --input-type=module -e "import { chromium } from '@playwright/test'; process.stdout.write(chromium.executablePath())")"
-          npm run test:lighthouse
+          set +e
+          npm run test:lighthouse > /tmp/shabdar-lighthouse.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            python - <<'PY'
+          import base64
+          from pathlib import Path
+
+          payload = Path('/tmp/shabdar-lighthouse.log').read_bytes()[-16000:]
+          encoded = base64.b64encode(payload).decode()
+          for offset in range(0, len(encoded), 3500):
+              print(f'::error::LIGHTHOUSE_LOG_BASE64={encoded[offset:offset + 3500]}')
+          PY
+          fi
+          exit "$status"
 
       - name: Measure production route client JS after the final Playwright fixture reset
         working-directory: apps/web
