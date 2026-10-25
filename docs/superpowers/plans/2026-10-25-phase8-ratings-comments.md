@@ -125,15 +125,17 @@ Use default/cap limits, malformed cursors, equal timestamps, and deletion of the
 
 RED evidence for Steps 1–2: run `40229627813` passed compile, fmt, and Clippy, then executed all nine comment tests on MariaDB: 0 passed / 9 failed. Failures were the expected missing-route 404s (including expected 200/400/401/410 responses), with no skipped DB evidence. The cursor cases were present in that run.
 
-- [ ] **Step 3: Implement comment service and routes**
+- [x] **Step 3: Implement comment service and routes**
 
 Use ULID public IDs, trimmed body, listing lock, visible-count delta, exact comment JSON, `{data,page}` list, `{ok:true}` deletion, and existing cursor helpers. DELETE sets `deleted_at` only and spends no creation-limit hit.
 
-- [ ] **Step 4: Run GREEN and full API regression**
+- [x] **Step 4: Run GREEN and full API regression**
 
 Required: new comments suite, all older API suites, fmt and Clippy.
 
-- [ ] **Step 5: Commit**
+GREEN evidence: run `40229899339` passed all nine comment tests (including equal timestamps, deleted cursor anchors, concurrent create/delete, Unicode boundaries, and per-user limits), all older API suites, fmt/Clippy, all 56 browser tests, Nuxt typecheck/build, independent JS budgets, and enforcing Lighthouse.
+
+- [x] **Step 5: Commit**
 
 `feat(api): add paginated listing comments`
 

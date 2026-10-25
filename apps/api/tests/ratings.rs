@@ -645,6 +645,101 @@ async fn rating_limit_is_per_user_and_comes_after_validation_and_csrf() {
     );
 }
 
+#[tokio::test]
+async fn detail_rating_state_is_private_and_viewer_specific() {
+    let Some(t) = setup().await else { return };
+    let seller = create_user(&t.pool, &t.cfg, "+989100000001").await;
+    let first = create_user(&t.pool, &t.cfg, "+989100000002").await;
+    let second = create_user(&t.pool, &t.cfg, "+989100000003").await;
+    let listing = create_listing(&t.pool, seller.id, "rating fixture", "active").await;
+    assert_eq!(
+        put_rating(t.app.clone(), &listing, &first, serde_json::json!(4))
+            .await
+            .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        put_rating(t.app.clone(), &listing, &second, serde_json::json!(2))
+            .await
+            .0,
+        StatusCode::OK
+    );
+    let detail_uri = format!("/api/v1/listings/{}", listing.slug);
+
+    let (status, _, anonymous) =
+        send(t.app.clone(), Method::GET, &detail_uri, None, None, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(anonymous.get("my_stars").is_none());
+    assert!(anonymous.get("favorited").is_none());
+
+    let stale = TestUser {
+        id: 0,
+        cookie: "shabdar_session=stale; shabdar_csrf=stale".to_string(),
+        csrf: "stale".to_string(),
+    };
+    let (status, _, stale_body) = send(
+        t.app.clone(),
+        Method::GET,
+        &detail_uri,
+        Some(&stale),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(stale_body.get("my_stars").is_none());
+    assert!(stale_body.get("favorited").is_none());
+
+    for (viewer, expected) in [(&first, 4), (&second, 2)] {
+        let (status, headers, body) = send(
+            t.app.clone(),
+            Method::GET,
+            &detail_uri,
+            Some(viewer),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["my_stars"], expected);
+        assert_eq!(body["favorited"], false);
+        assert_eq!(
+            headers
+                .get("cache-control")
+                .and_then(|value| value.to_str().ok()),
+            Some("private, no-store")
+        );
+    }
+    let (_, _, seller_body) = send(
+        t.app.clone(),
+        Method::GET,
+        &detail_uri,
+        Some(&seller),
+        None,
+        None,
+    )
+    .await;
+    assert!(seller_body.get("my_stars").is_some());
+    assert!(seller_body["my_stars"].is_null());
+
+    assert_eq!(
+        delete_rating(t.app.clone(), &listing, &first).await.0,
+        StatusCode::OK
+    );
+    let (_, _, after_delete) = send(
+        t.app.clone(),
+        Method::GET,
+        &detail_uri,
+        Some(&first),
+        None,
+        None,
+    )
+    .await;
+    assert!(after_delete.get("my_stars").is_some());
+    assert!(after_delete["my_stars"].is_null());
+    assert_eq!(after_delete["rating_count"], 1);
+}
+
 fn titles(body: &serde_json::Value) -> Vec<String> {
     body["data"]
         .as_array()
