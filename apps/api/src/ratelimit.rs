@@ -134,7 +134,9 @@ fn retry_after_secs(window: &Window, now: Instant) -> u64 {
         .window
         .saturating_sub(now.saturating_duration_since(window.started));
     let millis = left.as_millis();
-    u64::try_from(millis.div_ceil(1000)).unwrap_or(u64::MAX).max(1)
+    u64::try_from(millis.div_ceil(1000))
+        .unwrap_or(u64::MAX)
+        .max(1)
 }
 
 #[cfg(test)]
@@ -197,7 +199,10 @@ mod tests {
     fn zero_limit_or_zero_window_disables_the_check() {
         let limiter = RateLimiter::new();
         for _ in 0..10 {
-            assert_eq!(limiter.hit(KEY, 0, Duration::from_secs(60)), LimitOutcome::Allowed);
+            assert_eq!(
+                limiter.hit(KEY, 0, Duration::from_secs(60)),
+                LimitOutcome::Allowed
+            );
             assert_eq!(limiter.hit(KEY, 5, Duration::ZERO), LimitOutcome::Allowed);
         }
     }

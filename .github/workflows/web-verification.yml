@@ -3,8 +3,9 @@ name: Web verification
 on:
   push:
     branches:
-      - arena/31e5990a-shabdar
+      - arena/4fdc08a7-shabdar
     paths:
+      - apps/api/**
       - apps/web/**
       - .github/workflows/web-verification.yml
       - docs/performance/**
@@ -12,6 +13,7 @@ on:
     branches:
       - main
     paths:
+      - apps/api/**
       - apps/web/**
       - .github/workflows/web-verification.yml
       - docs/performance/**
@@ -41,6 +43,7 @@ jobs:
           --health-retries=10
     env:
       DATABASE_URL: mysql://root:shabdar_test@127.0.0.1:3306/shabdar_test
+      TEST_DATABASE_URL: mysql://root:shabdar_test@127.0.0.1:3306/shabdar_test
       E2E_DATABASE_URL: mysql://root:shabdar_test@127.0.0.1:3306/shabdar_test
       BIND_ADDR: 127.0.0.1:8081
       NUXT_API_BASE: http://127.0.0.1:8081
@@ -57,6 +60,8 @@ jobs:
       OTP_VERIFY_IP_LIMIT: '1000'
       OTP_PHONE_DAILY_LIMIT: '1000'
       OTP_SMS_GLOBAL_LIMIT: '1000'
+      RATING_USER_LIMIT: '1000'
+      COMMENT_USER_LIMIT: '1000'
       PORT: '3000'
       HOST: 127.0.0.1
     steps:
@@ -89,6 +94,33 @@ jobs:
       - name: Build Axum debug binary
         working-directory: apps/api
         run: cargo build
+
+      - name: Check Rust formatting
+        working-directory: apps/api
+        run: cargo fmt --check
+
+      - name: Lint every Rust target
+        working-directory: apps/api
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run the full API suite against MariaDB
+        working-directory: apps/api
+        run: |
+          set +e
+          cargo test > /tmp/shabdar-api-tests.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            python - <<'PY'
+          import base64
+          from pathlib import Path
+
+          payload = Path('/tmp/shabdar-api-tests.log').read_bytes()[-16000:]
+          encoded = base64.b64encode(payload).decode()
+          for offset in range(0, len(encoded), 3500):
+              print(f'::error::API_TEST_LOG_BASE64={encoded[offset:offset + 3500]}')
+          PY
+          fi
+          exit "$status"
 
       - name: Typecheck web
         working-directory: apps/web
@@ -134,7 +166,21 @@ jobs:
         working-directory: apps/web
         run: |
           export CHROME_PATH="$(node --input-type=module -e "import { chromium } from '@playwright/test'; process.stdout.write(chromium.executablePath())")"
-          npm run test:lighthouse
+          set +e
+          npm run test:lighthouse > /tmp/shabdar-lighthouse.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            python - <<'PY'
+          import base64
+          from pathlib import Path
+
+          payload = Path('/tmp/shabdar-lighthouse.log').read_bytes()[-16000:]
+          encoded = base64.b64encode(payload).decode()
+          for offset in range(0, len(encoded), 3500):
+              print(f'::error::LIGHTHOUSE_LOG_BASE64={encoded[offset:offset + 3500]}')
+          PY
+          fi
+          exit "$status"
 
       - name: Measure production route client JS after the final Playwright fixture reset
         working-directory: apps/web
@@ -145,11 +191,14 @@ jobs:
         run: npm run test:client-budget
 
       - name: Verify and publish performance report summary
+        if: always() && hashFiles('apps/web/lighthouse-report/manifest.json') != ''
         working-directory: apps/web
         run: |
           node --input-type=module <<'EOF'
-          import { readFileSync } from 'node:fs'
-          const client = JSON.parse(readFileSync('test-results/client-js.json', 'utf8'))
+          import { existsSync, readFileSync } from 'node:fs'
+          const client = existsSync('test-results/client-js.json')
+            ? JSON.parse(readFileSync('test-results/client-js.json', 'utf8'))
+            : { baseURL: process.env.E2E_BASE_URL }
           const fixtures = JSON.parse(readFileSync('tests/e2e/.artifacts/fixtures.json', 'utf8'))
           const detailPath = new URL(fixtures.detailPath, client.baseURL).pathname
           const manifest = JSON.parse(readFileSync('lighthouse-report/manifest.json', 'utf8'))
@@ -285,21 +334,23 @@ jobs:
           }
           publish('Home network diagnostics', networkDiagnose(homeEntry))
           publish('Detail network diagnostics', networkDiagnose(detailEntry))
-          const clientSummary = {
-            schemaVersion: client.schemaVersion,
-            measuredAt: client.measuredAt,
-            measuredHead: client.measuredHead,
-            productBaseline: client.productBaseline,
-            baseURL: client.baseURL,
-            node: client.node,
-            nuxt: client.nuxt,
-            playwright: client.playwright,
-            gzipLevel: client.gzipLevel,
-            home: { totalGzip: client.home.totalGzip, scriptCount: client.home.scripts.length },
-            detail: { totalGzip: client.detail.totalGzip, scriptCount: client.detail.scripts.length },
-            fonts: client.fonts,
+          if (client.home && client.detail) {
+            const clientSummary = {
+              schemaVersion: client.schemaVersion,
+              measuredAt: client.measuredAt,
+              measuredHead: client.measuredHead,
+              productBaseline: client.productBaseline,
+              baseURL: client.baseURL,
+              node: client.node,
+              nuxt: client.nuxt,
+              playwright: client.playwright,
+              gzipLevel: client.gzipLevel,
+              home: { totalGzip: client.home.totalGzip, scriptCount: client.home.scripts.length },
+              detail: { totalGzip: client.detail.totalGzip, scriptCount: client.detail.scripts.length },
+              fonts: client.fonts,
+            }
+            publish('client', clientSummary)
           }
-          publish('client', clientSummary)
           publish('Lighthouse', lighthouse)
           EOF
 
@@ -313,7 +364,7 @@ jobs:
             apps/web/.lighthouseci/
             apps/web/lighthouse-report/
             apps/web/quality-artifacts/
-          if-no-files-found: error
+          if-no-files-found: ignore
           include-hidden-files: true
 
       - name: Show Nuxt log on failure

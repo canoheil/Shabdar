@@ -34,6 +34,8 @@ struct ListingFixture {
 
 async fn reset_db(pool: &MySqlPool) {
     for table in [
+        "listing_comments",
+        "listing_ratings",
         "favorites",
         "listing_images",
         "listings",
@@ -162,7 +164,10 @@ async fn favorite_rows(pool: &MySqlPool, listing_id: u64) -> i64 {
 async fn assert_counter_matches_rows(pool: &MySqlPool, listing_id: u64) {
     let counter = favorite_count(pool, listing_id).await;
     let rows = favorite_rows(pool, listing_id).await;
-    assert_eq!(counter, u64::try_from(rows).expect("non-negative row count"));
+    assert_eq!(
+        counter,
+        u64::try_from(rows).expect("non-negative row count")
+    );
 }
 
 #[tokio::test]
@@ -178,14 +183,7 @@ async fn favorite_mutations_require_session_and_csrf() {
         assert_eq!(body["error"]["code"], "unauthorized");
     }
     for method in [Method::PUT, Method::DELETE] {
-        let (status, _, body) = send(
-            t.app.clone(),
-            method,
-            &uri,
-            Some(&seller.cookie),
-            None,
-        )
-        .await;
+        let (status, _, body) = send(t.app.clone(), method, &uri, Some(&seller.cookie), None).await;
         assert_eq!(status, StatusCode::FORBIDDEN);
         assert_eq!(body["error"]["code"], "csrf_failed");
     }
@@ -226,14 +224,13 @@ async fn save_is_idempotent_and_counts_distinct_users() {
         assert_eq!(favorite_rows(&t.pool, listing.id).await, 1);
     }
 
-    let saved_at: chrono::DateTime<chrono::Utc> = sqlx::query_scalar(
-        "SELECT created_at FROM favorites WHERE user_id = ? AND listing_id = ?",
-    )
-    .bind(first.id)
-    .bind(listing.id)
-    .fetch_one(&t.pool)
-    .await
-    .expect("original saved-at");
+    let saved_at: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT created_at FROM favorites WHERE user_id = ? AND listing_id = ?")
+            .bind(first.id)
+            .bind(listing.id)
+            .fetch_one(&t.pool)
+            .await
+            .expect("original saved-at");
     let (status, _, _) = send(
         t.app.clone(),
         Method::PUT,
@@ -243,14 +240,13 @@ async fn save_is_idempotent_and_counts_distinct_users() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let after_duplicate: chrono::DateTime<chrono::Utc> = sqlx::query_scalar(
-        "SELECT created_at FROM favorites WHERE user_id = ? AND listing_id = ?",
-    )
-    .bind(first.id)
-    .bind(listing.id)
-    .fetch_one(&t.pool)
-    .await
-    .expect("duplicate saved-at");
+    let after_duplicate: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT created_at FROM favorites WHERE user_id = ? AND listing_id = ?")
+            .bind(first.id)
+            .bind(listing.id)
+            .fetch_one(&t.pool)
+            .await
+            .expect("duplicate saved-at");
     assert_eq!(after_duplicate, saved_at, "duplicate save keeps created_at");
 
     let (status, _, _) = send(
@@ -274,7 +270,9 @@ async fn save_rejects_unknown_inactive_and_deleted_listings() {
     let listing = create_listing(&t.pool, seller.id, "draft").await;
     let uri = format!("/api/v1/me/favorites/{}", listing.public_id);
 
-    for status in ["draft", "pending", "rejected", "sold", "archived", "removed"] {
+    for status in [
+        "draft", "pending", "rejected", "sold", "archived", "removed",
+    ] {
         sqlx::query("UPDATE listings SET status = ? WHERE id = ?")
             .bind(status)
             .bind(listing.id)
@@ -451,14 +449,13 @@ async fn users_cannot_mutate_each_others_favorites() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, serde_json::json!({ "favorited": false }));
 
-    let first_rows: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM favorites WHERE user_id = ? AND listing_id = ?",
-    )
-    .bind(first.id)
-    .bind(listing.id)
-    .fetch_one(&t.pool)
-    .await
-    .expect("first user's row");
+    let first_rows: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM favorites WHERE user_id = ? AND listing_id = ?")
+            .bind(first.id)
+            .bind(listing.id)
+            .fetch_one(&t.pool)
+            .await
+            .expect("first user's row");
     assert_eq!(first_rows, 1);
     assert_eq!(favorite_count(&t.pool, listing.id).await, 1);
 }
@@ -575,8 +572,7 @@ async fn favorite_concurrent_mutations_keep_counter_exact() {
 
 /// A fixed millisecond-precision timestamp makes cursor ties deterministic.
 fn fixture_saved_at() -> chrono::DateTime<chrono::Utc> {
-    chrono::DateTime::from_timestamp_micros(1_700_000_000_123_000)
-        .expect("valid fixture timestamp")
+    chrono::DateTime::from_timestamp_micros(1_700_000_000_123_000).expect("valid fixture timestamp")
 }
 
 /// Direct list fixtures preserve the same row/counter invariant as the API.
@@ -635,7 +631,9 @@ async fn favorites_list_returns_only_viewers_active_cards() {
     insert_favorite(&t.pool, viewer.id, visible.id).await;
     let other_only = create_listing(&t.pool, seller.id, "active").await;
     insert_favorite(&t.pool, other.id, other_only.id).await;
-    for status in ["sold", "archived", "removed", "pending", "draft", "rejected"] {
+    for status in [
+        "sold", "archived", "removed", "pending", "draft", "rejected",
+    ] {
         let hidden = create_listing(&t.pool, seller.id, status).await;
         insert_favorite(&t.pool, viewer.id, hidden.id).await;
     }
@@ -665,7 +663,10 @@ async fn favorites_list_returns_only_viewers_active_cards() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(card_public_ids(&body), vec![visible.public_id.clone()]);
-    assert_eq!(body["data"][0]["slug"].as_str(), Some(visible.slug.as_str()));
+    assert_eq!(
+        body["data"][0]["slug"].as_str(),
+        Some(visible.slug.as_str())
+    );
     assert_eq!(body["data"][0]["cover_image"], "/media/setup/cover.png");
     assert_eq!(body["data"][0]["city"], "رشت");
     assert_eq!(body["data"][0]["province"], "گیلان");
@@ -739,7 +740,11 @@ async fn favorites_cursor_walks_equal_timestamps() {
     walked.extend(card_public_ids(&second_page));
     assert_eq!(
         walked,
-        vec![third.public_id.clone(), second.public_id.clone(), first.public_id.clone()],
+        vec![
+            third.public_id.clone(),
+            second.public_id.clone(),
+            first.public_id.clone()
+        ],
         "equal timestamps must not duplicate or skip a card"
     );
 }
@@ -859,7 +864,10 @@ async fn dashboard_counts_received_not_personal_favorites() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(dashboard(t.app.clone(), &seller).await["favorite_count"], 3);
-    assert_eq!(dashboard(t.app.clone(), &other_seller).await["favorite_count"], 1);
+    assert_eq!(
+        dashboard(t.app.clone(), &other_seller).await["favorite_count"],
+        1
+    );
 
     let (status, _, _) = send(
         t.app.clone(),
@@ -878,7 +886,10 @@ async fn dashboard_counts_received_not_personal_favorites() {
         .await
         .expect("soft-delete fixture");
     assert_eq!(dashboard(t.app.clone(), &seller).await["favorite_count"], 1);
-    assert_eq!(dashboard(t.app.clone(), &other_seller).await["favorite_count"], 1);
+    assert_eq!(
+        dashboard(t.app.clone(), &other_seller).await["favorite_count"],
+        1
+    );
 }
 
 #[tokio::test]
@@ -891,14 +902,7 @@ async fn detail_favorite_state_is_viewer_specific_and_private() {
     let uri = format!("/api/v1/listings/{}", listing.slug);
 
     for cookie in [None, Some("shabdar_session=stale; shabdar_csrf=stale")] {
-        let (status, headers, body) = send(
-            t.app.clone(),
-            Method::GET,
-            &uri,
-            cookie,
-            None,
-        )
-        .await;
+        let (status, headers, body) = send(t.app.clone(), Method::GET, &uri, cookie, None).await;
         assert_eq!(status, StatusCode::OK);
         assert!(body.get("favorited").is_none());
         assert_ne!(
@@ -909,14 +913,8 @@ async fn detail_favorite_state_is_viewer_specific_and_private() {
         );
     }
 
-    let (status, headers, body) = send(
-        t.app.clone(),
-        Method::GET,
-        &uri,
-        Some(&first.cookie),
-        None,
-    )
-    .await;
+    let (status, headers, body) =
+        send(t.app.clone(), Method::GET, &uri, Some(&first.cookie), None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["favorited"], false);
     assert_eq!(
@@ -936,14 +934,8 @@ async fn detail_favorite_state_is_viewer_specific_and_private() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let (status, headers, body) = send(
-        t.app.clone(),
-        Method::GET,
-        &uri,
-        Some(&first.cookie),
-        None,
-    )
-    .await;
+    let (status, headers, body) =
+        send(t.app.clone(), Method::GET, &uri, Some(&first.cookie), None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["favorited"], true);
     assert_eq!(
@@ -953,16 +945,13 @@ async fn detail_favorite_state_is_viewer_specific_and_private() {
         Some("private, no-store")
     );
 
-    let (status, headers, body) = send(
-        t.app.clone(),
-        Method::GET,
-        &uri,
-        Some(&second.cookie),
-        None,
-    )
-    .await;
+    let (status, headers, body) =
+        send(t.app.clone(), Method::GET, &uri, Some(&second.cookie), None).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["favorited"], false, "another viewer's row must not leak");
+    assert_eq!(
+        body["favorited"], false,
+        "another viewer's row must not leak"
+    );
     assert_eq!(
         headers
             .get(axum::http::header::CACHE_CONTROL)

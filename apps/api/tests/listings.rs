@@ -25,10 +25,7 @@ async fn send(
     };
     let resp = app.oneshot(req).await.unwrap();
     let status = resp.status();
-    let bytes = BodyExt::collect(resp.into_body())
-        .await
-        .unwrap()
-        .to_bytes();
+    let bytes = BodyExt::collect(resp.into_body()).await.unwrap().to_bytes();
     (status, serde_json::from_slice(&bytes).expect("JSON body"))
 }
 
@@ -113,6 +110,8 @@ static WRITE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// tests/db_migrations.rs) and re-apply, so each test starts clean.
 async fn reset_db(pool: &sqlx::MySqlPool) {
     for table in [
+        "listing_comments",
+        "listing_ratings",
         "favorites",
         "listing_images",
         "listings",
@@ -205,10 +204,7 @@ async fn send_authed(
     };
     let resp = app.oneshot(req).await.unwrap();
     let status = resp.status();
-    let bytes = BodyExt::collect(resp.into_body())
-        .await
-        .unwrap()
-        .to_bytes();
+    let bytes = BodyExt::collect(resp.into_body()).await.unwrap().to_bytes();
     (status, serde_json::from_slice(&bytes).expect("JSON body"))
 }
 
@@ -234,13 +230,23 @@ async fn create_draft_returns_draft_with_ids() {
     let app = common::spawn_app(cfg.clone()).await;
     let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
 
-    let (status, body) =
-        send_authed(app, Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(valid_draft())).await;
+    let (status, body) = send_authed(
+        app,
+        Method::POST,
+        "/api/v1/listings",
+        Some(&cookie),
+        Some(&csrf),
+        Some(valid_draft()),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["status"], "draft");
     let public_id = body["public_id"].as_str().expect("public_id");
     assert_eq!(public_id.len(), 26, "public_id is a 26-char ULID");
-    assert!(!body["slug"].as_str().expect("slug").is_empty(), "slug generated");
+    assert!(
+        !body["slug"].as_str().expect("slug").is_empty(),
+        "slug generated"
+    );
 }
 
 #[tokio::test]
@@ -257,8 +263,15 @@ async fn create_draft_validation_pins_field_reasons() {
     // Empty title → required.
     let mut bad = valid_draft();
     bad["title"] = serde_json::json!("");
-    let (status, body) =
-        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(bad)).await;
+    let (status, body) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/listings",
+        Some(&cookie),
+        Some(&csrf),
+        Some(bad),
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"]["code"], "validation_error");
     assert_eq!(body["error"]["fields"]["title"], "required");
@@ -266,32 +279,60 @@ async fn create_draft_validation_pins_field_reasons() {
     // 161-char title → too_long.
     let mut bad = valid_draft();
     bad["title"] = serde_json::json!("x".repeat(161));
-    let (status, body) =
-        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(bad)).await;
+    let (status, body) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/listings",
+        Some(&cookie),
+        Some(&csrf),
+        Some(bad),
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"]["fields"]["title"], "too_long");
 
     // Unknown category → unknown_category.
     let mut bad = valid_draft();
     bad["category_id"] = serde_json::json!(999);
-    let (status, body) =
-        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(bad)).await;
+    let (status, body) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/listings",
+        Some(&cookie),
+        Some(&csrf),
+        Some(bad),
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"]["fields"]["category_id"], "unknown_category");
 
     // fixed without price → invalid_price.
     let mut bad = valid_draft();
     bad["price_toman"] = serde_json::Value::Null;
-    let (status, body) =
-        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(bad)).await;
+    let (status, body) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/listings",
+        Some(&cookie),
+        Some(&csrf),
+        Some(bad),
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"]["fields"]["price_toman"], "invalid_price");
 
     // free with a price → invalid_price.
     let mut bad = valid_draft();
     bad["price_type"] = serde_json::json!("free");
-    let (status, body) =
-        send_authed(app, Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(bad)).await;
+    let (status, body) = send_authed(
+        app,
+        Method::POST,
+        "/api/v1/listings",
+        Some(&cookie),
+        Some(&csrf),
+        Some(bad),
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"]["fields"]["price_toman"], "invalid_price");
 }
@@ -308,8 +349,15 @@ async fn edit_by_non_owner_is_forbidden() {
     let (cookie_a, csrf_a) = register_user(&app, &pool, &cfg, "+989123456789").await;
     let (cookie_b, csrf_b) = register_user(&app, &pool, &cfg, "+989009876543").await;
 
-    let (status, body) =
-        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie_a), Some(&csrf_a), Some(valid_draft())).await;
+    let (status, body) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/listings",
+        Some(&cookie_a),
+        Some(&csrf_a),
+        Some(valid_draft()),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     let public_id = body["public_id"].as_str().unwrap().to_string();
 
@@ -337,8 +385,15 @@ async fn mutation_without_csrf_changes_nothing() {
     let app = common::spawn_app(cfg.clone()).await;
     let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
 
-    let (status, body) =
-        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(valid_draft())).await;
+    let (status, body) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/listings",
+        Some(&cookie),
+        Some(&csrf),
+        Some(valid_draft()),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     let public_id = body["public_id"].as_str().unwrap().to_string();
 
@@ -375,8 +430,15 @@ async fn submit_requires_an_image_then_moves_to_pending() {
     let app = common::spawn_app(cfg.clone()).await;
     let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
 
-    let (status, body) =
-        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(valid_draft())).await;
+    let (status, body) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/listings",
+        Some(&cookie),
+        Some(&csrf),
+        Some(valid_draft()),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     let public_id = body["public_id"].as_str().unwrap().to_string();
 
@@ -427,8 +489,15 @@ async fn dashboard_filters_drafts() {
     let app = common::spawn_app(cfg.clone()).await;
     let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
 
-    let (status, _) =
-        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(valid_draft())).await;
+    let (status, _) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/listings",
+        Some(&cookie),
+        Some(&csrf),
+        Some(valid_draft()),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
 
     // Drafts are the seller's working set: the explicit filter must list them.
@@ -459,11 +528,25 @@ async fn same_title_by_two_sellers_yields_distinct_slugs() {
 
     let mut draft = valid_draft();
     draft["title"] = serde_json::json!("فرش دستباف");
-    let (status, first) =
-        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie_a), Some(&csrf_a), Some(draft.clone())).await;
+    let (status, first) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/listings",
+        Some(&cookie_a),
+        Some(&csrf_a),
+        Some(draft.clone()),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
-    let (status, second) =
-        send_authed(app, Method::POST, "/api/v1/listings", Some(&cookie_b), Some(&csrf_b), Some(draft)).await;
+    let (status, second) = send_authed(
+        app,
+        Method::POST,
+        "/api/v1/listings",
+        Some(&cookie_b),
+        Some(&csrf_b),
+        Some(draft),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     let slug_a = first["slug"].as_str().unwrap();
     let slug_b = second["slug"].as_str().unwrap();
@@ -486,13 +569,27 @@ async fn edit_slug_exhaustion_is_400_not_500() {
     let mut draft = valid_draft();
     draft["title"] = serde_json::json!("مبل راحتی");
     for _ in 0..6 {
-        let (status, _) =
-            send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(draft.clone())).await;
+        let (status, _) = send_authed(
+            app.clone(),
+            Method::POST,
+            "/api/v1/listings",
+            Some(&cookie),
+            Some(&csrf),
+            Some(draft.clone()),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
     }
     // A seventh listing with another title…
-    let (status, body) =
-        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(valid_draft())).await;
+    let (status, body) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/listings",
+        Some(&cookie),
+        Some(&csrf),
+        Some(valid_draft()),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     let public_id = body["public_id"].as_str().unwrap().to_string();
 
@@ -521,8 +618,15 @@ async fn mark_sold_from_pending_is_rejected() {
     let app = common::spawn_app(cfg.clone()).await;
     let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
 
-    let (status, body) =
-        send_authed(app.clone(), Method::POST, "/api/v1/listings", Some(&cookie), Some(&csrf), Some(valid_draft())).await;
+    let (status, body) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/listings",
+        Some(&cookie),
+        Some(&csrf),
+        Some(valid_draft()),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     let public_id = body["public_id"].as_str().unwrap().to_string();
 
@@ -551,7 +655,17 @@ async fn create_active(
     csrf: &str,
     title: &str,
 ) -> (String, String) {
-    create_active_with(app, pool, cookie, csrf, title, "fixed", Some(5_000_000), None).await
+    create_active_with(
+        app,
+        pool,
+        cookie,
+        csrf,
+        title,
+        "fixed",
+        Some(5_000_000),
+        None,
+    )
+    .await
 }
 
 /// Sort fixtures need a chosen price and rating counters; the reads under
@@ -601,13 +715,11 @@ async fn create_active_with(
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    sqlx::query(
-        "UPDATE listings SET status = 'active', published_at = NOW(3) WHERE public_id = ?",
-    )
-    .bind(&public_id)
-    .execute(pool)
-    .await
-    .expect("activate");
+    sqlx::query("UPDATE listings SET status = 'active', published_at = NOW(3) WHERE public_id = ?")
+        .bind(&public_id)
+        .execute(pool)
+        .await
+        .expect("activate");
     if let Some((sum, count)) = rating {
         sqlx::query("UPDATE listings SET rating_sum = ?, rating_count = ? WHERE public_id = ?")
             .bind(sum)
@@ -671,15 +783,33 @@ async fn feed_filters_by_category_and_city() {
     let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
     create_active(&app, &pool, &cookie, &csrf, "فرش دستباف").await;
 
-    let (status, body) = send(app.clone(), Method::GET, "/api/v1/listings?category=home-sweets", None).await;
+    let (status, body) = send(
+        app.clone(),
+        Method::GET,
+        "/api/v1/listings?category=home-sweets",
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["data"].as_array().unwrap().len(), 1);
 
-    let (status, body) = send(app.clone(), Method::GET, "/api/v1/listings?category=education", None).await;
+    let (status, body) = send(
+        app.clone(),
+        Method::GET,
+        "/api/v1/listings?category=education",
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["data"], serde_json::json!([]));
 
-    let (status, body) = send(app.clone(), Method::GET, "/api/v1/listings?city=rasht", None).await;
+    let (status, body) = send(
+        app.clone(),
+        Method::GET,
+        "/api/v1/listings?city=rasht",
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["data"].as_array().unwrap().len(), 1);
 
@@ -707,10 +837,18 @@ async fn feed_keyset_cursor_pages_without_gaps() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(page1["data"].as_array().unwrap().len(), 2);
     assert_eq!(page1["page"]["has_more"], true);
-    let cursor = page1["page"]["next_cursor"].as_str().expect("cursor").to_string();
+    let cursor = page1["page"]["next_cursor"]
+        .as_str()
+        .expect("cursor")
+        .to_string();
 
-    let (status, page2) =
-        send(app, Method::GET, &format!("/api/v1/listings?limit=2&cursor={cursor}"), None).await;
+    let (status, page2) = send(
+        app,
+        Method::GET,
+        &format!("/api/v1/listings?limit=2&cursor={cursor}"),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(page2["data"].as_array().unwrap().len(), 1);
     assert_eq!(page2["page"]["has_more"], false);
@@ -761,7 +899,10 @@ async fn feed_cursor_from_another_sort_is_400() {
 
     let (status, page1) = send(app.clone(), Method::GET, "/api/v1/listings?limit=1", None).await;
     assert_eq!(status, StatusCode::OK);
-    let cursor = page1["page"]["next_cursor"].as_str().expect("cursor").to_string();
+    let cursor = page1["page"]["next_cursor"]
+        .as_str()
+        .expect("cursor")
+        .to_string();
 
     let (status, body) = send(
         app,
@@ -779,14 +920,29 @@ async fn feed_cursor_from_another_sort_is_400() {
 
 /// Four actives: two priced, two NULL-priced (free + negotiable). NULLs must
 /// sort last in BOTH price directions.
-async fn seed_price_fixtures(
-    app: &axum::Router,
-    pool: &sqlx::MySqlPool,
-    cookie: &str,
-    csrf: &str,
-) {
-    create_active_with(app, pool, cookie, csrf, "ارزان", "fixed", Some(100_000), None).await;
-    create_active_with(app, pool, cookie, csrf, "گران", "fixed", Some(200_000), None).await;
+async fn seed_price_fixtures(app: &axum::Router, pool: &sqlx::MySqlPool, cookie: &str, csrf: &str) {
+    create_active_with(
+        app,
+        pool,
+        cookie,
+        csrf,
+        "ارزان",
+        "fixed",
+        Some(100_000),
+        None,
+    )
+    .await;
+    create_active_with(
+        app,
+        pool,
+        cookie,
+        csrf,
+        "گران",
+        "fixed",
+        Some(200_000),
+        None,
+    )
+    .await;
     create_active_with(app, pool, cookie, csrf, "رایگان", "free", None, None).await;
     create_active_with(app, pool, cookie, csrf, "توافقی", "negotiable", None, None).await;
 }
@@ -812,10 +968,20 @@ async fn feed_price_sorts_put_null_prices_last() {
     let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
     seed_price_fixtures(&app, &pool, &cookie, &csrf).await;
 
-    let (status, asc) = send(app.clone(), Method::GET, "/api/v1/listings?sort=price_asc", None).await;
+    let (status, asc) = send(
+        app.clone(),
+        Method::GET,
+        "/api/v1/listings?sort=price_asc",
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     let asc_titles = titles(&asc);
-    assert_eq!(&asc_titles[..2], &["ارزان", "گران"], "cheapest first: {asc}");
+    assert_eq!(
+        &asc_titles[..2],
+        &["ارزان", "گران"],
+        "cheapest first: {asc}"
+    );
     let mut nulls = asc_titles[2..].to_vec();
     nulls.sort();
     assert_eq!(nulls, vec!["توافقی", "رایگان"], "NULL prices last: {asc}");
@@ -823,7 +989,11 @@ async fn feed_price_sorts_put_null_prices_last() {
     let (status, desc) = send(app, Method::GET, "/api/v1/listings?sort=price_desc", None).await;
     assert_eq!(status, StatusCode::OK);
     let desc_titles = titles(&desc);
-    assert_eq!(&desc_titles[..2], &["گران", "ارزان"], "dearest first: {desc}");
+    assert_eq!(
+        &desc_titles[..2],
+        &["گران", "ارزان"],
+        "dearest first: {desc}"
+    );
     let mut nulls = desc_titles[2..].to_vec();
     nulls.sort();
     assert_eq!(nulls, vec!["توافقی", "رایگان"], "NULL prices last: {desc}");
@@ -846,7 +1016,10 @@ async fn feed_price_cursor_walks_all_rows_once() {
         let (status, page1) = send(app.clone(), Method::GET, &path, None).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(page1["page"]["has_more"], true, "{sort} page 1");
-        let cursor = page1["page"]["next_cursor"].as_str().expect("cursor").to_string();
+        let cursor = page1["page"]["next_cursor"]
+            .as_str()
+            .expect("cursor")
+            .to_string();
 
         let (status, page2) = send(
             app.clone(),
@@ -882,9 +1055,39 @@ async fn feed_popular_prefers_many_good_over_one_perfect() {
     let app = common::spawn_app(cfg.clone()).await;
     let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
     // A: 5/1 → 25/6 = 4.166… · B: 48/10 → 68/15 = 4.533… · C: 0/0 → 20/5 = 4.0
-    create_active_with(&app, &pool, &cookie, &csrf, "یک‌ستاره‌کامل", "fixed", Some(100_000), Some((5, 1))).await;
-    create_active_with(&app, &pool, &cookie, &csrf, "خیلی‌خوب", "fixed", Some(100_000), Some((48, 10))).await;
-    create_active_with(&app, &pool, &cookie, &csrf, "بدون‌امتیاز", "fixed", Some(100_000), None).await;
+    create_active_with(
+        &app,
+        &pool,
+        &cookie,
+        &csrf,
+        "یک‌ستاره‌کامل",
+        "fixed",
+        Some(100_000),
+        Some((5, 1)),
+    )
+    .await;
+    create_active_with(
+        &app,
+        &pool,
+        &cookie,
+        &csrf,
+        "خیلی‌خوب",
+        "fixed",
+        Some(100_000),
+        Some((48, 10)),
+    )
+    .await;
+    create_active_with(
+        &app,
+        &pool,
+        &cookie,
+        &csrf,
+        "بدون‌امتیاز",
+        "fixed",
+        Some(100_000),
+        None,
+    )
+    .await;
 
     let (status, body) = send(app, Method::GET, "/api/v1/listings?sort=popular", None).await;
     assert_eq!(status, StatusCode::OK);
@@ -905,15 +1108,53 @@ async fn feed_popular_cursor_walks_all_rows_once() {
     let cfg = common::test_config();
     let app = common::spawn_app(cfg.clone()).await;
     let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
-    create_active_with(&app, &pool, &cookie, &csrf, "الف", "fixed", Some(100_000), Some((5, 1))).await;
-    create_active_with(&app, &pool, &cookie, &csrf, "ب", "fixed", Some(100_000), Some((48, 10))).await;
-    create_active_with(&app, &pool, &cookie, &csrf, "ج", "fixed", Some(100_000), None).await;
+    create_active_with(
+        &app,
+        &pool,
+        &cookie,
+        &csrf,
+        "الف",
+        "fixed",
+        Some(100_000),
+        Some((5, 1)),
+    )
+    .await;
+    create_active_with(
+        &app,
+        &pool,
+        &cookie,
+        &csrf,
+        "ب",
+        "fixed",
+        Some(100_000),
+        Some((48, 10)),
+    )
+    .await;
+    create_active_with(
+        &app,
+        &pool,
+        &cookie,
+        &csrf,
+        "ج",
+        "fixed",
+        Some(100_000),
+        None,
+    )
+    .await;
 
-    let (status, page1) =
-        send(app.clone(), Method::GET, "/api/v1/listings?sort=popular&limit=2", None).await;
+    let (status, page1) = send(
+        app.clone(),
+        Method::GET,
+        "/api/v1/listings?sort=popular&limit=2",
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(page1["page"]["has_more"], true);
-    let cursor = page1["page"]["next_cursor"].as_str().expect("cursor").to_string();
+    let cursor = page1["page"]["next_cursor"]
+        .as_str()
+        .expect("cursor")
+        .to_string();
 
     let (status, page2) = send(
         app,
@@ -986,7 +1227,11 @@ async fn feed_search_matches_title_and_description() {
 
     let (status, body) = send(app, Method::GET, "/api/v1/listings?q=یخچال", None).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["data"], serde_json::json!([]), "no match is an empty page");
+    assert_eq!(
+        body["data"],
+        serde_json::json!([]),
+        "no match is an empty page"
+    );
 }
 
 #[tokio::test]
@@ -1001,14 +1246,27 @@ async fn feed_search_requires_every_term() {
     let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
     seed_search_fixtures(&app, &pool, &cookie, &csrf).await;
 
-    let (status, body) =
-        send(app.clone(), Method::GET, "/api/v1/listings?q=فرش%20دستباف", None).await;
+    let (status, body) = send(
+        app.clone(),
+        Method::GET,
+        "/api/v1/listings?q=فرش%20دستباف",
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(titles(&body), vec!["فرش دستباف"], "both terms in the title: {body}");
+    assert_eq!(
+        titles(&body),
+        vec!["فرش دستباف"],
+        "both terms in the title: {body}"
+    );
 
     let (status, body) = send(app, Method::GET, "/api/v1/listings?q=فرش%20مبل", None).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["data"], serde_json::json!([]), "terms are AND, not OR: {body}");
+    assert_eq!(
+        body["data"],
+        serde_json::json!([]),
+        "terms are AND, not OR: {body}"
+    );
 }
 
 #[tokio::test]
@@ -1026,8 +1284,7 @@ async fn feed_search_folds_arabic_letters_and_zwnj() {
     create_active(&app, &pool, &cookie, &csrf, "كتاب قدیمی").await;
 
     // Query without ZWNJ, Persian yeh: matches the ZWNJ title.
-    let (status, body) =
-        send(app.clone(), Method::GET, "/api/v1/listings?q=میخواهم", None).await;
+    let (status, body) = send(app.clone(), Method::GET, "/api/v1/listings?q=میخواهم", None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(titles(&body), vec!["می‌خواهم کتاب"], "ZWNJ folded: {body}");
 
@@ -1057,7 +1314,11 @@ async fn feed_search_escapes_like_wildcards() {
     // `_` alone would match any single character; escaped it matches nothing.
     let (status, body) = send(app.clone(), Method::GET, "/api/v1/listings?q=20_", None).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["data"], serde_json::json!([]), "no wildcard widening: {body}");
+    assert_eq!(
+        body["data"],
+        serde_json::json!([]),
+        "no wildcard widening: {body}"
+    );
 }
 
 #[tokio::test]
@@ -1073,14 +1334,23 @@ async fn feed_search_rejects_overlong_q_and_ignores_blank() {
     create_active(&app, &pool, &cookie, &csrf, "فرش دستباف").await;
 
     let long = "a".repeat(101);
-    let (status, body) =
-        send(app.clone(), Method::GET, &format!("/api/v1/listings?q={long}"), None).await;
+    let (status, body) = send(
+        app.clone(),
+        Method::GET,
+        &format!("/api/v1/listings?q={long}"),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"]["fields"]["q"], "too_long");
 
     let (status, body) = send(app, Method::GET, "/api/v1/listings?q=%20%20", None).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(titles(&body), vec!["فرش دستباف"], "blank q is no search: {body}");
+    assert_eq!(
+        titles(&body),
+        vec!["فرش دستباف"],
+        "blank q is no search: {body}"
+    );
 }
 
 // --- Phase 4 Task 4: dashboard summary ------------------------------------
@@ -1178,8 +1448,7 @@ async fn summary_requires_a_session() {
     reset_db(&pool).await;
     let app = common::spawn_app(common::test_config()).await;
 
-    let (status, body) =
-        send(app, Method::GET, "/api/v1/me/dashboard/summary", None).await;
+    let (status, body) = send(app, Method::GET, "/api/v1/me/dashboard/summary", None).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     assert_eq!(body["error"]["code"], "unauthorized");
 }
@@ -1197,7 +1466,13 @@ async fn detail_visibility_rules() {
     let (active_id, active_slug) = create_active(&app, &pool, &cookie, &csrf, "فرش دستباف").await;
 
     // Active → 200 with the Persian title.
-    let (status, body) = send(app.clone(), Method::GET, &format!("/api/v1/listings/{active_slug}"), None).await;
+    let (status, body) = send(
+        app.clone(),
+        Method::GET,
+        &format!("/api/v1/listings/{active_slug}"),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["title"], "فرش دستباف");
 
@@ -1207,7 +1482,13 @@ async fn detail_visibility_rules() {
         .execute(&pool)
         .await
         .expect("remove");
-    let (status, body) = send(app.clone(), Method::GET, &format!("/api/v1/listings/{active_slug}"), None).await;
+    let (status, body) = send(
+        app.clone(),
+        Method::GET,
+        &format!("/api/v1/listings/{active_slug}"),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::GONE);
     assert_eq!(body["error"]["code"], "gone");
 
@@ -1223,7 +1504,13 @@ async fn detail_visibility_rules() {
     .await;
     assert_eq!(status, StatusCode::OK);
     let draft_slug = body["slug"].as_str().unwrap().to_string();
-    let (status, body) = send(app, Method::GET, &format!("/api/v1/listings/{draft_slug}"), None).await;
+    let (status, body) = send(
+        app,
+        Method::GET,
+        &format!("/api/v1/listings/{draft_slug}"),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["error"]["code"], "not_found");
 }

@@ -198,8 +198,7 @@ pub async fn verify_challenge(
     .await
     .map_err(|_| ApiError::Internal)?;
 
-    let Some((phone_e164, purpose, code_hash, attempt_count, expires_at, consumed_at)) = row
-    else {
+    let Some((phone_e164, purpose, code_hash, attempt_count, expires_at, consumed_at)) = row else {
         return Err(ApiError::InvalidCode);
     };
     if consumed_at.is_some() {
@@ -215,11 +214,13 @@ pub async fn verify_challenge(
     }
     // 4. Constant-time HMAC check; a wrong code burns one attempt.
     if !otp::verify_code(code, &cfg.otp_pepper, &code_hash) {
-        sqlx::query("UPDATE otp_challenges SET attempt_count = attempt_count + 1 WHERE public_id = ?")
-            .bind(challenge_id)
-            .execute(pool)
-            .await
-            .map_err(|_| ApiError::Internal)?;
+        sqlx::query(
+            "UPDATE otp_challenges SET attempt_count = attempt_count + 1 WHERE public_id = ?",
+        )
+        .bind(challenge_id)
+        .execute(pool)
+        .await
+        .map_err(|_| ApiError::Internal)?;
         return Err(ApiError::InvalidCode);
     }
 
@@ -237,7 +238,9 @@ pub async fn verify_challenge(
         "register" => get_or_create_user(pool, &phone_e164).await?,
         _ => {
             // purpose is ENUM('login','register'); anything else is a data bug.
-            let user = find_user(pool, &phone_e164).await?.ok_or(ApiError::NoAccount)?;
+            let user = find_user(pool, &phone_e164)
+                .await?
+                .ok_or(ApiError::NoAccount)?;
             (user, false)
         }
     };
@@ -263,14 +266,16 @@ async fn find_user(pool: &MySqlPool, phone_e164: &str) -> Result<Option<UserReco
     .fetch_optional(pool)
     .await
     .map_err(|_| ApiError::Internal)?;
-    Ok(row.map(|(id, public_id, display_name, is_admin)| UserRecord {
-        id,
-        summary: UserSummary {
-            public_id,
-            display_name,
-            is_admin,
-        },
-    }))
+    Ok(
+        row.map(|(id, public_id, display_name, is_admin)| UserRecord {
+            id,
+            summary: UserSummary {
+                public_id,
+                display_name,
+                is_admin,
+            },
+        }),
+    )
 }
 
 /// register purpose: the user if one exists, otherwise create it (ULID

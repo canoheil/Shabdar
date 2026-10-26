@@ -28,6 +28,11 @@ pub struct Config {
     pub otp_phone_daily_window_secs: u32,
     pub otp_sms_global_limit: u32,
     pub otp_sms_global_window_secs: u32,
+    /// Phase 8 per-user rating/comment mutation windows.
+    pub rating_user_limit: u32,
+    pub rating_user_window_secs: u32,
+    pub comment_user_limit: u32,
+    pub comment_user_window_secs: u32,
     pub session_ttl_secs: u32,
     pub cookie_name: String,
     pub cookie_secure: bool,
@@ -59,6 +64,10 @@ impl Config {
             otp_phone_daily_window_secs: parse_u32("OTP_PHONE_DAILY_WINDOW_SECS", 86_400)?,
             otp_sms_global_limit: parse_u32("OTP_SMS_GLOBAL_LIMIT", 200)?,
             otp_sms_global_window_secs: parse_u32("OTP_SMS_GLOBAL_WINDOW_SECS", 3_600)?,
+            rating_user_limit: parse_u32("RATING_USER_LIMIT", 60)?,
+            rating_user_window_secs: parse_u32("RATING_USER_WINDOW_SECS", 600)?,
+            comment_user_limit: parse_u32("COMMENT_USER_LIMIT", 20)?,
+            comment_user_window_secs: parse_u32("COMMENT_USER_WINDOW_SECS", 600)?,
             session_ttl_secs: parse_u32("SESSION_TTL_SECS", 2_592_000)?,
             cookie_name: optional_string("COOKIE_NAME", "shabdar_session"),
             cookie_secure: parse_bool("COOKIE_SECURE", false)?,
@@ -118,7 +127,7 @@ mod tests {
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     /// Every variable Config reads (keep in sync with from_env).
-    const VARS: [&str; 22] = [
+    const VARS: [&str; 26] = [
         "DATABASE_URL",
         "OTP_PEPPER",
         "BIND_ADDR",
@@ -135,6 +144,10 @@ mod tests {
         "OTP_PHONE_DAILY_WINDOW_SECS",
         "OTP_SMS_GLOBAL_LIMIT",
         "OTP_SMS_GLOBAL_WINDOW_SECS",
+        "RATING_USER_LIMIT",
+        "RATING_USER_WINDOW_SECS",
+        "COMMENT_USER_LIMIT",
+        "COMMENT_USER_WINDOW_SECS",
         "SESSION_TTL_SECS",
         "COOKIE_NAME",
         "COOKIE_SECURE",
@@ -177,7 +190,10 @@ mod tests {
     fn locked_required_env() -> (MutexGuard<'static, ()>, EnvGuard) {
         let lock = ENV_MUTEX.lock().unwrap();
         let env = EnvGuard::cleared();
-        env.set("DATABASE_URL", "mysql://user:pass@127.0.0.1:3306/shabdar_test");
+        env.set(
+            "DATABASE_URL",
+            "mysql://user:pass@127.0.0.1:3306/shabdar_test",
+        );
         env.set("OTP_PEPPER", "test-pepper");
         (lock, env)
     }
@@ -205,6 +221,10 @@ mod tests {
         assert_eq!(cfg.otp_phone_daily_window_secs, 86_400);
         assert_eq!(cfg.otp_sms_global_limit, 200);
         assert_eq!(cfg.otp_sms_global_window_secs, 3_600);
+        assert_eq!(cfg.rating_user_limit, 60);
+        assert_eq!(cfg.rating_user_window_secs, 600);
+        assert_eq!(cfg.comment_user_limit, 20);
+        assert_eq!(cfg.comment_user_window_secs, 600);
         assert_eq!(cfg.session_ttl_secs, 2_592_000);
         assert_eq!(cfg.cookie_name, "shabdar_session");
         assert!(!cfg.cookie_secure);
@@ -230,6 +250,10 @@ mod tests {
         env.set("OTP_PHONE_DAILY_WINDOW_SECS", "3600");
         env.set("OTP_SMS_GLOBAL_LIMIT", "50");
         env.set("OTP_SMS_GLOBAL_WINDOW_SECS", "1800");
+        env.set("RATING_USER_LIMIT", "61");
+        env.set("RATING_USER_WINDOW_SECS", "601");
+        env.set("COMMENT_USER_LIMIT", "21");
+        env.set("COMMENT_USER_WINDOW_SECS", "602");
         env.set("SESSION_TTL_SECS", "3600");
         env.set("COOKIE_NAME", "test_cookie");
         env.set("COOKIE_SECURE", "1");
@@ -251,6 +275,10 @@ mod tests {
         assert_eq!(cfg.otp_phone_daily_window_secs, 3_600);
         assert_eq!(cfg.otp_sms_global_limit, 50);
         assert_eq!(cfg.otp_sms_global_window_secs, 1_800);
+        assert_eq!(cfg.rating_user_limit, 61);
+        assert_eq!(cfg.rating_user_window_secs, 601);
+        assert_eq!(cfg.comment_user_limit, 21);
+        assert_eq!(cfg.comment_user_window_secs, 602);
         assert_eq!(cfg.session_ttl_secs, 3600);
         assert_eq!(cfg.cookie_name, "test_cookie");
         assert!(cfg.cookie_secure);
@@ -277,7 +305,10 @@ mod tests {
     fn missing_otp_pepper_errors_and_names_the_variable() {
         let _lock = ENV_MUTEX.lock().unwrap();
         let env = EnvGuard::cleared();
-        env.set("DATABASE_URL", "mysql://user:pass@127.0.0.1:3306/shabdar_test");
+        env.set(
+            "DATABASE_URL",
+            "mysql://user:pass@127.0.0.1:3306/shabdar_test",
+        );
         match super::Config::from_env() {
             Ok(_) => panic!("OTP_PEPPER missing must be an error"),
             Err(e) => assert!(

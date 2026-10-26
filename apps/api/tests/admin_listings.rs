@@ -16,6 +16,8 @@ static ADMIN_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// Same child-first reset as the other suites (see tests/db_migrations.rs).
 async fn reset_db(pool: &sqlx::MySqlPool) {
     for table in [
+        "listing_comments",
+        "listing_ratings",
         "favorites",
         "listing_images",
         "listings",
@@ -105,7 +107,10 @@ async fn send_authed(
     csrf: Option<&str>,
     body: Option<serde_json::Value>,
 ) -> (StatusCode, serde_json::Value) {
-    let mut builder = Request::builder().method(method).uri(path).header("cookie", cookie);
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(path)
+        .header("cookie", cookie);
     if let Some(t) = csrf {
         builder = builder.header("x-csrf-token", t);
     }
@@ -210,7 +215,11 @@ async fn queue_lists_pending_oldest_first() {
     assert_eq!(status, StatusCode::OK);
     let data = body["data"].as_array().expect("data array");
     assert_eq!(data.len(), 2, "both pending listings: {body}");
-    assert_eq!(data[0]["public_id"], serde_json::json!(first), "oldest first");
+    assert_eq!(
+        data[0]["public_id"],
+        serde_json::json!(first),
+        "oldest first"
+    );
     assert_eq!(data[1]["public_id"], serde_json::json!(second));
 }
 
@@ -287,12 +296,10 @@ async fn approve_publishes_and_audits() {
     assert_eq!(feed["data"].as_array().unwrap().len(), 1);
 
     // Exactly one audit row, naming action + target.
-    let row = sqlx::query(
-        "SELECT action, target_type, reason FROM admin_audit_logs",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("audit row");
+    let row = sqlx::query("SELECT action, target_type, reason FROM admin_audit_logs")
+        .fetch_one(&pool)
+        .await
+        .expect("audit row");
     let action: String = row.try_get("action").unwrap();
     let target_type: String = row.try_get("target_type").unwrap();
     assert_eq!(action, "listing.approve");
@@ -362,7 +369,10 @@ async fn reject_needs_reason_and_hides_from_public() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(mine["data"].as_array().unwrap().len(), 1);
-    assert_eq!(mine["data"][0]["rejection_reason"], serde_json::json!("عکس نامناسب است"));
+    assert_eq!(
+        mine["data"][0]["rejection_reason"],
+        serde_json::json!("عکس نامناسب است")
+    );
 
     // …but the public detail stays 404 (slug known from the dashboard).
     let slug = mine["data"][0]["slug"].as_str().unwrap().to_string();

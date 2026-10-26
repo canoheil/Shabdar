@@ -28,6 +28,9 @@ export default defineNuxtConfig({
               // every tiny shared control on the production HTTP/1.1 server.
               if (id === '\0plugin-vue:export-helper') return 'shell'
               if (id.endsWith('/app/app.vue')) return 'shell'
+              // Detail-only engagement stays in the existing detail route chunk;
+              // putting its mutation UI in the shell penalizes every Home visit.
+              if (/\/app\/components\/Listing(?:Rating|Comments)\.vue/.test(id)) return
               if (/\/app\/(components|layouts|composables)\//.test(id)) return 'shell'
             },
           },
@@ -43,6 +46,12 @@ export default defineNuxtConfig({
       title: 'شبدر',
       link: [
         { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+      ],
+      // This belongs in document head, not a Vue client template: Vue rejects
+      // side-effect tags there. With JS disabled, retain immediate Vazirmatn;
+      // with JS enabled, font-enhancement.client.ts controls the later swap.
+      noscript: [
+        { innerHTML: '<style>body { font-family: var(--font-family-base); }</style>' },
       ],
     },
   },

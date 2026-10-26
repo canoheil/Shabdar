@@ -21,6 +21,8 @@ static DB_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// named *_test.
 async fn drop_owned_tables(pool: &sqlx::MySqlPool) {
     for table in [
+        "listing_comments",
+        "listing_ratings",
         "favorites",
         "listing_images",
         "listings",
@@ -47,7 +49,9 @@ async fn migrations_apply_on_empty_database() {
 
     drop_owned_tables(&pool).await;
 
-    run_migrations(&pool).await.expect("first apply must succeed");
+    run_migrations(&pool)
+        .await
+        .expect("first apply must succeed");
 
     for table in [
         "users",
@@ -59,6 +63,8 @@ async fn migrations_apply_on_empty_database() {
         "listings",
         "listing_images",
         "favorites",
+        "listing_ratings",
+        "listing_comments",
         "admin_audit_logs",
     ] {
         let sql = format!("SELECT COUNT(*) AS c FROM {table}"); // fixed literals
@@ -96,7 +102,10 @@ async fn users_and_otp_challenges_have_the_approved_public_id_char26() {
     .await
     .unwrap();
     let c: i64 = row.try_get("c").unwrap();
-    assert_eq!(c, 2, "both tables expose public_id char(26) (approved amendment)");
+    assert_eq!(
+        c, 2,
+        "both tables expose public_id char(26) (approved amendment)"
+    );
 }
 
 #[tokio::test]
@@ -189,18 +198,16 @@ async fn favorites_rows_cascade_with_user_and_listing() {
     .execute(&pool)
     .await
     .expect("two users");
-    let user1: u64 = sqlx::query_scalar(
-        "SELECT id FROM users WHERE public_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAA'",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("user 1 id");
-    let user2: u64 = sqlx::query_scalar(
-        "SELECT id FROM users WHERE public_id = 'BBBBBBBBBBBBBBBBBBBBBBBBBB'",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("user 2 id");
+    let user1: u64 =
+        sqlx::query_scalar("SELECT id FROM users WHERE public_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAA'")
+            .fetch_one(&pool)
+            .await
+            .expect("user 1 id");
+    let user2: u64 =
+        sqlx::query_scalar("SELECT id FROM users WHERE public_id = 'BBBBBBBBBBBBBBBBBBBBBBBBBB'")
+            .fetch_one(&pool)
+            .await
+            .expect("user 2 id");
 
     sqlx::query(
         "INSERT INTO listings (public_id, seller_id, category_id, city_id, title, slug, \
@@ -252,19 +259,141 @@ async fn favorites_rows_cascade_with_user_and_listing() {
         .await
         .expect("hard-delete user 1");
     assert_eq!(deleted.rows_affected(), 1);
-    let deleted = sqlx::query(
-        "DELETE FROM listings WHERE public_id = 'DDDDDDDDDDDDDDDDDDDDDDDDDD'",
-    )
-    .execute(&pool)
-    .await
-    .expect("hard-delete listing 2");
+    let deleted =
+        sqlx::query("DELETE FROM listings WHERE public_id = 'DDDDDDDDDDDDDDDDDDDDDDDDDD'")
+            .execute(&pool)
+            .await
+            .expect("hard-delete listing 2");
     assert_eq!(deleted.rows_affected(), 1);
 
     let remaining: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM favorites")
         .fetch_one(&pool)
         .await
         .expect("favorites count");
-    assert_eq!(remaining, 0, "both cascading foreign keys removed their rows");
+    assert_eq!(
+        remaining, 0,
+        "both cascading foreign keys removed their rows"
+    );
+}
+
+#[tokio::test]
+async fn ratings_and_comments_schema_enforces_invariants() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+
+    drop_owned_tables(&pool).await;
+    run_migrations(&pool).await.expect("migrations apply");
+
+    sqlx::query(
+        "INSERT INTO users (public_id, phone_e164, created_at, updated_at) VALUES \
+         ('AAAAAAAAAAAAAAAAAAAAAAAAAA', '+989111111101', NOW(3), NOW(3)), \
+         ('BBBBBBBBBBBBBBBBBBBBBBBBBB', '+989111111102', NOW(3), NOW(3))",
+    )
+    .execute(&pool)
+    .await
+    .expect("two users");
+    let author_id: u64 =
+        sqlx::query_scalar("SELECT id FROM users WHERE public_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAA'")
+            .fetch_one(&pool)
+            .await
+            .expect("author id");
+    let seller_id: u64 =
+        sqlx::query_scalar("SELECT id FROM users WHERE public_id = 'BBBBBBBBBBBBBBBBBBBBBBBBBB'")
+            .fetch_one(&pool)
+            .await
+            .expect("seller id");
+    sqlx::query(
+        "INSERT INTO listings (public_id, seller_id, category_id, city_id, title, slug, \
+         description, price_toman, price_type, status, created_at, updated_at) VALUES \
+         ('CCCCCCCCCCCCCCCCCCCCCCCCCC', ?, 1, 1, 'one', 'ratings-comments-schema', 'd', \
+         1000, 'fixed', 'active', NOW(3), NOW(3))",
+    )
+    .bind(seller_id)
+    .execute(&pool)
+    .await
+    .expect("listing parent");
+    let listing_id: u64 = sqlx::query_scalar(
+        "SELECT id FROM listings WHERE public_id = 'CCCCCCCCCCCCCCCCCCCCCCCCCC'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("listing id");
+
+    sqlx::query(
+        "INSERT INTO listing_ratings (listing_id, user_id, stars, created_at, updated_at) \
+         VALUES (?, ?, 5, NOW(3), NOW(3))",
+    )
+    .bind(listing_id)
+    .bind(author_id)
+    .execute(&pool)
+    .await
+    .expect("valid rating");
+    let duplicate = sqlx::query(
+        "INSERT INTO listing_ratings (listing_id, user_id, stars, created_at, updated_at) \
+         VALUES (?, ?, 4, NOW(3), NOW(3))",
+    )
+    .bind(listing_id)
+    .bind(author_id)
+    .execute(&pool)
+    .await;
+    assert!(duplicate.is_err(), "one current rating per user/listing");
+    let invalid_stars = sqlx::query(
+        "INSERT INTO listing_ratings (listing_id, user_id, stars, created_at, updated_at) \
+         VALUES (?, ?, 0, NOW(3), NOW(3))",
+    )
+    .bind(listing_id)
+    .bind(seller_id)
+    .execute(&pool)
+    .await;
+    assert!(
+        invalid_stars.is_err(),
+        "database rejects stars outside 1..=5"
+    );
+
+    sqlx::query(
+        "INSERT INTO listing_comments (public_id, listing_id, author_id, body, created_at, updated_at) \
+         SELECT 'DDDDDDDDDDDDDDDDDDDDDDDDDD', id, ?, 'comment', NOW(3), NOW(3) \
+         FROM listings WHERE public_id = 'CCCCCCCCCCCCCCCCCCCCCCCCCC'",
+    )
+    .bind(author_id)
+    .execute(&pool)
+    .await
+    .expect("comment row");
+    let duplicate_comment_id = sqlx::query(
+        "INSERT INTO listing_comments (public_id, listing_id, author_id, body, created_at, updated_at) \
+         SELECT 'DDDDDDDDDDDDDDDDDDDDDDDDDD', id, ?, 'other', NOW(3), NOW(3) \
+         FROM listings WHERE public_id = 'CCCCCCCCCCCCCCCCCCCCCCCCCC'",
+    )
+    .bind(author_id)
+    .execute(&pool)
+    .await;
+    assert!(duplicate_comment_id.is_err(), "comment public_id is unique");
+    let delete_author = sqlx::query("DELETE FROM users WHERE id = ?")
+        .bind(author_id)
+        .execute(&pool)
+        .await;
+    assert!(
+        delete_author.is_err(),
+        "comment author hard-delete is restricted"
+    );
+
+    sqlx::query("DELETE FROM listings WHERE id = ?")
+        .bind(listing_id)
+        .execute(&pool)
+        .await
+        .expect("listing hard-delete cascades engagement rows");
+    let ratings: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM listing_ratings")
+        .fetch_one(&pool)
+        .await
+        .expect("rating count");
+    let comments: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM listing_comments")
+        .fetch_one(&pool)
+        .await
+        .expect("comment count");
+    assert_eq!(ratings, 0);
+    assert_eq!(comments, 0);
 }
 
 // --- Environment-free guard tests: these must pass with no database at all.

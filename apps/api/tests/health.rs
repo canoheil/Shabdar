@@ -7,7 +7,7 @@ mod common;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt; // collect a body to bytes
-use tower::ServiceExt;       // Router::oneshot
+use tower::ServiceExt; // Router::oneshot
 
 async fn call_health(app: axum::Router) -> (StatusCode, serde_json::Value, bool) {
     let req = Request::builder()
@@ -17,10 +17,7 @@ async fn call_health(app: axum::Router) -> (StatusCode, serde_json::Value, bool)
     let resp = app.oneshot(req).await.unwrap();
     let status = resp.status();
     let has_request_id = resp.headers().contains_key("x-request-id");
-    let bytes = BodyExt::collect(resp.into_body())
-        .await
-        .unwrap()
-        .to_bytes();
+    let bytes = BodyExt::collect(resp.into_body()).await.unwrap().to_bytes();
     let body = serde_json::from_slice(&bytes).expect("JSON body");
     (status, body, has_request_id)
 }
@@ -40,7 +37,10 @@ async fn health_200_ok_ok_when_database_is_reachable() {
     assert_eq!(status, StatusCode::OK);
     // Exact body: these two keys and nothing else.
     assert_eq!(body, serde_json::json!({"status": "ok", "database": "ok"}));
-    assert!(has_request_id, "request-id layer must wrap the health route too");
+    assert!(
+        has_request_id,
+        "request-id layer must wrap the health route too"
+    );
 }
 
 #[tokio::test]
@@ -55,5 +55,8 @@ async fn health_503_error_error_when_database_is_unreachable() {
     let (status, body, _has_request_id) = call_health(app).await;
 
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-    assert_eq!(body, serde_json::json!({"status": "error", "database": "error"}));
+    assert_eq!(
+        body,
+        serde_json::json!({"status": "error", "database": "error"})
+    );
 }

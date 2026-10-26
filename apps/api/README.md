@@ -1,6 +1,6 @@
 # Shabdar API (`apps/api`)
 
-Rust + Axum REST API for the Shabdar marketplace. Phase 1–6 scope: MariaDB
+Rust + Axum REST API for the Shabdar marketplace. Phase 1–8 scope: MariaDB
 via sqlx (runtime queries only — no compile-time macros), `GET /api/v1/health`,
 dev-mode OTP login (`POST /api/v1/auth/otp/request` +
 `POST /api/v1/auth/otp/verify`) issuing a 30-day session cookie + a CSRF
@@ -9,10 +9,11 @@ cookie, the session surface (`GET`/`PATCH /api/v1/me`,
 domain: reference reads (categories, provinces/cities), seller listing
 write (draft → pending → sold/archived/deleted), public feed/detail/sitemap,
 local-disk image uploads, the admin approve/reject/remove queue with
-audit rows, and atomic personal favorites with exact listing counters. The
-Nuxt frontend lives in `apps/web` and talks to this API through its same-origin
-`/api` proxy. Ratings, comments, reports, chat, and notifications are later
-phases.
+audit rows, atomic personal favorites, one-rating-per-user listing ratings,
+and immediate paginated comments with exact listing counters. The Nuxt
+frontend lives in `apps/web` and talks to this API through its same-origin
+`/api` proxy. Reports, blocks, chat, notifications, and profanity filtering
+are later phases.
 
 Development happens on Termux (Android). No Docker; MariaDB runs as a native
 service on the phone.
@@ -31,6 +32,10 @@ files**: no `.env` is committed, and credentials are exported in the shell.
 | `OTP_TTL_SECS` | no | `120` | OTP code expiry in seconds |
 | `OTP_RESEND_SECS` | no | `60` | Resend cooldown per phone + purpose |
 | `OTP_MAX_ATTEMPTS` | no | `5` | Wrong-code limit before the challenge locks |
+| `RATING_USER_LIMIT` | no | `60` | Per-user rating PUT/DELETE allowance per window, shared across listings |
+| `RATING_USER_WINDOW_SECS` | no | `600` | Rating limiter window; limit responses include `Retry-After` |
+| `COMMENT_USER_LIMIT` | no | `20` | Per-user new-comment allowance per window, shared across listings; deletes do not consume it |
+| `COMMENT_USER_WINDOW_SECS` | no | `600` | Comment creation limiter window; limit responses include `Retry-After` |
 | `SESSION_TTL_SECS` | no | `2592000` | Session lifetime (30 days); also the cookie `Max-Age` |
 | `COOKIE_NAME` | no | `shabdar_session` | Session cookie name |
 | `COOKIE_SECURE` | no | `false` | Set `true` behind HTTPS. `false` is correct for `http://localhost` only — never expose real sessions over plain HTTP |
@@ -66,9 +71,10 @@ FLUSH PRIVILEGES;
 into `DATABASE_URL` / `TEST_DATABASE_URL` — never into any file in the
 repository.
 
-Migrations (`migrations/0001_users_otp_challenges.sql` … `0007_favorites.sql`:
+Migrations (`migrations/0001_users_otp_challenges.sql` … `0008_ratings_comments.sql`:
 users, OTP challenges, sessions, provinces/cities/categories + Rasht and
-7-category seeds, listings, listing_images, admin_audit_logs, favorites) are applied
+7-category seeds, listings, listing_images, admin_audit_logs, favorites,
+listing_ratings, listing_comments) are applied
 automatically at startup by sqlx's
 runtime `Migrator` (no compile-time `migrate!` macro). The migrator reads the
 `migrations/` directory at runtime, so **start the server from the crate
@@ -98,7 +104,7 @@ Keep the phone awake during long runs: `termux-wake-lock`.
   edit: seconds. Measure and record the first cold `cargo build` / `cargo test`
   on your device when you run them.
 
-## Endpoints (Phase 1–6)
+## Endpoints (Phase 1–8)
 
 | Method | Path | Summary |
 |---|---|---|
@@ -119,7 +125,12 @@ Keep the phone awake during long runs: `termux-wake-lock`.
 | GET | `/api/v1/me/listings?status=` | Own listings (`all`\|`pending`\|`active`\|`rejected`\|`sold`\|`archived`) |
 | GET | `/api/v1/me/dashboard/summary` | Own counts `{active_count,sold_count,pending_count,favorite_count}`; `favorite_count` is the sum of favorites received on the seller's non-deleted listings |
 | GET | `/api/v1/listings?…` | Public feed, `active` only, keyset (`q`,`category`,`city`,`province`,`min_price`,`max_price`,`sort`,`cursor`,`limit` ≤ 50) → `{data:[card…],page:{next_cursor,has_more}}` |
-| GET | `/api/v1/listings/{slug}` | Public detail; unknown/non-public → 404, removed/deleted → 410 `gone`; valid viewers also get `favorited`, anonymous responses omit it |
+| GET | `/api/v1/listings/{slug}` | Public detail; unknown/non-public → 404, removed/deleted → 410 `gone`; valid viewers also get private `favorited` + `my_stars`, anonymous responses omit both |
+| PUT | `/api/v1/listings/{slug}/rating` | Session + CSRF; JSON integer `{stars:1..5}` creates/updates one rating → `{rating_average,rating_count,my_stars}` |
+| DELETE | `/api/v1/listings/{slug}/rating` | Session + CSRF; idempotent delete → the same summary with `my_stars:null` |
+| GET | `/api/v1/listings/{slug}/comments?cursor=…&limit=…` | Public visible comments, newest-first keyset, default 20 / max 50 + page envelope |
+| POST | `/api/v1/listings/{slug}/comments` | Session + CSRF; trimmed Unicode `{body}` of 1–1000 characters publishes immediately → confirmed comment |
+| DELETE | `/api/v1/comments/{public_id}` | Author + CSRF; idempotent soft delete → exactly `{ok:true}` |
 | PUT | `/api/v1/me/favorites/{public_id}` | Session + CSRF; save an active listing idempotently → exactly `{favorited:true}` |
 | DELETE | `/api/v1/me/favorites/{public_id}` | Session + CSRF; unsave any known listing idempotently → exactly `{favorited:false}` |
 | GET | `/api/v1/me/favorites?cursor=…&limit=…` | Session; caller's active saved cards, newest save first, default 20 / max 50 + page envelope |
@@ -237,6 +248,49 @@ curl -s -X DELETE "$API/me/favorites/$PUBLIC_ID" \
 curl -s "$API/me/favorites?limit=20" -H "$AUTH"
 curl -s --get "$API/me/favorites" \
   --data-urlencode "cursor=$CURSOR" --data-urlencode 'limit=20' -H "$AUTH"
+```
+
+### Ratings and comments (Phase 8)
+
+Ratings use one `(listing_id,user_id)` row and integer stars 1–5. Sellers
+cannot rate their own listing. PUT/DELETE lock the listing and apply exact
+`rating_sum`/`rating_count` deltas atomically; DELETE is idempotent and returns
+`my_stars:null`. Unknown/non-public targets are 404 and removed/deleted targets
+are 410. Valid-viewer Detail includes `my_stars` together with `favorited` and
+uses `private, no-store`; anonymous/stale-session responses omit both keys.
+
+Comments are public immediately after a trimmed 1–1000 Unicode-character body
+is confirmed. Only visible, non-deleted comments on active listings appear.
+Pages use `created_at DESC,id DESC`, default 20 / maximum 50, and opaque
+`<created-at-micros>:<id>` cursors that survive deletion of their anchor.
+Authors can idempotently soft-delete their own comments; only the first delete
+decrements the visible `comment_count`, and deletion never consumes the
+creation allowance. Bodies must be rendered as text, not HTML.
+
+The default process-local limits are 60 rating mutations and 20 new comments
+per user per 600 seconds. Their four env overrides are listed above; 429
+responses carry `Retry-After`. Use a shared limiter store before multiple API
+replicas. Reports, blocks, comment editing/replies/reactions, and profanity
+filtering are not implemented; profanity filtering remains a launch blocker.
+
+```sh
+API='http://127.0.0.1:8080/api/v1'
+AUTH="cookie: shabdar_session=$SESSION; shabdar_csrf=$CSRF"
+
+curl -s -X PUT "$API/listings/$SLUG/rating" \
+  -H "$AUTH" -H 'content-type: application/json' \
+  -H "x-csrf-token: $CSRF" -d '{"stars":4}'
+curl -s -X DELETE "$API/listings/$SLUG/rating" \
+  -H "$AUTH" -H "x-csrf-token: $CSRF"
+
+curl -s "$API/listings/$SLUG/comments?limit=20"
+curl -s --get "$API/listings/$SLUG/comments" \
+  --data-urlencode "cursor=$CURSOR" --data-urlencode 'limit=20'
+curl -s -X POST "$API/listings/$SLUG/comments" \
+  -H "$AUTH" -H 'content-type: application/json' \
+  -H "x-csrf-token: $CSRF" -d '{"body":"دیدگاه من"}'
+curl -s -X DELETE "$API/comments/$COMMENT_ID" \
+  -H "$AUTH" -H "x-csrf-token: $CSRF"
 ```
 
 Multipart upload recipe (field name `file`; the server ignores the client

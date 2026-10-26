@@ -91,9 +91,13 @@ pub async fn add_image(
     let key = storage_key(ext);
     let path = std::path::Path::new(&cfg.media_dir).join(&key);
     if let Some(parent) = path.parent() {
-        tokio::fs::create_dir_all(parent).await.map_err(|_| ApiError::Internal)?;
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|_| ApiError::Internal)?;
     }
-    tokio::fs::write(&path, bytes).await.map_err(|_| ApiError::Internal)?;
+    tokio::fs::write(&path, bytes)
+        .await
+        .map_err(|_| ApiError::Internal)?;
 
     // MAX over TINYINT UNSIGNED decodes into Option<u64> (same-sign widening;
     // Option<i64> is rejected by sqlx's type check on non-NULL values).
@@ -172,13 +176,12 @@ pub async fn set_order(
     ids: &[u64],
 ) -> Result<(), ApiError> {
     let listing_id = draft_listing_id(pool, seller_id, public_id).await?;
-    let current: Vec<u64> = sqlx::query_scalar(
-        "SELECT id FROM listing_images WHERE listing_id = ? ORDER BY id",
-    )
-    .bind(listing_id)
-    .fetch_all(pool)
-    .await
-    .map_err(|_| ApiError::Internal)?;
+    let current: Vec<u64> =
+        sqlx::query_scalar("SELECT id FROM listing_images WHERE listing_id = ? ORDER BY id")
+            .bind(listing_id)
+            .fetch_all(pool)
+            .await
+            .map_err(|_| ApiError::Internal)?;
     let mut want: Vec<u64> = ids.to_vec();
     want.sort_unstable();
     if want != current {
@@ -286,6 +289,9 @@ mod tests {
     // image-moderation decision; this test pins the current ceiling.
     #[test]
     fn magic_bytes_only_garbage_after_signature_passes() {
-        assert_eq!(detect_ext(&[0xFF, 0xD8, 0xFF, b'!', b'!', b'!']), Some("jpg"));
+        assert_eq!(
+            detect_ext(&[0xFF, 0xD8, 0xFF, b'!', b'!', b'!']),
+            Some("jpg")
+        );
     }
 }

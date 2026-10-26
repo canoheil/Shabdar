@@ -12,7 +12,7 @@
 - Soft delete (`deleted_at`) for users and listings. Hard delete only for personal data on request, after a retention review.
 - Uniqueness and check constraints are enforced in the database.
 - This is a logical design, not executable migration SQL. Migrations are written after approval. Each migration is tested on an empty database.
-- Phase 6 status (2026-10-24): `provinces`, `cities` (+ Gilan/Rasht seed, Rasht = launch city), `categories` (+ the 7 launch seeds), `listings` (price CHECK: fixed requires a price, negotiable optional, free must be NULL), `listing_images`, `admin_audit_logs`, and `favorites` are built (migrations 0003–0007) with seeds applied. Still deferred: `listing_locations`, `support_tickets`, profanity keyword table, and everything in §2 not named here (ratings, comments, reports, blocks, conversations, messages, notifications).
+- Phase 8 status (2026-10-25): `provinces`, `cities` (+ Gilan/Rasht seed, Rasht = launch city), `categories` (+ the 7 launch seeds), `listings` (price CHECK: fixed requires a price, negotiable optional, free must be NULL), `listing_images`, `admin_audit_logs`, `favorites`, `listing_ratings`, and `listing_comments` are built (migrations 0003–0008) with seeds applied. Still deferred: `listing_locations`, `support_tickets`, profanity keyword table, reports, blocks, conversations, messages, and notifications.
 
 ## 2. Tables
 
@@ -125,6 +125,9 @@ Reasoning: `status` is the single source of truth for public visibility. The cou
 Limit per listing (proposed): 8 images, 5 MB each. Final limits are checked in ARCHITECTURE.md.
 
 ### `listing_ratings`
+
+**Built in migration `0008_ratings_comments.sql` (Phase 8).**
+
 - `listing_id BIGINT UNSIGNED NOT NULL` FK → `listings.id` (ON DELETE CASCADE)
 - `user_id BIGINT UNSIGNED NOT NULL` FK → `users.id` (ON DELETE CASCADE)
 - `stars TINYINT UNSIGNED NOT NULL` with `CHECK (stars BETWEEN 1 AND 5)`
@@ -132,9 +135,12 @@ Limit per listing (proposed): 8 images, 5 MB each. Final limits are checked in A
 - Primary key: `(listing_id, user_id)`
 - Index: `(user_id)`
 
-Rules enforced in the service layer and tested: the rater is not the seller. When a rating is inserted or changed, `listings.rating_sum` and `rating_count` are updated in the same transaction.
+Rules enforced in the service layer and tested: the rater is not the seller, stars are integers 1–5, and the composite primary key permits one current row per user/listing. Insert, update, and idempotent delete lock the listing row and apply old-row deltas to `listings.rating_sum` and `rating_count` in the same transaction. Same-star writes do not change counters. A future user hard-delete workflow must reconcile affected listing counters before cascading rating rows; current user deletion is soft.
 
 ### `listing_comments`
+
+**Built in migration `0008_ratings_comments.sql` (Phase 8).**
+
 - `id BIGINT UNSIGNED PK`
 - `public_id CHAR(26) UNIQUE NOT NULL`
 - `listing_id BIGINT UNSIGNED NOT NULL` FK → `listings.id` (ON DELETE CASCADE)
@@ -143,10 +149,10 @@ Rules enforced in the service layer and tested: the rater is not the seller. Whe
 - `status ENUM('visible','hidden','removed') NOT NULL DEFAULT 'visible'`
 - `hidden_reason VARCHAR(500) NULL`
 - `created_at DATETIME(3) NOT NULL`, `updated_at DATETIME(3) NOT NULL`, `deleted_at DATETIME(3) NULL`
-- Index: `(listing_id, status, id)`
-- Index: `(author_id, created_at)`
+- Index: `(listing_id, status, created_at, id)` for the newest-first visible keyset feed
+- Index: `(author_id, created_at, id)`
 
-Reasoning: `hidden` is set immediately when a report arrives. Only admins can restore it to `visible`. Profanity filtering (required before public launch) will set `hidden` automatically; it is not in v1.
+Reasoning: Phase 8 publishes trimmed 1–1000-character comments immediately as `visible`. Only `status='visible' AND deleted_at IS NULL` rows appear publicly and count toward `listings.comment_count`. Creation and author-only deletion hold the listing row lock and update the visible counter in the same transaction; repeated deletion changes neither `deleted_at` nor the counter again. `hidden`/`removed` and `hidden_reason` are reserved for the future reports/admin domain—Phase 8 exposes no route that sets them. Profanity filtering remains required before public launch. Listing deletion cascades comments; author hard-delete is restricted pending a reviewed retention flow.
 
 ### `favorites`
 
@@ -252,7 +258,6 @@ When the nearby feature returns:
 - Price rule for `negotiable` (is a price required?).
 - Listing expiry (not in v1).
 - Retention for OTP records, IP hashes, messages, and reports.
-- Whether comments on sold or removed listings stay visible.
 
 ## 6. Relations overview
 

@@ -77,6 +77,20 @@ export interface ApiListingDetail {
   published_at: string
   // Present only on a valid viewer's detail response; absent from public SSR.
   favorited?: boolean
+  my_stars?: number | null
+}
+
+export interface ApiRatingState {
+  rating_average: number
+  rating_count: number
+  my_stars: number | null
+}
+
+export interface ApiComment {
+  public_id: string
+  body: string
+  author: { public_id: string; display_name: string | null }
+  created_at: string
 }
 
 export interface ApiListingOut {

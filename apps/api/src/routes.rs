@@ -42,32 +42,58 @@ pub fn router(state: AppState) -> Router {
             put(save_favorite).delete(unsave_favorite),
         )
         .route("/api/v1/me/listings", get(my_listings))
-        .route(
-            "/api/v1/me/dashboard/summary",
-            get(dashboard_summary),
-        )
+        .route("/api/v1/me/dashboard/summary", get(dashboard_summary))
         .route("/api/v1/listings", post(create_listing).get(feed_listings))
+        .route(
+            "/api/v1/listings/{slug}/comments",
+            get(listing_comments).post(create_comment),
+        )
+        .route("/api/v1/comments/{public_id}", delete(delete_comment))
+        .route(
+            "/api/v1/listings/{slug}/rating",
+            put(put_rating).delete(delete_rating),
+        )
         // One template for all single-listing methods (axum rejects two
         // registrations of the same shape under different capture names).
         .route(
             "/api/v1/listings/{public_id}",
-            patch(edit_listing).delete(delete_listing).get(listing_detail),
+            patch(edit_listing)
+                .delete(delete_listing)
+                .get(listing_detail),
         )
         .route("/api/v1/sitemap/listings", get(sitemap_listings))
         .route("/api/v1/listings/{public_id}/submit", post(submit_listing))
-        .route("/api/v1/listings/{public_id}/mark-sold", post(mark_sold_listing))
-        .route("/api/v1/listings/{public_id}/archive", post(archive_listing))
+        .route(
+            "/api/v1/listings/{public_id}/mark-sold",
+            post(mark_sold_listing),
+        )
+        .route(
+            "/api/v1/listings/{public_id}/archive",
+            post(archive_listing),
+        )
         .route("/api/v1/listings/{public_id}/images", post(upload_image))
         .route(
             "/api/v1/listings/{public_id}/images/{image_id}",
             delete(delete_image),
         )
-        .route("/api/v1/listings/{public_id}/images/order", patch(images_order))
+        .route(
+            "/api/v1/listings/{public_id}/images/order",
+            patch(images_order),
+        )
         .route("/api/v1/admin/listings/queue", get(admin_queue))
         .route("/api/v1/admin/listings/{public_id}", get(admin_detail))
-        .route("/api/v1/admin/listings/{public_id}/approve", post(admin_approve))
-        .route("/api/v1/admin/listings/{public_id}/reject", post(admin_reject))
-        .route("/api/v1/admin/listings/{public_id}/remove", post(admin_remove))
+        .route(
+            "/api/v1/admin/listings/{public_id}/approve",
+            post(admin_approve),
+        )
+        .route(
+            "/api/v1/admin/listings/{public_id}/reject",
+            post(admin_reject),
+        )
+        .route(
+            "/api/v1/admin/listings/{public_id}/remove",
+            post(admin_remove),
+        )
         .route("/media/{*key}", get(serve_media))
         .route("/api/v1/categories", get(categories))
         .route("/api/v1/locations/provinces", get(provinces))
@@ -90,8 +116,14 @@ pub fn router(state: AppState) -> Router {
 /// `HeaderMap::extend` appends, so both values survive.
 fn two_set_cookies(first: String, second: String) -> HeaderMap {
     let mut map = HeaderMap::new();
-    map.append(SET_COOKIE, first.parse().expect("server-built cookie is ascii"));
-    map.append(SET_COOKIE, second.parse().expect("server-built cookie is ascii"));
+    map.append(
+        SET_COOKIE,
+        first.parse().expect("server-built cookie is ascii"),
+    );
+    map.append(
+        SET_COOKIE,
+        second.parse().expect("server-built cookie is ascii"),
+    );
     map
 }
 
@@ -223,6 +255,114 @@ async fn unsave_favorite(
     Ok(Json(serde_json::json!({ "favorited": false })))
 }
 
+#[derive(Deserialize)]
+struct RatingBody {
+    stars: Option<serde_json::Value>,
+}
+
+/// PUT /api/v1/listings/{slug}/rating — create or update one current rating.
+async fn put_rating(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(slug): Path<String>,
+    ApiJson(body): ApiJson<RatingBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    let stars = crate::ratings::validate_stars(body.stars.as_ref())?;
+    state
+        .limiter
+        .hit(
+            &format!("rating:user:{}", user.user_id),
+            state.config.rating_user_limit,
+            Duration::from_secs(u64::from(state.config.rating_user_window_secs)),
+        )
+        .into_result()?;
+    Ok(Json(
+        crate::ratings::put(&state.pool, user.user_id, &slug, stars).await?,
+    ))
+}
+
+/// DELETE /api/v1/listings/{slug}/rating — idempotently remove own rating.
+async fn delete_rating(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(slug): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    state
+        .limiter
+        .hit(
+            &format!("rating:user:{}", user.user_id),
+            state.config.rating_user_limit,
+            Duration::from_secs(u64::from(state.config.rating_user_window_secs)),
+        )
+        .into_result()?;
+    Ok(Json(
+        crate::ratings::delete(&state.pool, user.user_id, &slug).await?,
+    ))
+}
+
+#[derive(Deserialize)]
+struct CommentBody {
+    body: Option<String>,
+}
+
+/// GET /api/v1/listings/{slug}/comments — public viewer-independent page.
+async fn listing_comments(
+    State(state): State<AppState>,
+    Path(slug): Path<String>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(
+        crate::comments::list(
+            &state.pool,
+            &slug,
+            params.get("cursor").map(String::as_str),
+            params.get("limit").map(String::as_str),
+        )
+        .await?,
+    ))
+}
+
+/// POST /api/v1/listings/{slug}/comments — publish one visible comment.
+async fn create_comment(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(slug): Path<String>,
+    ApiJson(body): ApiJson<CommentBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    let body = crate::comments::validate_body(body.body.as_deref())?;
+    state
+        .limiter
+        .hit(
+            &format!("comment:user:{}", user.user_id),
+            state.config.comment_user_limit,
+            Duration::from_secs(u64::from(state.config.comment_user_window_secs)),
+        )
+        .into_result()?;
+    Ok(Json(
+        crate::comments::create(&state.pool, user.user_id, &slug, &body).await?,
+    ))
+}
+
+/// DELETE /api/v1/comments/{public_id} — author-only idempotent soft delete.
+/// It deliberately does not spend the new-comment creation allowance.
+async fn delete_comment(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    Ok(Json(
+        crate::comments::delete(&state.pool, user.user_id, &public_id).await?,
+    ))
+}
+
 /// GET /api/v1/me/listings — the seller's own listings (Phase 3 Task 3).
 /// Query: `status` (all|pending|active|rejected|sold|archived, default all).
 async fn my_listings(
@@ -244,7 +384,9 @@ async fn create_listing(
 ) -> Result<Json<crate::listings::ListingOut>, ApiError> {
     // CSRF first: a failed check must not create anything.
     crate::csrf::check_csrf(&headers)?;
-    Ok(Json(crate::listings::create_draft(&state.pool, user.user_id, body).await?))
+    Ok(Json(
+        crate::listings::create_draft(&state.pool, user.user_id, body).await?,
+    ))
 }
 
 /// PATCH /api/v1/listings/{public_id} — edit a draft/rejected listing.
@@ -256,7 +398,9 @@ async fn edit_listing(
     ApiJson(body): ApiJson<crate::listings::EditBody>,
 ) -> Result<Json<crate::listings::ListingOut>, ApiError> {
     crate::csrf::check_csrf(&headers)?;
-    Ok(Json(crate::listings::edit_listing(&state.pool, user.user_id, &public_id, body).await?))
+    Ok(Json(
+        crate::listings::edit_listing(&state.pool, user.user_id, &public_id, body).await?,
+    ))
 }
 
 /// POST /api/v1/listings/{public_id}/submit — draft|rejected → pending.
@@ -267,7 +411,9 @@ async fn submit_listing(
     Path(public_id): Path<String>,
 ) -> Result<Json<crate::listings::ListingOut>, ApiError> {
     crate::csrf::check_csrf(&headers)?;
-    Ok(Json(crate::listings::transition(&state.pool, user.user_id, &public_id, "submit").await?))
+    Ok(Json(
+        crate::listings::transition(&state.pool, user.user_id, &public_id, "submit").await?,
+    ))
 }
 
 /// POST /api/v1/listings/{public_id}/mark-sold — active → sold.
@@ -278,7 +424,9 @@ async fn mark_sold_listing(
     Path(public_id): Path<String>,
 ) -> Result<Json<crate::listings::ListingOut>, ApiError> {
     crate::csrf::check_csrf(&headers)?;
-    Ok(Json(crate::listings::transition(&state.pool, user.user_id, &public_id, "mark-sold").await?))
+    Ok(Json(
+        crate::listings::transition(&state.pool, user.user_id, &public_id, "mark-sold").await?,
+    ))
 }
 
 /// POST /api/v1/listings/{public_id}/archive — active → archived.
@@ -289,7 +437,9 @@ async fn archive_listing(
     Path(public_id): Path<String>,
 ) -> Result<Json<crate::listings::ListingOut>, ApiError> {
     crate::csrf::check_csrf(&headers)?;
-    Ok(Json(crate::listings::transition(&state.pool, user.user_id, &public_id, "archive").await?))
+    Ok(Json(
+        crate::listings::transition(&state.pool, user.user_id, &public_id, "archive").await?,
+    ))
 }
 
 /// DELETE /api/v1/listings/{public_id} — soft-delete draft|rejected|archived.
@@ -322,11 +472,17 @@ async fn upload_image(
         ApiError::Validation { fields }
     })? {
         if field.name() == Some("file") {
-            bytes = Some(field.bytes().await.map_err(|_| {
-                let mut fields = BTreeMap::new();
-                fields.insert("images".to_string(), "unreadable".to_string());
-                ApiError::Validation { fields }
-            })?.to_vec());
+            bytes = Some(
+                field
+                    .bytes()
+                    .await
+                    .map_err(|_| {
+                        let mut fields = BTreeMap::new();
+                        fields.insert("images".to_string(), "unreadable".to_string());
+                        ApiError::Validation { fields }
+                    })?
+                    .to_vec(),
+            );
             break;
         }
     }
@@ -336,8 +492,14 @@ async fn upload_image(
         return Err(ApiError::Validation { fields });
     };
     Ok(Json(
-        crate::listing_images::add_image(&state.pool, &state.config, user.user_id, &public_id, &bytes)
-            .await?,
+        crate::listing_images::add_image(
+            &state.pool,
+            &state.config,
+            user.user_id,
+            &public_id,
+            &bytes,
+        )
+        .await?,
     ))
 }
 
@@ -349,8 +511,14 @@ async fn delete_image(
     Path((public_id, image_id)): Path<(String, u64)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     crate::csrf::check_csrf(&headers)?;
-    crate::listing_images::remove_image(&state.pool, &state.config, user.user_id, &public_id, image_id)
-        .await?;
+    crate::listing_images::remove_image(
+        &state.pool,
+        &state.config,
+        user.user_id,
+        &public_id,
+        image_id,
+    )
+    .await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -384,7 +552,9 @@ async fn admin_detail(
     Path(public_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     crate::admin::require_admin(&user)?;
-    Ok(Json(crate::admin::admin_detail(&state.pool, &public_id).await?))
+    Ok(Json(
+        crate::admin::admin_detail(&state.pool, &public_id).await?,
+    ))
 }
 
 /// POST /api/v1/admin/listings/{public_id}/approve — pending → active.
@@ -396,7 +566,9 @@ async fn admin_approve(
 ) -> Result<Json<crate::listings::ListingOut>, ApiError> {
     crate::csrf::check_csrf(&headers)?;
     crate::admin::require_admin(&user)?;
-    Ok(Json(crate::admin::approve(&state.pool, &user, &public_id).await?))
+    Ok(Json(
+        crate::admin::approve(&state.pool, &user, &public_id).await?,
+    ))
 }
 
 /// POST /api/v1/admin/listings/{public_id}/reject — pending → rejected.
@@ -409,7 +581,9 @@ async fn admin_reject(
 ) -> Result<Json<crate::listings::ListingOut>, ApiError> {
     crate::csrf::check_csrf(&headers)?;
     crate::admin::require_admin(&user)?;
-    Ok(Json(crate::admin::reject(&state.pool, &user, &public_id, &body.reason).await?))
+    Ok(Json(
+        crate::admin::reject(&state.pool, &user, &public_id, &body.reason).await?,
+    ))
 }
 
 /// POST /api/v1/admin/listings/{public_id}/remove — active → removed.
@@ -422,7 +596,9 @@ async fn admin_remove(
 ) -> Result<Json<crate::listings::ListingOut>, ApiError> {
     crate::csrf::check_csrf(&headers)?;
     crate::admin::require_admin(&user)?;
-    Ok(Json(crate::admin::remove(&state.pool, &user, &public_id, &body.reason).await?))
+    Ok(Json(
+        crate::admin::remove(&state.pool, &user, &public_id, &body.reason).await?,
+    ))
 }
 
 /// Request body for PATCH …/images/order (Phase 3 Task 5).
@@ -511,7 +687,14 @@ async fn sitemap_listings(
 async fn serve_media(
     State(state): State<AppState>,
     Path(key): Path<String>,
-) -> Result<(StatusCode, [(axum::http::header::HeaderName, &'static str); 1], Vec<u8>), ApiError> {
+) -> Result<
+    (
+        StatusCode,
+        [(axum::http::header::HeaderName, &'static str); 1],
+        Vec<u8>,
+    ),
+    ApiError,
+> {
     let (bytes, content_type) = crate::listing_images::read_media(&state.config, &key).await?;
     Ok((
         StatusCode::OK,
@@ -593,8 +776,9 @@ async fn province_cities(
             let id: u32 = row.try_get("id").map_err(|_| ApiError::Internal)?;
             let name_fa: String = row.try_get("name_fa").map_err(|_| ApiError::Internal)?;
             let slug: String = row.try_get("slug").map_err(|_| ApiError::Internal)?;
-            let is_launch_city: bool =
-                row.try_get("is_launch_city").map_err(|_| ApiError::Internal)?;
+            let is_launch_city: bool = row
+                .try_get("is_launch_city")
+                .map_err(|_| ApiError::Internal)?;
             Ok(serde_json::json!({
                 "id": id, "name_fa": name_fa, "slug": slug,
                 "is_launch_city": is_launch_city,
@@ -659,11 +843,7 @@ async fn otp_request(
     // so scanning phone numbers from one address still throttles, then the
     // request must survive the per-phone rules, and only then may it spend a
     // slot from the global SMS budget.
-    let ip = client_ip(
-        state.config.trust_proxy,
-        peer.0,
-        &headers,
-    );
+    let ip = client_ip(state.config.trust_proxy, peer.0, &headers);
     state
         .limiter
         .hit(
@@ -736,11 +916,7 @@ async fn otp_verify(
     }
 
     // Guessing codes is a per-client activity: bound it before touching the DB.
-    let ip = client_ip(
-        state.config.trust_proxy,
-        peer.0,
-        &headers,
-    );
+    let ip = client_ip(state.config.trust_proxy, peer.0, &headers);
     state
         .limiter
         .hit(

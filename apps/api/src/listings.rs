@@ -73,8 +73,10 @@ pub struct ListingOut {
 pub fn listing_out(row: &sqlx::mysql::MySqlRow) -> Result<ListingOut, ApiError> {
     // Timestamps serialize as RFC3339 strings (ponytail: string fields dodge
     // the chrono `serde` feature — no new dependency surface for one format).
-    let created_at: chrono::DateTime<Utc> = row.try_get("created_at").map_err(|_| ApiError::Internal)?;
-    let updated_at: chrono::DateTime<Utc> = row.try_get("updated_at").map_err(|_| ApiError::Internal)?;
+    let created_at: chrono::DateTime<Utc> =
+        row.try_get("created_at").map_err(|_| ApiError::Internal)?;
+    let updated_at: chrono::DateTime<Utc> =
+        row.try_get("updated_at").map_err(|_| ApiError::Internal)?;
     Ok(ListingOut {
         public_id: row.try_get("public_id").map_err(|_| ApiError::Internal)?,
         slug: row.try_get("slug").map_err(|_| ApiError::Internal)?,
@@ -85,7 +87,9 @@ pub fn listing_out(row: &sqlx::mysql::MySqlRow) -> Result<ListingOut, ApiError> 
         status: row.try_get("status").map_err(|_| ApiError::Internal)?,
         category_id: row.try_get("category_id").map_err(|_| ApiError::Internal)?,
         city_id: row.try_get("city_id").map_err(|_| ApiError::Internal)?,
-        rejection_reason: row.try_get("rejection_reason").map_err(|_| ApiError::Internal)?,
+        rejection_reason: row
+            .try_get("rejection_reason")
+            .map_err(|_| ApiError::Internal)?,
         created_at: created_at.to_rfc3339(),
         updated_at: updated_at.to_rfc3339(),
     })
@@ -110,7 +114,12 @@ pub fn make_slug(title: &str) -> String {
     slug
 }
 
-fn required_text(value: &Option<String>, field: &str, max: usize, errors: &mut BTreeMap<String, String>) -> Option<String> {
+fn required_text(
+    value: &Option<String>,
+    field: &str,
+    max: usize,
+    errors: &mut BTreeMap<String, String>,
+) -> Option<String> {
     match value {
         None => {
             errors.insert(field.to_string(), "required".to_string());
@@ -229,7 +238,12 @@ pub async fn create_draft(
 ) -> Result<ListingOut, ApiError> {
     let mut errors = BTreeMap::new();
     let title = required_text(&body.title, "title", MAX_TITLE_CHARS, &mut errors);
-    let description = required_text(&body.description, "description", MAX_DESCRIPTION_CHARS, &mut errors);
+    let description = required_text(
+        &body.description,
+        "description",
+        MAX_DESCRIPTION_CHARS,
+        &mut errors,
+    );
     let price_type = match &body.price_type {
         Some(t) if !t.trim().is_empty() => Some(t.trim().to_string()),
         _ => {
@@ -253,8 +267,12 @@ pub async fn create_draft(
     if !errors.is_empty() {
         return Err(ApiError::Validation { fields: errors });
     }
-    let (title, description, price_type, price) =
-        (title.unwrap(), description.unwrap(), price_type.unwrap(), price.unwrap());
+    let (title, description, price_type, price) = (
+        title.unwrap(),
+        description.unwrap(),
+        price_type.unwrap(),
+        price.unwrap(),
+    );
     let category_id = body.category_id.unwrap();
     let city_id = body.city_id.unwrap();
 
@@ -326,13 +344,20 @@ pub async fn edit_listing(
     };
     let description = match &body.description {
         None => None,
-        Some(d) => required_text(&Some(d.clone()), "description", MAX_DESCRIPTION_CHARS, &mut errors),
+        Some(d) => required_text(
+            &Some(d.clone()),
+            "description",
+            MAX_DESCRIPTION_CHARS,
+            &mut errors,
+        ),
     };
     // Effective price inputs: patched values or the stored ones.
     let stored_type: String = row.try_get("price_type").map_err(|_| ApiError::Internal)?;
     let stored_price: Option<u64> = row.try_get("price_toman").map_err(|_| ApiError::Internal)?;
     let price_type = body.price_type.clone().unwrap_or(stored_type);
-    let price_input = body.price_toman.unwrap_or_else(|| stored_price.map(|n| n as i64));
+    let price_input = body
+        .price_toman
+        .unwrap_or_else(|| stored_price.map(|n| n as i64));
     let price = check_price(&price_type, price_input, &mut errors);
     if let Some(id) = body.category_id {
         check_category(pool, id, &mut errors).await;
@@ -349,8 +374,12 @@ pub async fn edit_listing(
     let new_title: String = title.unwrap_or_else(|| row.try_get("title").unwrap_or_default());
     let new_description: String =
         description.unwrap_or_else(|| row.try_get("description").unwrap_or_default());
-    let new_category: u16 = body.category_id.unwrap_or_else(|| row.try_get("category_id").unwrap_or(0));
-    let new_city: u32 = body.city_id.unwrap_or_else(|| row.try_get("city_id").unwrap_or(0));
+    let new_category: u16 = body
+        .category_id
+        .unwrap_or_else(|| row.try_get("category_id").unwrap_or(0));
+    let new_city: u32 = body
+        .city_id
+        .unwrap_or_else(|| row.try_get("city_id").unwrap_or(0));
 
     // A new title means a new slug (same collision retry, excluding own row).
     // Exhaustion returns 400, never a 500 on the UNIQUE index.
@@ -360,13 +389,18 @@ pub async fn edit_listing(
         let base = make_slug(&new_title);
         let mut free: Option<String> = None;
         for attempt in 1..=6 {
-            let candidate = if attempt == 1 { base.clone() } else { format!("{base}-{attempt}") };
-            let clash: Option<u64> = sqlx::query_scalar("SELECT id FROM listings WHERE slug = ? AND id <> ?")
-                .bind(&candidate)
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-                .map_err(|_| ApiError::Internal)?;
+            let candidate = if attempt == 1 {
+                base.clone()
+            } else {
+                format!("{base}-{attempt}")
+            };
+            let clash: Option<u64> =
+                sqlx::query_scalar("SELECT id FROM listings WHERE slug = ? AND id <> ?")
+                    .bind(&candidate)
+                    .bind(id)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|_| ApiError::Internal)?;
             if clash.is_none() {
                 free = Some(candidate);
                 break;
@@ -423,11 +457,12 @@ pub async fn transition(
             if status != "draft" && status != "rejected" {
                 return Err(bad_transition());
             }
-            let images: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM listing_images WHERE listing_id = ?")
-                .bind(id)
-                .fetch_one(pool)
-                .await
-                .map_err(|_| ApiError::Internal)?;
+            let images: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM listing_images WHERE listing_id = ?")
+                    .bind(id)
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|_| ApiError::Internal)?;
             if images < 1 {
                 let mut fields = BTreeMap::new();
                 fields.insert("images".to_string(), "required".to_string());
@@ -449,13 +484,15 @@ pub async fn transition(
             if status != "active" {
                 return Err(bad_transition());
             }
-            sqlx::query("UPDATE listings SET status = 'sold', sold_at = ?, updated_at = ? WHERE id = ?")
-                .bind(now)
-                .bind(now)
-                .bind(id)
-                .execute(pool)
-                .await
-                .map_err(|_| ApiError::Internal)?;
+            sqlx::query(
+                "UPDATE listings SET status = 'sold', sold_at = ?, updated_at = ? WHERE id = ?",
+            )
+            .bind(now)
+            .bind(now)
+            .bind(id)
+            .execute(pool)
+            .await
+            .map_err(|_| ApiError::Internal)?;
         }
         "archive" => {
             if status != "active" {
@@ -549,10 +586,16 @@ pub async fn summary(pool: &MySqlPool, seller_id: u64) -> Result<serde_json::Val
     .await
     .map_err(|_| ApiError::Internal)?;
     // COUNT() decodes as a signed BIGINT in sqlx's MySQL driver.
-    let active_count: i64 = row.try_get("active_count").map_err(|_| ApiError::Internal)?;
+    let active_count: i64 = row
+        .try_get("active_count")
+        .map_err(|_| ApiError::Internal)?;
     let sold_count: i64 = row.try_get("sold_count").map_err(|_| ApiError::Internal)?;
-    let pending_count: i64 = row.try_get("pending_count").map_err(|_| ApiError::Internal)?;
-    let favorite_count: i64 = row.try_get("favorite_count").map_err(|_| ApiError::Internal)?;
+    let pending_count: i64 = row
+        .try_get("pending_count")
+        .map_err(|_| ApiError::Internal)?;
+    let favorite_count: i64 = row
+        .try_get("favorite_count")
+        .map_err(|_| ApiError::Internal)?;
     Ok(serde_json::json!({
         "active_count": active_count,
         "sold_count": sold_count,
@@ -594,7 +637,9 @@ pub fn decode_cursor(raw: &str) -> Result<(chrono::DateTime<Utc>, u64), ApiError
 }
 
 pub fn page_limit(raw: Option<&str>) -> usize {
-    raw.and_then(|s| s.parse::<usize>().ok()).unwrap_or(20).clamp(1, 50)
+    raw.and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(20)
+        .clamp(1, 50)
 }
 
 /// Resolves an optional slug filter to its id: unknown slugs are a client
@@ -625,15 +670,18 @@ async fn filter_id(
 
 pub(crate) fn card_from_row(row: &sqlx::mysql::MySqlRow) -> Result<serde_json::Value, ApiError> {
     let sum: u32 = row.try_get("rating_sum").map_err(|_| ApiError::Internal)?;
-    let count: u32 = row.try_get("rating_count").map_err(|_| ApiError::Internal)?;
+    let count: u32 = row
+        .try_get("rating_count")
+        .map_err(|_| ApiError::Internal)?;
     let average = if count == 0 {
         serde_json::json!(0)
     } else {
         serde_json::json!(sum as f64 / count as f64)
     };
     let cover: Option<String> = row.try_get("cover").map_err(|_| ApiError::Internal)?;
-    let published_at: chrono::DateTime<Utc> =
-        row.try_get("published_at").map_err(|_| ApiError::Internal)?;
+    let published_at: chrono::DateTime<Utc> = row
+        .try_get("published_at")
+        .map_err(|_| ApiError::Internal)?;
     Ok(serde_json::json!({
         "public_id": row.try_get::<String, _>("public_id").map_err(|_| ApiError::Internal)?,
         "slug": row.try_get::<String, _>("slug").map_err(|_| ApiError::Internal)?,
@@ -762,7 +810,7 @@ pub fn normalize_query(raw: &str) -> Vec<String> {
         .filter_map(|c| match c {
             '\u{064A}' => Some('\u{06CC}'), // Arabic yeh → Persian yeh
             '\u{0643}' => Some('\u{06A9}'), // Arabic kaf → Persian kaf
-            '\u{200C}' => None,              // ZWNJ is a joiner, not a break
+            '\u{200C}' => None,             // ZWNJ is a joiner, not a break
             _ => Some(c),
         })
         .collect::<String>()
@@ -849,7 +897,8 @@ pub async fn feed(
     }
     // One AND clause per term: each term may hit title or description.
     let patterns: Vec<String> = terms.iter().map(|t| like_pattern(t)).collect();
-    let (title_folded, description_folded) = (folded_column("l.title"), folded_column("l.description"));
+    let (title_folded, description_folded) =
+        (folded_column("l.title"), folded_column("l.description"));
     for _ in &patterns {
         sql.push_str(&format!(
             " AND (({title_folded}) LIKE ? ESCAPE '!' OR ({description_folded}) LIKE ? ESCAPE '!')"
@@ -875,7 +924,9 @@ async fn feed_query(
     limit: usize,
 ) -> Result<serde_json::Value, ApiError> {
     let mut sql = base.to_string();
-    let anchor: Option<[i64; 3]> = cursor.map(|raw| decode_feed_cursor(sort, raw)).transpose()?;
+    let anchor: Option<[i64; 3]> = cursor
+        .map(|raw| decode_feed_cursor(sort, raw))
+        .transpose()?;
     if anchor.is_some() {
         sql.push_str(&format!(
             " AND (({}) , ({}) , ({})) > (?, ?, ?)",
@@ -905,16 +956,21 @@ async fn feed_query(
     let mut with_keys: Vec<(serde_json::Value, [i64; 3])> = Vec::with_capacity(rows.len());
     for row in &rows {
         let triple = [
-            row.try_get::<i64, _>("k1").map_err(|_| ApiError::Internal)?,
-            row.try_get::<i64, _>("k2").map_err(|_| ApiError::Internal)?,
-            row.try_get::<i64, _>("k3").map_err(|_| ApiError::Internal)?,
+            row.try_get::<i64, _>("k1")
+                .map_err(|_| ApiError::Internal)?,
+            row.try_get::<i64, _>("k2")
+                .map_err(|_| ApiError::Internal)?,
+            row.try_get::<i64, _>("k3")
+                .map_err(|_| ApiError::Internal)?,
         ];
         with_keys.push((card_from_row(row)?, triple));
     }
     let has_more = with_keys.len() > limit;
     with_keys.truncate(limit);
     let next_cursor = if has_more {
-        with_keys.last().map(|(_, triple)| encode_feed_cursor(sort, *triple))
+        with_keys
+            .last()
+            .map(|(_, triple)| encode_feed_cursor(sort, *triple))
     } else {
         None
     };
@@ -956,17 +1012,23 @@ pub async fn detail(
         return Err(ApiError::NotFound);
     }
     let id: u64 = row.try_get("id").map_err(|_| ApiError::Internal)?;
-    let favorited = match viewer_user_id {
+    let viewer_state = match viewer_user_id {
         Some(viewer_user_id) => {
-            let exists: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM favorites WHERE user_id = ? AND listing_id = ?)",
+            let state = sqlx::query(
+                "SELECT \
+                 EXISTS(SELECT 1 FROM favorites WHERE user_id = ? AND listing_id = ?) AS favorited, \
+                 (SELECT stars FROM listing_ratings WHERE user_id = ? AND listing_id = ?) AS my_stars",
             )
+            .bind(viewer_user_id)
+            .bind(id)
             .bind(viewer_user_id)
             .bind(id)
             .fetch_one(pool)
             .await
             .map_err(|_| ApiError::Internal)?;
-            Some(exists)
+            let favorited: bool = state.try_get("favorited").map_err(|_| ApiError::Internal)?;
+            let my_stars: Option<u8> = state.try_get("my_stars").map_err(|_| ApiError::Internal)?;
+            Some((favorited, my_stars))
         }
         None => None,
     };
@@ -986,9 +1048,12 @@ pub async fn detail(
         })
         .collect::<Result<_, ApiError>>()?;
     let sum: u32 = row.try_get("rating_sum").map_err(|_| ApiError::Internal)?;
-    let count: u32 = row.try_get("rating_count").map_err(|_| ApiError::Internal)?;
-    let published_at: chrono::DateTime<Utc> =
-        row.try_get("published_at").map_err(|_| ApiError::Internal)?;
+    let count: u32 = row
+        .try_get("rating_count")
+        .map_err(|_| ApiError::Internal)?;
+    let published_at: chrono::DateTime<Utc> = row
+        .try_get("published_at")
+        .map_err(|_| ApiError::Internal)?;
     let mut body = serde_json::json!({
         "public_id": row.try_get::<String, _>("public_id").map_err(|_| ApiError::Internal)?,
         "slug": row.try_get::<String, _>("slug").map_err(|_| ApiError::Internal)?,
@@ -1009,8 +1074,9 @@ pub async fn detail(
         "comment_count": row.try_get::<u32, _>("comment_count").map_err(|_| ApiError::Internal)?,
         "published_at": published_at.to_rfc3339(),
     });
-    if let Some(favorited) = favorited {
+    if let Some((favorited, my_stars)) = viewer_state {
         body["favorited"] = serde_json::json!(favorited);
+        body["my_stars"] = serde_json::json!(my_stars);
     }
     Ok(body)
 }
@@ -1022,8 +1088,7 @@ pub async fn sitemap(
     limit_raw: Option<&str>,
 ) -> Result<serde_json::Value, ApiError> {
     let limit = page_limit(limit_raw);
-    let anchor: Option<(chrono::DateTime<Utc>, u64)> =
-        cursor.map(decode_cursor).transpose()?;
+    let anchor: Option<(chrono::DateTime<Utc>, u64)> = cursor.map(decode_cursor).transpose()?;
     let mut sql = "SELECT id, slug, updated_at FROM listings \
          WHERE status = 'active' AND deleted_at IS NULL"
         .to_string();

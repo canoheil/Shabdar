@@ -1,6 +1,6 @@
 # REST API Proposal
 
-> **خلاصه فارسی:** API به‌صورت REST زیر `/api/v1` است. مسیرهای عمومی بدون ورود قابل استفاده‌اند و کارهای شخصی یا مدیریتی نشست معتبر می‌خواهند. ورود با کد پیامکی یک‌بار مصرف انجام می‌شود. آگهی‌ها قبل از تأیید ادمین عمومی نمی‌شوند. امتیاز، کامنت، ریپورت، بلاک و صف مدیریت در این فایل تعریف شده‌اند.
+> **خلاصه فارسی:** API به‌صورت REST زیر `/api/v1` است. مسیرهای عمومی بدون ورود قابل استفاده‌اند و کارهای شخصی یا مدیریتی نشست معتبر می‌خواهند. ورود با کد پیامکی یک‌بار مصرف انجام می‌شود. آگهی‌ها قبل از تأیید ادمین عمومی نمی‌شوند. امتیاز و دیدگاه در فاز ۸ پیاده‌سازی شده‌اند؛ ریپورت، بلاک و صف مدیریت آن‌ها هنوز برای فاز بعد پیشنهادی‌اند.
 
 ## 1. Conventions
 
@@ -87,7 +87,7 @@ Error codes used by the auth and session endpoints:
 
 Listing card shape: `{ public_id, slug, title, price_toman, price_type, city, province, category, cover_image, rating_average, rating_count, published_at }`.
 
-Public detail keeps the existing visibility rules. For a valid logged-in viewer it also contains `favorited: true|false`; anonymous, invalid, expired, or non-active sessions receive the normal public payload without a `favorited` key. A response containing viewer state is private and `no-store`; it must not be placed in public SSR/cached HTML.
+Public detail keeps the existing visibility rules. For a valid logged-in viewer it also contains `favorited: true|false` and `my_stars: 1|2|3|4|5|null`; anonymous, invalid, expired, or non-active sessions receive the normal public payload with **both keys omitted**. A response containing viewer state is `Cache-Control: private, no-store`; it must not be placed in public SSR/cached HTML. Public comment pages never contain viewer state or a `can_delete` field.
 
 ### Search and sorting (Phase 4)
 
@@ -169,26 +169,62 @@ curl -s --get "$API/me/favorites" \
   -H "cookie: shabdar_session=$SESSION"
 ```
 
-## 7. Ratings
+## 7. Ratings (Phase 8 — built)
 
 | Method | Path | Auth | Summary |
 |---|---|---|---|
-| PUT | `/listings/{slug}/rating` | User | Body: `{ stars: 1..5 }`. Creates or updates the user's rating. Returns `{ rating_average, rating_count, my_stars }`. Forbidden if the user is the seller. Target must be `active`. |
-| DELETE | `/listings/{slug}/rating` | User | Removes the user's rating. Returns the updated summary. |
+| PUT | `/listings/{slug}/rating` | User + CSRF | JSON body `{ "stars": 1|2|3|4|5 }`. Creates or updates the caller's single rating. Returns exactly `{ rating_average, rating_count, my_stars }`. |
+| DELETE | `/listings/{slug}/rating` | User + CSRF | Idempotently removes the caller's rating. Returns the same summary shape with `my_stars: null`. |
 
-The listing detail response includes `my_stars` when the user is logged in.
+`stars` is required and must be a JSON integer in the inclusive range 1–5. Missing, fractional, string, boolean, null, or out-of-range values are `400 validation_error` with `fields.stars` = `required`, `integer`, or `range`. There is one row per `(listing_id, user_id)`; writing the same stars again is a no-op. Sellers receive `403 forbidden` when rating their own listing. An unknown or non-public target is `404 not_found`; a `removed` or soft-deleted target is `410 gone`.
 
-## 8. Comments
+Every mutation locks the listing row and applies the old-row delta to `rating_sum` and `rating_count` in the same transaction. `rating_average` is `rating_sum / rating_count`, or `0` when the count is zero; no clamp hides an invariant error. Popular sort reads these API-maintained counters and retains its Bayesian prior.
+
+The per-user allowance is 60 PUT/DELETE mutations per 600 seconds by default, shared across listings. `RATING_USER_LIMIT` and `RATING_USER_WINDOW_SECS` override it. A valid mutation attempt that passes body validation consumes one hit even if the target is later rejected. The limiter returns `429 rate_limited` with `Retry-After`; counters are process-local and reset on restart, so a multi-replica deployment needs a shared store.
+
+## 8. Comments (Phase 8 — built)
 
 | Method | Path | Auth | Summary |
 |---|---|---|---|
-| GET | `/listings/{slug}/comments?cursor=…` | Public | Visible comments, newest first. Hidden comments are excluded. Blocked users' comments are excluded for the viewer. |
-| POST | `/listings/{slug}/comments` | User | Body: `{ body }` (max 1000 characters). Publishes immediately. Returns the comment. |
-| DELETE | `/comments/{public_id}` | Author | Soft-deletes own comment. |
+| GET | `/listings/{slug}/comments?cursor=…&limit=…` | Public | Visible, non-deleted comments on a publicly active listing, newest first. Returns `{ data, page: { next_cursor, has_more } }`. |
+| POST | `/listings/{slug}/comments` | User + CSRF | JSON body `{ "body": "…" }`. Publishes immediately and returns the confirmed comment object. |
+| DELETE | `/comments/{public_id}` | Author + CSRF | Idempotently soft-deletes the caller's comment. Returns exactly `{ "ok": true }`. |
 
-Comments on `removed` or `archived` listings are hidden. Comment profanity filtering is not in v1 (see PRODUCT.md section 4).
+A comment object is `{ public_id, body, author: { public_id, display_name }, created_at }`. `display_name` is nullable. Text is trimmed; after trimming it must contain 1–1000 Unicode scalar values. Missing/blank input is `400 validation_error` with `fields.body = "required"`; over 1000 characters is `fields.body = "too_long"`. Self-comments are allowed. Clients must render the body as text, never HTML. Comment profanity filtering remains a public-launch blocker and is not implemented in Phase 8.
 
-## 9. Reports and blocks
+The public list defaults to 20 and clamps `limit` to 1–50. Order is `created_at DESC, id DESC`; the opaque cursor is `<created-at-micros>:<id>`. Send `page.next_cursor` unchanged until `has_more` is false. Equal timestamps are disambiguated by ID, and deleting the anchor between pages does not invalidate the cursor. A malformed cursor is `400 validation_error` with `fields.cursor = "invalid_cursor"`. Only `status = 'visible' AND deleted_at IS NULL` rows appear; `hidden` and `removed` are reserved for the future trust-and-safety domain.
+
+Creating a comment locks the listing and increments `listings.comment_count` in the same transaction. Deletion sets only `deleted_at` and decrements the visible counter on the first delete; repeated deletes return `{ "ok": true }` without another decrement. Another author's comment returns `403 forbidden`; an unknown comment ID returns `404 not_found`. Comment targets use the same listing 404/410 visibility rules as ratings. Reports, blocks, report-driven hiding, editing, replies, and reactions are not part of these routes.
+
+The creation allowance is 20 comments per user per 600 seconds by default, shared across listings. `COMMENT_USER_LIMIT` and `COMMENT_USER_WINDOW_SECS` override it. Validated creation attempts consume the allowance; deletion never does. Limit failures are `429 rate_limited` with `Retry-After`. These counters are process-local and require a shared store before running multiple API replicas.
+
+```sh
+API='http://127.0.0.1:8080/api/v1'
+AUTH="cookie: shabdar_session=$SESSION; shabdar_csrf=$CSRF"
+
+# Create/update/delete one rating (PUT and DELETE need session + CSRF).
+curl -s -X PUT "$API/listings/$SLUG/rating" \
+  -H "$AUTH" -H 'content-type: application/json' \
+  -H "x-csrf-token: $CSRF" -d '{"stars":5}'
+curl -s -X DELETE "$API/listings/$SLUG/rating" \
+  -H "$AUTH" -H "x-csrf-token: $CSRF"
+
+# Public first/next comment pages; no session or CSRF is required for GET.
+curl -s "$API/listings/$SLUG/comments?limit=20"
+curl -s --get "$API/listings/$SLUG/comments" \
+  --data-urlencode "cursor=$CURSOR" --data-urlencode 'limit=20'
+
+# Publish and then softly delete a comment. COMMENT_ID is the returned public_id.
+curl -s -X POST "$API/listings/$SLUG/comments" \
+  -H "$AUTH" -H 'content-type: application/json' \
+  -H "x-csrf-token: $CSRF" -d '{"body":"دیدگاه من"}'
+curl -s -X DELETE "$API/comments/$COMMENT_ID" \
+  -H "$AUTH" -H "x-csrf-token: $CSRF"
+```
+
+## 9. Reports and blocks (deferred — not implemented in Phase 8)
+
+The following routes remain a proposed future contract; Phase 8 does not expose them or filter comments by blocks/reports.
 
 | Method | Path | Auth | Summary |
 |---|---|---|---|
@@ -251,5 +287,4 @@ All endpoints are under `/api/v1/admin`. Each requires `is_admin = true`. Each m
   resend cooldown, attempt limit and the Phase 5 abuse limits are decided.
 - Whether editing an `active` listing is allowed (v1 says no).
 - Keyword search behavior and sort tie-breakers.
-- Whether `comments` on `archived` listings are visible to the public.
 - Phase 3 resolutions (**decided 2026-10-11**): `negotiable` leaves `price_toman` optional (`fixed` requires it, `free` forbids it); public slugs are Persian with numeric-suffix dedup; description bound is 5000 chars; public feed sorts `newest` only (price/popular/search are the discovery follow-up); `/me/listings` ships without a cursor; image validation is magic bytes + size + count (no decode until the image-moderation decision); unknown `category`/`city`/`province` filter slugs → 400 (never an empty list).

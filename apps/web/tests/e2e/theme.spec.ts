@@ -101,6 +101,32 @@ test('@theme native control, exact semantic tokens, local font, and quality gate
   expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toContain('Vazirmatn Variable')
 })
 
+test('@theme no-JavaScript head fallback keeps local Vazirmatn', async ({ browser }) => {
+  const context = await browser.newContext({
+    baseURL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3000',
+    javaScriptEnabled: false,
+  })
+  try {
+    const page = await context.newPage()
+    const fontURLs: string[] = []
+    page.on('response', (response) => {
+      if (response.request().resourceType() === 'font') fontURLs.push(response.url())
+    })
+    await page.goto('/')
+    await expect(page.locator('main')).toBeVisible()
+    await expect(page.locator('head noscript style')).toHaveCount(1)
+    expect(await page.locator('body').evaluate((element) => getComputedStyle(element).fontFamily))
+      .toContain('Vazirmatn Variable')
+    await page.evaluate(() => document.fonts.ready.then(() => undefined))
+    expect(fontURLs.length).toBeGreaterThan(0)
+    for (const fontURL of fontURLs) {
+      expect(new URL(fontURL).origin).toBe(new URL(page.url()).origin)
+    }
+  } finally {
+    await context.close()
+  }
+})
+
 test('@theme stored dark applies before paint without a light-class flash', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('nuxt-color-mode', 'dark')

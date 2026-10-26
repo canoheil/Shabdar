@@ -21,6 +21,8 @@ static DB_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// Phase 3 tables drop first (see auth_otp.rs: FK error 1451/3730 otherwise).
 async fn reset_db(pool: &sqlx::MySqlPool) {
     for table in [
+        "listing_comments",
+        "listing_ratings",
         "favorites",
         "listing_images",
         "listings",
@@ -112,10 +114,7 @@ async fn post_with_cookie(
 
 /// Collect a response body into parsed JSON.
 async fn json_body(resp: axum::response::Response) -> serde_json::Value {
-    let bytes = BodyExt::collect(resp.into_body())
-        .await
-        .unwrap()
-        .to_bytes();
+    let bytes = BodyExt::collect(resp.into_body()).await.unwrap().to_bytes();
     serde_json::from_slice(&bytes).expect("JSON body")
 }
 
@@ -354,7 +353,14 @@ async fn patch_me_missing_display_name_is_400_required() {
     let app = common::spawn_app(cfg.clone()).await;
     let (cookie, csrf, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
 
-    let resp = patch_json(app, "/api/v1/me", Some(&cookie), Some(&csrf), serde_json::json!({})).await;
+    let resp = patch_json(
+        app,
+        "/api/v1/me",
+        Some(&cookie),
+        Some(&csrf),
+        serde_json::json!({}),
+    )
+    .await;
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     let body = json_body(resp).await;
     assert_eq!(error_code(&body), "validation_error");
@@ -485,7 +491,13 @@ async fn logout_revokes_the_session_and_clears_both_cookies() {
     let app = common::spawn_app(cfg.clone()).await;
     let (cookie, csrf, _user) = register_user(&app, &pool, &cfg, "+989123456789").await;
 
-    let resp = post_with_cookie(app.clone(), "/api/v1/auth/logout", Some(&cookie), Some(&csrf)).await;
+    let resp = post_with_cookie(
+        app.clone(),
+        "/api/v1/auth/logout",
+        Some(&cookie),
+        Some(&csrf),
+    )
+    .await;
     assert_eq!(resp.status(), StatusCode::OK);
     // Owned copies first: json_body(resp) below moves the response.
     let mut clears: Vec<String> = resp
@@ -584,7 +596,12 @@ async fn verify_sets_session_and_csrf_cookies() {
     let app = common::spawn_app(cfg.clone()).await;
     let (challenge_id, code) = challenge_with_code(&pool, &cfg, "+989123456789", "register").await;
 
-    let resp = post_json(app, "/api/v1/auth/otp/verify", verify_body(&challenge_id, &code)).await;
+    let resp = post_json(
+        app,
+        "/api/v1/auth/otp/verify",
+        verify_body(&challenge_id, &code),
+    )
+    .await;
     assert_eq!(resp.status(), StatusCode::OK);
     // Owned copies first: json_body(resp) below moves the response.
     let mut cookies: Vec<String> = resp
@@ -620,8 +637,14 @@ async fn verify_sets_session_and_csrf_cookies() {
         .strip_prefix("shabdar_csrf=")
         .and_then(|rest| rest.split(';').next())
         .expect("csrf token");
-    assert!(is_crockford_ulid(csrf_token), "csrf token must be a ULID: {csrf_token}");
-    assert_eq!(csrf, &format!("shabdar_csrf={csrf_token}; Path=/; SameSite=Lax"));
+    assert!(
+        is_crockford_ulid(csrf_token),
+        "csrf token must be a ULID: {csrf_token}"
+    );
+    assert_eq!(
+        csrf,
+        &format!("shabdar_csrf={csrf_token}; Path=/; SameSite=Lax")
+    );
 
     let body = json_body(resp).await;
     assert_eq!(body["is_new_user"], true);
@@ -652,7 +675,10 @@ async fn patch_me_without_csrf_header_is_403_and_does_not_mutate() {
     // No state change: the display name is untouched.
     let resp = get_with_cookie(app, "/api/v1/me", Some(&cookie)).await;
     let body = json_body(resp).await;
-    assert!(body["user"]["display_name"].is_null(), "mutation must not apply");
+    assert!(
+        body["user"]["display_name"].is_null(),
+        "mutation must not apply"
+    );
 }
 
 #[tokio::test]
@@ -738,5 +764,8 @@ async fn csrf_empty_or_blank_tokens_are_403_and_do_not_mutate() {
     // No state change: the display name is untouched.
     let resp = get_with_cookie(app, "/api/v1/me", Some(&cookie)).await;
     let body = json_body(resp).await;
-    assert!(body["user"]["display_name"].is_null(), "mutation must not apply");
+    assert!(
+        body["user"]["display_name"].is_null(),
+        "mutation must not apply"
+    );
 }
