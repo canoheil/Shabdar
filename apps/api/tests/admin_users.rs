@@ -342,7 +342,7 @@ async fn admin_user_search_escapes_like_and_validates_unicode_length() {
         ("%", vec![percent.public_id.clone()]),
         ("_", vec![underscore.public_id.clone()]),
         ("\\", vec![backslash.public_id.clone()]),
-        ("90000099", vec![phone.public_id.clone()]),
+        ("100000099", vec![phone.public_id.clone()]),
     ] {
         let query = format!("?query={}", percent_encode(raw));
         let (status, _, body) = list_users(t.app.clone(), &admin, &query).await;
