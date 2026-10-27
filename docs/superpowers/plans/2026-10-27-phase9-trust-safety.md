@@ -49,11 +49,13 @@ The exact component split may remain smaller where a page is clearer; do not int
 
 Assert both tables, report enums/unique/indexes/resolution action, block composite PK/self-check/both indexes, FK actions, and clean migration reapplication. Add `REPORT_USER_LIMIT=20` and `REPORT_USER_WINDOW_SECS=600` to every Config constructor and env-name test. Add `reports` and `blocks` to every reset/drop list before users. Change the workflow push branch to `arena/d645adc0-shabdar` without removing pull-request verification.
 
-- [ ] **Step 2: Run canonical RED**
+- [x] **Step 2: Run canonical RED**
 
 Push the focused tests on the active branch. Expected: real MariaDB failures because `reports`/`blocks` do not exist, not compilation errors or skipped DB tests. Record the run/job ID here.
 
-- [ ] **Step 3: Implement migration and config**
+RED evidence: run `40474523848`, job `122089351913`, passed fmt and Clippy, then executed the real migration suite on MariaDB. `db_migrations` reported 7 passed / 2 failed; both failures were MySQL 1146 (`42S02`) because `shabdar_test.reports` did not exist. No schema test was skipped. Earlier runs `40474010417` and `40474274276` stopped at formatting and are not canonical RED evidence.
+
+- [x] **Step 3: Implement migration and config**
 
 Create exactly `0009_reports_blocks.sql`; do not edit old migrations or backfill counters. Parse the two new env values with startup errors naming invalid variables.
 
