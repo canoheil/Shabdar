@@ -214,10 +214,8 @@ fn assert_public_block_shape(item: &serde_json::Value, target: &TestUser) {
 }
 
 async fn insert_block(pool: &MySqlPool, blocker_id: u64, blocked_id: u64) {
-    sqlx::query(
-        "INSERT INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)",
-    )
-    .bind(blocker_id)
+    sqlx::query("INSERT INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)")
+        .bind(blocker_id)
     .bind(blocked_id)
     .bind(fixture_created_at())
     .execute(pool)
@@ -225,12 +223,7 @@ async fn insert_block(pool: &MySqlPool, blocker_id: u64, blocked_id: u64) {
     .expect("block page fixture");
 }
 
-async fn insert_comment(
-    pool: &MySqlPool,
-    listing_id: u64,
-    author_id: u64,
-    body: &str,
-) -> String {
+async fn insert_comment(pool: &MySqlPool, listing_id: u64, author_id: u64, body: &str) -> String {
     let public_id = ulid::Ulid::new().to_string();
     let mut tx = pool.begin().await.expect("comment fixture transaction");
     sqlx::query(
@@ -274,12 +267,7 @@ fn comment_bodies(body: &serde_json::Value) -> Vec<String> {
         .as_array()
         .expect("comment data")
         .iter()
-        .map(|comment| {
-            comment["body"]
-                .as_str()
-                .expect("comment body")
-                .to_string()
-        })
+        .map(|comment| comment["body"].as_str().expect("comment body").to_string())
         .collect()
 }
 
@@ -327,14 +315,8 @@ async fn block_routes_require_session_and_mutations_require_csrf() {
         assert_eq!(body["error"]["code"], "unauthorized");
     }
     for method in [Method::PUT, Method::DELETE] {
-        let (status, _, body) = send(
-            t.app.clone(),
-            method,
-            &uri,
-            Some(&blocker.cookie),
-            None,
-        )
-        .await;
+        let (status, _, body) =
+            send(t.app.clone(), method, &uri, Some(&blocker.cookie), None).await;
         assert_eq!(status, StatusCode::FORBIDDEN);
         assert_eq!(body["error"]["code"], "csrf_failed");
     }
@@ -374,8 +356,7 @@ async fn block_is_idempotent_and_list_is_private() {
         .expect("display name fixture");
 
     for _ in 0..2 {
-        let (status, _, body) =
-            mutate_block(t.app.clone(), Method::PUT, &blocker, &target).await;
+        let (status, _, body) = mutate_block(t.app.clone(), Method::PUT, &blocker, &target).await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body, serde_json::json!({ "blocked": true }));
         assert_eq!(block_rows(&t.pool, blocker.id, target.id).await, 1);
@@ -417,8 +398,7 @@ async fn block_rejects_self_unknown_and_deleted_but_allows_suspended_target() {
     let suspended = create_user(&t.pool, &t.cfg, "+989100000002").await;
     let deleted = create_user(&t.pool, &t.cfg, "+989100000003").await;
 
-    let (status, _, body) =
-        mutate_block(t.app.clone(), Method::PUT, &blocker, &blocker).await;
+    let (status, _, body) = mutate_block(t.app.clone(), Method::PUT, &blocker, &blocker).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"]["code"], "validation_error");
     assert_eq!(body["error"]["fields"]["public_id"], "self_block");
@@ -441,8 +421,7 @@ async fn block_rejects_self_unknown_and_deleted_but_allows_suspended_target() {
         .execute(&t.pool)
         .await
         .expect("suspended target fixture");
-    let (status, _, body) =
-        mutate_block(t.app.clone(), Method::PUT, &blocker, &suspended).await;
+    let (status, _, body) = mutate_block(t.app.clone(), Method::PUT, &blocker, &suspended).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(block_rows(&t.pool, blocker.id, suspended.id).await, 1);
 
@@ -468,8 +447,7 @@ async fn unblock_is_idempotent_directional_and_allows_deleted_target() {
     }
 
     for _ in 0..2 {
-        let (status, _, body) =
-            mutate_block(t.app.clone(), Method::DELETE, &first, &second).await;
+        let (status, _, body) = mutate_block(t.app.clone(), Method::DELETE, &first, &second).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body, serde_json::json!({ "blocked": false }));
         assert_eq!(block_rows(&t.pool, first.id, second.id).await, 0);
@@ -485,8 +463,7 @@ async fn unblock_is_idempotent_directional_and_allows_deleted_target() {
     let (status, _, page) = list_blocks(t.app.clone(), &second, "").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(blocked_ids(&page), vec![first.public_id.clone()]);
-    let (status, _, body) =
-        mutate_block(t.app.clone(), Method::DELETE, &second, &first).await;
+    let (status, _, body) = mutate_block(t.app.clone(), Method::DELETE, &second, &first).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, serde_json::json!({ "blocked": false }));
     assert_eq!(block_rows(&t.pool, second.id, first.id).await, 0);
@@ -536,8 +513,7 @@ async fn block_list_rejects_bad_cursor_and_survives_anchor_unblock() {
         .to_string();
 
     // Removing the cursor anchor cannot skip or duplicate another equal-time row.
-    let (status, _, _) =
-        mutate_block(t.app.clone(), Method::DELETE, &blocker, &targets[2]).await;
+    let (status, _, _) = mutate_block(t.app.clone(), Method::DELETE, &blocker, &targets[2]).await;
     assert_eq!(status, StatusCode::OK);
     let (status, _, second_page) = list_blocks(
         t.app.clone(),
@@ -566,14 +542,7 @@ async fn concurrent_duplicate_blocks_keep_one_row() {
         let csrf = blocker.csrf.clone();
         let uri = block_uri(&target.public_id);
         tasks.push(tokio::spawn(async move {
-            send(
-                app,
-                Method::PUT,
-                &uri,
-                Some(&cookie),
-                Some(&csrf),
-            )
-            .await
+            send(app, Method::PUT, &uri, Some(&cookie), Some(&csrf)).await
         }));
     }
     for task in tasks {
@@ -670,14 +639,12 @@ async fn blocks_filter_only_blockers_comments_without_changing_public_state() {
     }
 
     // Incoming blocks are irrelevant: only the viewer's outgoing rows filter.
-    let (status, _, _) =
-        mutate_block(t.app.clone(), Method::PUT, &blocked_author, &blocker).await;
+    let (status, _, _) = mutate_block(t.app.clone(), Method::PUT, &blocked_author, &blocker).await;
     assert_eq!(status, StatusCode::OK);
     let (status, _, _) =
         mutate_block(t.app.clone(), Method::DELETE, &blocker, &blocked_author).await;
     assert_eq!(status, StatusCode::OK);
-    let (status, _, unblocked_page) =
-        list_comments(t.app.clone(), &listing, Some(&blocker)).await;
+    let (status, _, unblocked_page) = list_comments(t.app.clone(), &listing, Some(&blocker)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(comment_bodies(&unblocked_page).len(), 2);
     assert_eq!(comment_count(&t.pool, listing.id).await, 2);
