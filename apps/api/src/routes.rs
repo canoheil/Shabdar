@@ -41,6 +41,11 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/me/favorites/{public_id}",
             put(save_favorite).delete(unsave_favorite),
         )
+        .route("/api/v1/me/blocks", get(my_blocks))
+        .route(
+            "/api/v1/me/blocks/{public_id}",
+            put(block_user).delete(unblock_user),
+        )
         .route("/api/v1/me/listings", get(my_listings))
         .route("/api/v1/me/dashboard/summary", get(dashboard_summary))
         .route("/api/v1/listings", post(create_listing).get(feed_listings))
@@ -125,6 +130,18 @@ fn two_set_cookies(first: String, second: String) -> HeaderMap {
         second.parse().expect("server-built cookie is ascii"),
     );
     map
+}
+
+fn mark_private_viewer(response: &mut axum::response::Response) {
+    let headers = response.headers_mut();
+    headers.insert(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("private, no-store"),
+    );
+    headers.insert(
+        axum::http::header::VARY,
+        axum::http::HeaderValue::from_static("Cookie"),
+    );
 }
 
 /// Fallback: unknown paths get 404 `not_found` in the documented envelope
@@ -255,6 +272,48 @@ async fn unsave_favorite(
     Ok(Json(serde_json::json!({ "favorited": false })))
 }
 
+/// GET /api/v1/me/blocks — the current viewer's private block list.
+async fn my_blocks(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<axum::response::Response, ApiError> {
+    let body = crate::blocks::list(
+        &state.pool,
+        user.user_id,
+        params.get("cursor").map(String::as_str),
+        params.get("limit").map(String::as_str),
+    )
+    .await?;
+    let mut response = Json(body).into_response();
+    mark_private_viewer(&mut response);
+    Ok(response)
+}
+
+/// PUT /api/v1/me/blocks/{public_id} — idempotently block another user.
+async fn block_user(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::blocks::put(&state.pool, user.user_id, &public_id).await?;
+    Ok(Json(serde_json::json!({ "blocked": true })))
+}
+
+/// DELETE /api/v1/me/blocks/{public_id} — idempotently unblock a known user.
+async fn unblock_user(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::blocks::delete(&state.pool, user.user_id, &public_id).await?;
+    Ok(Json(serde_json::json!({ "blocked": false })))
+}
+
 #[derive(Deserialize)]
 struct RatingBody {
     stars: Option<serde_json::Value>,
@@ -309,21 +368,32 @@ struct CommentBody {
     body: Option<String>,
 }
 
-/// GET /api/v1/listings/{slug}/comments — public viewer-independent page.
+/// GET /api/v1/listings/{slug}/comments — public by default, with private
+/// outgoing-block filtering only when a valid viewer session is present.
 async fn listing_comments(
     State(state): State<AppState>,
     Path(slug): Path<String>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    Ok(Json(
-        crate::comments::list(
-            &state.pool,
-            &slug,
-            params.get("cursor").map(String::as_str),
-            params.get("limit").map(String::as_str),
-        )
-        .await?,
-    ))
+    current_user: Result<CurrentUser, ApiError>,
+) -> Result<axum::response::Response, ApiError> {
+    let viewer_user_id = match current_user {
+        Ok(user) => Some(user.user_id),
+        Err(ApiError::Unauthorized) => None,
+        Err(error) => return Err(error),
+    };
+    let body = crate::comments::list(
+        &state.pool,
+        &slug,
+        viewer_user_id,
+        params.get("cursor").map(String::as_str),
+        params.get("limit").map(String::as_str),
+    )
+    .await?;
+    let mut response = Json(body).into_response();
+    if viewer_user_id.is_some() {
+        mark_private_viewer(&mut response);
+    }
+    Ok(response)
 }
 
 /// POST /api/v1/listings/{slug}/comments — publish one visible comment.
@@ -660,10 +730,7 @@ async fn listing_detail(
     let body = crate::listings::detail(&state.pool, &slug, viewer_user_id).await?;
     let mut response = Json(body).into_response();
     if viewer_user_id.is_some() {
-        response.headers_mut().insert(
-            axum::http::header::CACHE_CONTROL,
-            axum::http::HeaderValue::from_static("private, no-store"),
-        );
+        mark_private_viewer(&mut response);
     }
     Ok(response)
 }

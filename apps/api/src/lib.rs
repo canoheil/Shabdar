@@ -3,6 +3,7 @@
 
 pub mod admin;
 pub mod api_json;
+pub mod blocks;
 pub mod client_ip;
 pub mod comments;
 pub mod config;

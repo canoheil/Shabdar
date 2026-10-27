@@ -77,11 +77,13 @@ GREEN evidence: run `40474830167`, job `122090364331`, head `03a3b4f41c6de371be7
 
 Cover session/CSRF, self-block, unknown/deleted targets, PUT/DELETE idempotency, exact `{blocked:boolean}` bodies, private list default/cap/cursor/deleted-anchor behavior, and no phone/internal IDs. Cover anonymous/stale unfiltered comments, one-way filtering for each valid viewer across multiple users, private `no-store`, unchanged global counts, and no added viewer fields.
 
-- [ ] **Step 2: Run canonical RED**
+- [x] **Step 2: Run canonical RED**
 
 Expected: block routes 404 and the new private-filter assertions fail while older anonymous comment contracts stay green. Record evidence.
 
-- [ ] **Step 3: Implement block service and optional-viewer comment reads**
+RED evidence: run `40476350854`, job `122095420649`, head `b84399c`. Formatting and Clippy passed; the real MariaDB `blocks` binary ran all 7 tests and reported 0 passed / 7 failed on the unimplemented routes (404 versus the required status), including the comment-filter setup. The older suites still executed. Runs `40475842609` and `40476108367` stopped at formatting and are not canonical RED evidence.
+
+- [x] **Step 3: Implement block service and optional-viewer comment reads**
 
 Use the composite PK for idempotent writes and `(created_at,blocked_id)` keyset pages. Add `NOT EXISTS` filtering by `(viewer,author)` only for a valid viewer. Treat `Unauthorized` optional sessions as anonymous and set `private, no-store` only on valid-viewer responses. Keep cursor/comment shapes unchanged.
 

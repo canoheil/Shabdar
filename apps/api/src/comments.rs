@@ -142,10 +142,13 @@ pub async fn create(
     Ok(comment)
 }
 
-/// Public newest-first keyset page. Only visible, non-deleted rows appear.
+/// Newest-first keyset page. Only visible, non-deleted rows appear. For a
+/// valid viewer, outgoing block rows hide only that viewer's matching authors;
+/// anonymous and stale sessions retain the original public page.
 pub async fn list(
     pool: &MySqlPool,
     slug: &str,
+    viewer_user_id: Option<u64>,
     cursor: Option<&str>,
     limit_raw: Option<&str>,
 ) -> Result<serde_json::Value, ApiError> {
@@ -172,11 +175,20 @@ pub async fn list(
          FROM listing_comments c JOIN users u ON u.id = c.author_id \
          WHERE c.listing_id = ? AND c.status = 'visible' AND c.deleted_at IS NULL",
     );
+    if viewer_user_id.is_some() {
+        sql.push_str(
+            " AND NOT EXISTS (SELECT 1 FROM blocks b \
+             WHERE b.blocker_id = ? AND b.blocked_id = c.author_id)",
+        );
+    }
     if anchor.is_some() {
         sql.push_str(" AND (c.created_at, c.id) < (?, ?)");
     }
     sql.push_str(" ORDER BY c.created_at DESC, c.id DESC LIMIT ?");
     let mut query = sqlx::query(&sql).bind(listing_id);
+    if let Some(viewer_user_id) = viewer_user_id {
+        query = query.bind(viewer_user_id);
+    }
     if let Some((created_at, id)) = anchor {
         query = query.bind(created_at).bind(id);
     }
