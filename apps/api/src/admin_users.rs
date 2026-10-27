@@ -90,10 +90,7 @@ pub async fn audit_in_tx(
     .bind(Utc::now())
     .execute(&mut **tx)
     .await
-    .map_err(|error| {
-        eprintln!("admin user audit insert failed: {error}");
-        ApiError::Internal
-    })?;
+    .map_err(|_| ApiError::Internal)?;
     Ok(())
 }
 
@@ -113,10 +110,7 @@ pub async fn transition_by_id_in_tx(
         .bind(user_id)
         .fetch_optional(&mut **tx)
         .await
-        .map_err(|error| {
-            eprintln!("admin user row lock failed: {error}");
-            ApiError::Internal
-        })?
+        .map_err(|_| ApiError::Internal)?
         .ok_or(ApiError::NotFound)?;
     if status == transition.desired_status() {
         return Ok(false);
@@ -131,10 +125,7 @@ pub async fn transition_by_id_in_tx(
         .bind(user_id)
         .execute(&mut **tx)
         .await
-        .map_err(|error| {
-            eprintln!("admin user status update failed: {error}");
-            ApiError::Internal
-        })?;
+        .map_err(|_| ApiError::Internal)?;
     if updated.rows_affected() != 1 {
         return Err(ApiError::Internal);
     }
@@ -143,10 +134,7 @@ pub async fn transition_by_id_in_tx(
             .bind(user_id)
             .execute(&mut **tx)
             .await
-            .map_err(|error| {
-                eprintln!("admin user session revoke failed: {error}");
-                ApiError::Internal
-            })?;
+            .map_err(|_| ApiError::Internal)?;
     }
     Ok(true)
 }
@@ -191,14 +179,11 @@ pub async fn transition(
         UserTransition::Unsuspend => None,
     };
     let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
-    let user_id: u64 = sqlx::query_scalar("SELECT id FROM users WHERE public_id = ?")
+    let user_id: u64 = sqlx::query_scalar("SELECT id FROM users WHERE public_id = ? FOR UPDATE")
         .bind(public_id)
         .fetch_optional(&mut *tx)
         .await
-        .map_err(|error| {
-            eprintln!("admin user public ID lookup failed: {error}");
-            ApiError::Internal
-        })?
+        .map_err(|_| ApiError::Internal)?
         .ok_or(ApiError::NotFound)?;
     let changed = transition_by_id_in_tx(&mut tx, admin_id, user_id, transition).await?;
     if changed {
@@ -213,18 +198,15 @@ pub async fn transition(
         )
         .await?;
     }
-    tx.commit().await.map_err(|error| {
-        eprintln!("admin user transition commit failed: {error}");
-        ApiError::Internal
-    })?;
+    tx.commit().await.map_err(|_| ApiError::Internal)?;
     get_user(pool, public_id).await
 }
 
 fn like_pattern(raw: &str) -> String {
     let mut escaped = String::new();
     for character in raw.chars() {
-        if matches!(character, '\\' | '%' | '_') {
-            escaped.push('\\');
+        if matches!(character, '!' | '%' | '_') {
+            escaped.push('!');
         }
         escaped.push(character);
     }
@@ -253,7 +235,7 @@ pub async fn search(
          FROM users WHERE 1 = 1",
     );
     if !query.is_empty() {
-        sql.push_str(" AND (display_name LIKE ? ESCAPE '\\' OR phone_e164 LIKE ? ESCAPE '\\')");
+        sql.push_str(" AND (display_name LIKE ? ESCAPE '!' OR phone_e164 LIKE ? ESCAPE '!')");
     }
     if anchor.is_some() {
         sql.push_str(" AND (created_at, id) < (?, ?)");
