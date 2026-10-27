@@ -140,9 +140,8 @@ pub async fn transition_by_id_in_tx(
 }
 
 fn user_from_row(row: &sqlx::mysql::MySqlRow) -> Result<serde_json::Value, ApiError> {
-    let created_at: chrono::DateTime<Utc> = row
-        .try_get("created_at")
-        .map_err(|_| ApiError::Internal)?;
+    let created_at: chrono::DateTime<Utc> =
+        row.try_get("created_at").map_err(|_| ApiError::Internal)?;
     Ok(serde_json::json!({
         "public_id": row.try_get::<String, _>("public_id").map_err(|_| ApiError::Internal)?,
         "display_name": row.try_get::<Option<String>, _>("display_name").map_err(|_| ApiError::Internal)?,
@@ -236,9 +235,7 @@ pub async fn search(
          FROM users WHERE 1 = 1",
     );
     if !query.is_empty() {
-        sql.push_str(
-            " AND (display_name LIKE ? ESCAPE '\\\\' OR phone_e164 LIKE ? ESCAPE '\\\\')",
-        );
+        sql.push_str(" AND (display_name LIKE ? ESCAPE '\\\\' OR phone_e164 LIKE ? ESCAPE '\\\\')");
     }
     if anchor.is_some() {
         sql.push_str(" AND (created_at, id) < (?, ?)");
@@ -262,9 +259,8 @@ pub async fn search(
     let next_cursor = if has_more {
         rows.last()
             .map(|row| {
-                let created_at: chrono::DateTime<Utc> = row
-                    .try_get("created_at")
-                    .map_err(|_| ApiError::Internal)?;
+                let created_at: chrono::DateTime<Utc> =
+                    row.try_get("created_at").map_err(|_| ApiError::Internal)?;
                 let id: u64 = row.try_get("id").map_err(|_| ApiError::Internal)?;
                 Ok(crate::listings::encode_cursor(&created_at, id))
             })
