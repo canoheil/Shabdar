@@ -169,15 +169,15 @@ Cover status filters, oldest-first default/cap/cursors, equal timestamps, anchor
 
 Cover every action-target pair, reason validation, unknown/deleted targets, closed-report conflicts, same-resolution idempotency, restore-only-after-hide, and one-audit transactions. Race hide/delete/restore/create operations and assert exact counters without clamping. Prove report-driven remove returns public 410 and suspension revokes sessions.
 
-- [ ] **Step 3: Run canonical RED**
+- [x] **Step 3: Run canonical RED**
 
-Expected: admin report routes 404 and `report_history` remains empty; all older suites still run. Record evidence.
+Canonical RED: run `40484182498`, job `122121716439`, head `ef798a6`. All 6 admin-report tests executed and failed on absent routes after fmt and Clippy passed; older suites ran. The preceding run exposed and fixed an unsigned-counter fixture decode, so it is not cited as canonical.
 
-- [ ] **Step 4: Implement batched queue mapping**
+- [x] **Step 4: Implement batched queue mapping**
 
 Fetch report pages first, then at most one target batch per represented type. Map public identifiers only and preserve reports whose targets vanished. Implement status-filtered keyset pages without N+1 target queries.
 
-- [ ] **Step 5: Implement transactional decisions**
+- [x] **Step 5: Implement transactional decisions**
 
 Lock the report and recorded resolution before acting. Reuse shared listing/user transition helpers; add comment hide/restore using listing-then-comment lock order. Update report + target + one audit atomically. Dismiss never changes target state; restore never revives a soft-deleted comment.
 

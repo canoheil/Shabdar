@@ -162,9 +162,10 @@ pub async fn admin_detail(
         "phone_e164": row.try_get::<String, _>("seller_phone").map_err(|_| ApiError::Internal)?,
         "status": row.try_get::<String, _>("seller_status").map_err(|_| ApiError::Internal)?,
     });
-    // No reports table until that phase — the key exists so clients can rely
-    // on the shape today.
-    listing["report_history"] = serde_json::json!([]);
+    let listing_id = row.try_get("id").map_err(|_| ApiError::Internal)?;
+    listing["report_history"] = serde_json::json!(
+        crate::admin_reports::history_for_listing(pool, listing_id).await?
+    );
     Ok(listing)
 }
 
@@ -261,6 +262,54 @@ pub async fn reject(
     listing_out(&row)
 }
 
+/// Lock and apply active → removed without writing an audit. The direct admin
+/// route and report decisions each add their own single audit outside this
+/// helper. An already-removed listing returns false for the caller's own
+/// transition/idempotency rules.
+pub async fn remove_by_id_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
+    admin_id: u64,
+    id: u64,
+    reason: &str,
+) -> Result<bool, ApiError> {
+    let row = sqlx::query("SELECT status, deleted_at FROM listings WHERE id = ? FOR UPDATE")
+        .bind(id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(|_| ApiError::Internal)?
+        .ok_or(ApiError::NotFound)?;
+    let deleted_at: Option<chrono::DateTime<Utc>> = row
+        .try_get("deleted_at")
+        .map_err(|_| ApiError::Internal)?;
+    if deleted_at.is_some() {
+        return Err(ApiError::NotFound);
+    }
+    let status: String = row.try_get("status").map_err(|_| ApiError::Internal)?;
+    if status == "removed" {
+        return Ok(false);
+    }
+    if status != "active" {
+        return Err(bad_transition());
+    }
+    let now = Utc::now();
+    let updated = sqlx::query(
+        "UPDATE listings SET status = 'removed', removed_reason = ?, reviewed_by = ?, \
+         reviewed_at = ?, updated_at = ? WHERE id = ?",
+    )
+    .bind(reason)
+    .bind(admin_id)
+    .bind(now)
+    .bind(now)
+    .bind(id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|_| ApiError::Internal)?;
+    if updated.rows_affected() != 1 {
+        return Err(ApiError::Internal);
+    }
+    Ok(true)
+}
+
 /// POST /admin/listings/{public_id}/remove — active → removed + audit.
 /// Public reads go 410 afterwards.
 pub async fn remove(
@@ -270,26 +319,19 @@ pub async fn remove(
     reason_raw: &Option<String>,
 ) -> Result<ListingOut, ApiError> {
     let reason = required_reason(reason_raw)?;
-    let row = load_for_review(pool, public_id).await?;
-    let status: String = row.try_get("status").map_err(|_| ApiError::Internal)?;
-    if status != "active" {
+    let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
+    let id: u64 = sqlx::query_scalar(
+        "SELECT id FROM listings WHERE public_id = ? AND deleted_at IS NULL FOR UPDATE",
+    )
+    .bind(public_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| ApiError::Internal)?
+    .ok_or(ApiError::NotFound)?;
+    let changed = remove_by_id_in_tx(&mut tx, admin.user_id, id, &reason).await?;
+    if !changed {
         return Err(bad_transition());
     }
-    let id: u64 = row.try_get("id").map_err(|_| ApiError::Internal)?;
-    let now = Utc::now();
-    let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
-    sqlx::query(
-        "UPDATE listings SET status = 'removed', removed_reason = ?, reviewed_by = ?, \
-         reviewed_at = ?, updated_at = ? WHERE id = ?",
-    )
-    .bind(&reason)
-    .bind(admin.user_id)
-    .bind(now)
-    .bind(now)
-    .bind(id)
-    .execute(&mut *tx)
-    .await
-    .map_err(|_| ApiError::Internal)?;
     audit(&mut tx, admin.user_id, "listing.remove", id, Some(&reason)).await?;
     tx.commit().await.map_err(|_| ApiError::Internal)?;
     let row = sqlx::query("SELECT * FROM listings WHERE id = ?")

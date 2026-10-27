@@ -86,6 +86,11 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/listings/{public_id}/images/order",
             patch(images_order),
         )
+        .route("/api/v1/admin/reports", get(admin_reports_queue))
+        .route(
+            "/api/v1/admin/reports/{public_id}/actions",
+            post(admin_report_action),
+        )
         .route("/api/v1/admin/users", get(admin_users_search))
         .route(
             "/api/v1/admin/users/{public_id}/suspend",
@@ -629,6 +634,52 @@ async fn delete_image(
 #[derive(Deserialize)]
 struct AdminReasonBody {
     reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct AdminReportActionBody {
+    action: Option<String>,
+    reason: Option<String>,
+}
+
+/// GET /api/v1/admin/reports — oldest-first filtered report queue.
+async fn admin_reports_queue(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::admin_reports::queue(
+            &state.pool,
+            params.get("status").map(String::as_str),
+            params.get("cursor").map(String::as_str),
+            params.get("limit").map(String::as_str),
+        )
+        .await?,
+    ))
+}
+
+/// POST /api/v1/admin/reports/{public_id}/actions — one atomic decision.
+async fn admin_report_action(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    ApiJson(body): ApiJson<AdminReportActionBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::admin_reports::act(
+            &state.pool,
+            user.user_id,
+            &public_id,
+            body.action.as_deref(),
+            body.reason.as_deref(),
+        )
+        .await?,
+    ))
 }
 
 /// GET /api/v1/admin/users — admin-only search and newest-first keyset pages.
