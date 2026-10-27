@@ -86,6 +86,15 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/listings/{public_id}/images/order",
             patch(images_order),
         )
+        .route("/api/v1/admin/users", get(admin_users_search))
+        .route(
+            "/api/v1/admin/users/{public_id}/suspend",
+            post(admin_suspend_user),
+        )
+        .route(
+            "/api/v1/admin/users/{public_id}/unsuspend",
+            post(admin_unsuspend_user),
+        )
         .route("/api/v1/admin/listings/queue", get(admin_queue))
         .route("/api/v1/admin/listings/{public_id}", get(admin_detail))
         .route(
@@ -620,6 +629,67 @@ async fn delete_image(
 #[derive(Deserialize)]
 struct AdminReasonBody {
     reason: Option<String>,
+}
+
+/// GET /api/v1/admin/users — admin-only search and newest-first keyset pages.
+async fn admin_users_search(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::admin_users::search(
+            &state.pool,
+            params.get("query").map(String::as_str),
+            params.get("cursor").map(String::as_str),
+            params.get("limit").map(String::as_str),
+        )
+        .await?,
+    ))
+}
+
+/// POST /api/v1/admin/users/{public_id}/suspend — revoke every target session.
+async fn admin_suspend_user(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    ApiJson(body): ApiJson<AdminReasonBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::admin_users::transition(
+            &state.pool,
+            user.user_id,
+            &public_id,
+            crate::admin_users::UserTransition::Suspend,
+            body.reason.as_deref(),
+        )
+        .await?,
+    ))
+}
+
+/// POST /api/v1/admin/users/{public_id}/unsuspend — permit a fresh login only.
+async fn admin_unsuspend_user(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::admin_users::transition(
+            &state.pool,
+            user.user_id,
+            &public_id,
+            crate::admin_users::UserTransition::Unsuspend,
+            None,
+        )
+        .await?,
+    ))
 }
 
 /// GET /api/v1/admin/listings/queue — pending oldest first (admin only).

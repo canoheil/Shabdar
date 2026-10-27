@@ -141,11 +141,11 @@ Cover admin/non-admin/anonymous access, CSRF, search escaping and 100-character 
 
 Create multiple sessions, suspend the user, and assert every session immediately receives generic 401. Assert unsuspend does not restore old sessions, actual transitions each write exactly one audit, and no-op transitions write none.
 
-- [ ] **Step 3: Run canonical RED**
+- [x] **Step 3: Run canonical RED**
 
-Expected: admin user routes 404 and session/audit contracts unimplemented. Record evidence.
+Canonical RED: run `40480334868`, job `122108741051`, head `ff27165`. All 6 new tests executed and failed with 404 on absent admin-user routes after fmt and Clippy passed; the earlier formatting-only run is not evidence.
 
-- [ ] **Step 4: Implement shared user moderation**
+- [x] **Step 4: Implement shared user moderation**
 
 Add bounded admin search and public-ID user lookup. Implement suspend/unsuspend in reusable transaction helpers that lock the user, re-evaluate state, revoke sessions on actual suspension, and write one generic audit. Keep the existing `CurrentUser` non-active behavior unchanged.
 

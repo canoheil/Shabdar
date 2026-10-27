@@ -2,6 +2,7 @@
 //! wires the process; integration tests in tests/ import from here.
 
 pub mod admin;
+pub mod admin_users;
 pub mod api_json;
 pub mod blocks;
 pub mod client_ip;
