@@ -154,13 +154,10 @@ async fn resolve_target(
             .map_err(|_| ApiError::Internal)?
             .ok_or(ApiError::NotFound)?;
             let status: String = row.try_get("status").map_err(|_| ApiError::Internal)?;
-            let deleted_at: Option<chrono::DateTime<Utc>> = row
-                .try_get("deleted_at")
-                .map_err(|_| ApiError::Internal)?;
+            let deleted_at: Option<chrono::DateTime<Utc>> =
+                row.try_get("deleted_at").map_err(|_| ApiError::Internal)?;
             check_listing_visibility(&status, deleted_at.is_some())?;
-            let seller_id: u64 = row
-                .try_get("seller_id")
-                .map_err(|_| ApiError::Internal)?;
+            let seller_id: u64 = row.try_get("seller_id").map_err(|_| ApiError::Internal)?;
             if seller_id == reporter_id {
                 return Err(self_report());
             }
@@ -195,9 +192,7 @@ async fn resolve_target(
             if comment_status != "visible" || comment_deleted_at.is_some() {
                 return Err(ApiError::NotFound);
             }
-            let author_id: u64 = row
-                .try_get("author_id")
-                .map_err(|_| ApiError::Internal)?;
+            let author_id: u64 = row.try_get("author_id").map_err(|_| ApiError::Internal)?;
             if author_id == reporter_id {
                 return Err(self_report());
             }
@@ -211,9 +206,8 @@ async fn resolve_target(
                 .map_err(|_| ApiError::Internal)?
                 .ok_or(ApiError::NotFound)?;
             let status: String = row.try_get("status").map_err(|_| ApiError::Internal)?;
-            let deleted_at: Option<chrono::DateTime<Utc>> = row
-                .try_get("deleted_at")
-                .map_err(|_| ApiError::Internal)?;
+            let deleted_at: Option<chrono::DateTime<Utc>> =
+                row.try_get("deleted_at").map_err(|_| ApiError::Internal)?;
             if status != "active" || deleted_at.is_some() {
                 return Err(ApiError::NotFound);
             }
