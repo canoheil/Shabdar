@@ -119,23 +119,25 @@ RED evidence: run `40478332831`, job `122102023832`, head `e7e05cd`. Formatting 
 
 Resolve public identifiers to internal IDs inside the service, never expose the polymorphic internal ID, normalize optional details, and insert a ULID report. Handle duplicate keys by returning the existing row's public ID/status without overwriting it. Consume the process-local report allowance only after body validation and CSRF.
 
-- [ ] **Step 5: Run GREEN and full API regression**
+- [x] **Step 5: Run GREEN and full API regression**
 
 Include concurrent duplicate submissions, all older suites, fmt, and Clippy.
 
-- [ ] **Step 6: Commit**
+GREEN evidence: run `40479044446`, job `122104418210`, final head `1b900a6`. All 9 report tests and the full MariaDB API suite passed, including concurrent duplicates and older suites; 66/66 browser tests, typecheck/build, both bundle budgets, and enforcing Lighthouse also passed. Home/Detail remained 93,101 / 95,474 gzip bytes with 3 scripts each.
 
-`feat(api): add abuse report creation`
+- [x] **Step 6: Commit**
+
+`feat(api): add abuse report creation` — implementation `00f190f`, final rustfmt `1b900a6`.
 
 ## Task 4: Admin user search and account suspension
 
 **Files:** admin/user moderation services, routes, `tests/admin_users.rs`, session/admin helpers.
 
-- [ ] **Step 1: Write failing admin-user tests**
+- [x] **Step 1: Write failing admin-user tests**
 
 Cover admin/non-admin/anonymous access, CSRF, search escaping and 100-character cap, keyset default/cap, admin-only phone/status fields, active/suspended transitions, required reason boundaries, self-suspend 403, and idempotent no-op retries.
 
-- [ ] **Step 2: Add session and audit RED cases**
+- [x] **Step 2: Add session and audit RED cases**
 
 Create multiple sessions, suspend the user, and assert every session immediately receives generic 401. Assert unsuspend does not restore old sessions, actual transitions each write exactly one audit, and no-op transitions write none.
 
