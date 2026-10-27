@@ -501,12 +501,10 @@ async fn reports_and_blocks_schema_enforces_invariants() {
     .bind(reporter)
     .execute(&pool)
     .await;
-    assert!(
-        duplicate_report
-            .expect_err("one report per reporter/target")
-            .to_string()
-            .contains("uq_reports_reporter_target")
-    );
+    assert!(duplicate_report
+        .expect_err("one report per reporter/target")
+        .to_string()
+        .contains("uq_reports_reporter_target"));
 
     let self_block = sqlx::query(
         "INSERT INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, NOW(3))",
@@ -515,12 +513,10 @@ async fn reports_and_blocks_schema_enforces_invariants() {
     .bind(reporter)
     .execute(&pool)
     .await;
-    assert!(
-        self_block
-            .expect_err("self block must fail")
-            .to_string()
-            .contains("chk_blocks_no_self")
-    );
+    assert!(self_block
+        .expect_err("self block must fail")
+        .to_string()
+        .contains("chk_blocks_no_self"));
     sqlx::query("INSERT INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, NOW(3))")
         .bind(reporter)
         .bind(handler)
