@@ -18,6 +18,7 @@ pub mod otp_service;
 pub mod phone;
 pub mod ratelimit;
 pub mod ratings;
+pub mod reports;
 pub mod request_id;
 pub mod routes;
 pub mod session;

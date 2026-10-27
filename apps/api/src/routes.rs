@@ -48,6 +48,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/v1/me/listings", get(my_listings))
         .route("/api/v1/me/dashboard/summary", get(dashboard_summary))
+        .route("/api/v1/reports", post(create_report))
         .route("/api/v1/listings", post(create_listing).get(feed_listings))
         .route(
             "/api/v1/listings/{slug}/comments",
@@ -312,6 +313,29 @@ async fn unblock_user(
     crate::csrf::check_csrf(&headers)?;
     crate::blocks::delete(&state.pool, user.user_id, &public_id).await?;
     Ok(Json(serde_json::json!({ "blocked": false })))
+}
+
+/// POST /api/v1/reports — validate first, then spend the independent report
+/// allowance, then resolve and insert/return the idempotent report.
+async fn create_report(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    ApiJson(body): ApiJson<crate::reports::ReportBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    let input = body.validate()?;
+    state
+        .limiter
+        .hit(
+            &format!("report:user:{}", user.user_id),
+            state.config.report_user_limit,
+            Duration::from_secs(u64::from(state.config.report_user_window_secs)),
+        )
+        .into_result()?;
+    Ok(Json(
+        crate::reports::create(&state.pool, user.user_id, input).await?,
+    ))
 }
 
 #[derive(Deserialize)]

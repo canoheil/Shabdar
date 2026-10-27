@@ -109,11 +109,13 @@ Cover session/CSRF, every target/reason, required/unknown fields, Unicode detail
 
 Same and changed duplicate bodies must return the existing report without changing it or adding a row. Use small test-only limits to prove per-user isolation, 20/600 defaults in config, `Retry-After`, and independent rating/comment/report keys.
 
-- [ ] **Step 3: Run canonical RED**
+- [x] **Step 3: Run canonical RED**
 
 Expected: `/reports` returns 404 for all new contracts; no test is skipped. Record evidence.
 
-- [ ] **Step 4: Implement target resolution and report creation**
+RED evidence: run `40478332831`, job `122102023832`, head `e7e05cd`. Formatting and Clippy passed; the real MariaDB `reports` binary ran all 9 tests and reported 0 passed / 9 failed against the unimplemented route (404 versus required statuses). Older suites, including blocks, comments, and migrations, still ran and passed. Run `40478070574` stopped at formatting and is not canonical RED evidence.
+
+- [x] **Step 4: Implement target resolution and report creation**
 
 Resolve public identifiers to internal IDs inside the service, never expose the polymorphic internal ID, normalize optional details, and insert a ULID report. Handle duplicate keys by returning the existing row's public ID/status without overwriting it. Consume the process-local report allowance only after body validation and CSRF.
 
