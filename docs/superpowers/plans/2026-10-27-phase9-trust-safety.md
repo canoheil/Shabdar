@@ -221,7 +221,7 @@ Canonical GREEN: run `40489601436`, job `122139909976`, head `189ec00`. All 70 b
 
 **Files:** `ReportControl.vue`, Detail/comments integration, types, report browser tests, chunk config.
 
-- [ ] **Step 1: Write browser RED coverage**
+- [x] **Step 1: Write browser RED coverage**
 
 Cover anonymous SSR/control privacy, login path, every target type, required reason, optional 500-character details, safe interpolation/XSS, pending duplicate prevention, confirmed success/already-reported states, self-target omission, 401, network failure/retry, and draft preservation.
 
