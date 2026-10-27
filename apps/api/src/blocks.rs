@@ -18,21 +18,18 @@ fn self_block() -> ApiError {
 /// remain valid targets; duplicate writes retain the original timestamp.
 pub async fn put(pool: &MySqlPool, user_id: u64, public_id: &str) -> Result<(), ApiError> {
     let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
-    let target = sqlx::query(
-        "SELECT id, status, deleted_at FROM users WHERE public_id = ? FOR UPDATE",
-    )
-    .bind(public_id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|_| ApiError::Internal)?
-    .ok_or(ApiError::NotFound)?;
+    let target =
+        sqlx::query("SELECT id, status, deleted_at FROM users WHERE public_id = ? FOR UPDATE")
+            .bind(public_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|_| ApiError::Internal)?
+            .ok_or(ApiError::NotFound)?;
     let target_id: u64 = target.try_get("id").map_err(|_| ApiError::Internal)?;
     if target_id == user_id {
         return Err(self_block());
     }
-    let status: String = target
-        .try_get("status")
-        .map_err(|_| ApiError::Internal)?;
+    let status: String = target.try_get("status").map_err(|_| ApiError::Internal)?;
     let deleted_at: Option<chrono::DateTime<Utc>> = target
         .try_get("deleted_at")
         .map_err(|_| ApiError::Internal)?;
@@ -104,12 +101,9 @@ pub async fn list(
     let next_cursor = if has_more {
         rows.last()
             .map(|row| {
-                let blocked_at: chrono::DateTime<Utc> = row
-                    .try_get("blocked_at")
-                    .map_err(|_| ApiError::Internal)?;
-                let blocked_id: u64 = row
-                    .try_get("blocked_id")
-                    .map_err(|_| ApiError::Internal)?;
+                let blocked_at: chrono::DateTime<Utc> =
+                    row.try_get("blocked_at").map_err(|_| ApiError::Internal)?;
+                let blocked_id: u64 = row.try_get("blocked_id").map_err(|_| ApiError::Internal)?;
                 Ok(crate::listings::encode_cursor(&blocked_at, blocked_id))
             })
             .transpose()?
