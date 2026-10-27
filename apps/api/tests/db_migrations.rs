@@ -21,6 +21,8 @@ static DB_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// named *_test.
 async fn drop_owned_tables(pool: &sqlx::MySqlPool) {
     for table in [
+        "reports",
+        "blocks",
         "listing_comments",
         "listing_ratings",
         "favorites",
@@ -65,6 +67,8 @@ async fn migrations_apply_on_empty_database() {
         "favorites",
         "listing_ratings",
         "listing_comments",
+        "reports",
+        "blocks",
         "admin_audit_logs",
     ] {
         let sql = format!("SELECT COUNT(*) AS c FROM {table}"); // fixed literals
@@ -394,6 +398,172 @@ async fn ratings_and_comments_schema_enforces_invariants() {
         .expect("comment count");
     assert_eq!(ratings, 0);
     assert_eq!(comments, 0);
+}
+
+#[tokio::test]
+async fn reports_and_blocks_schema_enforces_invariants() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+
+    drop_owned_tables(&pool).await;
+    run_migrations(&pool).await.expect("migrations apply");
+
+    // Direct reads intentionally fail with 1146 before migration 0009 exists.
+    let _: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM reports")
+        .fetch_one(&pool)
+        .await
+        .expect("reports table must exist");
+    let _: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM blocks")
+        .fetch_one(&pool)
+        .await
+        .expect("blocks table must exist");
+
+    let columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM information_schema.COLUMNS \
+         WHERE TABLE_SCHEMA = DATABASE() \
+           AND ((TABLE_NAME = 'reports' AND COLUMN_NAME = 'public_id' AND COLUMN_TYPE = 'char(26)') \
+           OR (TABLE_NAME = 'reports' AND COLUMN_NAME = 'resolution_action' AND COLUMN_TYPE = 'varchar(40)') \
+           OR (TABLE_NAME = 'reports' AND COLUMN_NAME = 'details' AND COLUMN_TYPE = 'varchar(500)'))",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("report column metadata");
+    assert_eq!(columns, 3, "public ID, resolution, and detail contracts");
+
+    for (table, index) in [
+        ("reports", "idx_reports_status_created"),
+        ("reports", "idx_reports_target"),
+        ("blocks", "idx_blocks_blocked"),
+        ("blocks", "idx_blocks_blocker_created"),
+    ] {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(DISTINCT INDEX_NAME) FROM information_schema.STATISTICS \
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?",
+        )
+        .bind(table)
+        .bind(index)
+        .fetch_one(&pool)
+        .await
+        .expect("index metadata");
+        assert_eq!(count, 1, "{table} must have {index}");
+    }
+
+    sqlx::query(
+        "INSERT INTO users (public_id, phone_e164, created_at, updated_at) VALUES \
+         ('AAAAAAAAAAAAAAAAAAAAAAAAAA', '+989111111101', NOW(3), NOW(3)), \
+         ('BBBBBBBBBBBBBBBBBBBBBBBBBB', '+989111111102', NOW(3), NOW(3))",
+    )
+    .execute(&pool)
+    .await
+    .expect("report/block users");
+    let reporter: u64 =
+        sqlx::query_scalar("SELECT id FROM users WHERE public_id = 'AAAAAAAAAAAAAAAAAAAAAAAAAA'")
+            .fetch_one(&pool)
+            .await
+            .expect("reporter ID");
+    let handler: u64 =
+        sqlx::query_scalar("SELECT id FROM users WHERE public_id = 'BBBBBBBBBBBBBBBBBBBBBBBBBB'")
+            .fetch_one(&pool)
+            .await
+            .expect("handler ID");
+
+    sqlx::query(
+        "INSERT INTO reports \
+         (public_id, reporter_id, target_type, target_id, reason, handled_by, created_at) \
+         VALUES ('RRRRRRRRRRRRRRRRRRRRRRRRRR', ?, 'listing', 123, 'spam', ?, NOW(3))",
+    )
+    .bind(reporter)
+    .bind(handler)
+    .execute(&pool)
+    .await
+    .expect("one report");
+    let state = sqlx::query(
+        "SELECT status, resolution_action, handled_by FROM reports \
+         WHERE public_id = 'RRRRRRRRRRRRRRRRRRRRRRRRRR'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("report defaults");
+    assert_eq!(state.try_get::<String, _>("status").unwrap(), "open");
+    assert_eq!(
+        state
+            .try_get::<Option<String>, _>("resolution_action")
+            .unwrap(),
+        None
+    );
+
+    let duplicate_report = sqlx::query(
+        "INSERT INTO reports (public_id, reporter_id, target_type, target_id, reason, created_at) \
+         VALUES ('SSSSSSSSSSSSSSSSSSSSSSSSSS', ?, 'listing', 123, 'other', NOW(3))",
+    )
+    .bind(reporter)
+    .execute(&pool)
+    .await;
+    assert!(
+        duplicate_report
+            .expect_err("one report per reporter/target")
+            .to_string()
+            .contains("uq_reports_reporter_target")
+    );
+
+    let self_block = sqlx::query(
+        "INSERT INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, NOW(3))",
+    )
+    .bind(reporter)
+    .bind(reporter)
+    .execute(&pool)
+    .await;
+    assert!(
+        self_block
+            .expect_err("self block must fail")
+            .to_string()
+            .contains("chk_blocks_no_self")
+    );
+    sqlx::query("INSERT INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, NOW(3))")
+        .bind(reporter)
+        .bind(handler)
+        .execute(&pool)
+        .await
+        .expect("one block");
+    let duplicate_block = sqlx::query(
+        "INSERT INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, NOW(3))",
+    )
+    .bind(reporter)
+    .bind(handler)
+    .execute(&pool)
+    .await;
+    assert!(duplicate_block.is_err(), "block primary key is unique");
+
+    sqlx::query("DELETE FROM users WHERE id = ?")
+        .bind(handler)
+        .execute(&pool)
+        .await
+        .expect("handler hard-delete cascades block and nulls handler");
+    let handled_by: Option<u64> = sqlx::query_scalar(
+        "SELECT handled_by FROM reports WHERE public_id = 'RRRRRRRRRRRRRRRRRRRRRRRRRR'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("nullable handler");
+    assert_eq!(handled_by, None, "handled_by uses ON DELETE SET NULL");
+    let blocks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM blocks")
+        .fetch_one(&pool)
+        .await
+        .expect("block count");
+    assert_eq!(blocks, 0, "block rows cascade with either user");
+
+    sqlx::query("DELETE FROM users WHERE id = ?")
+        .bind(reporter)
+        .execute(&pool)
+        .await
+        .expect("reporter hard-delete");
+    let reports: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM reports")
+        .fetch_one(&pool)
+        .await
+        .expect("report count");
+    assert_eq!(reports, 0, "reports cascade with their reporter");
 }
 
 // --- Environment-free guard tests: these must pass with no database at all.

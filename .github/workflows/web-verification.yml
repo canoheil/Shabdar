@@ -3,7 +3,7 @@ name: Web verification
 on:
   push:
     branches:
-      - arena/4fdc08a7-shabdar
+      - arena/d645adc0-shabdar
     paths:
       - apps/api/**
       - apps/web/**
@@ -62,6 +62,7 @@ jobs:
       OTP_SMS_GLOBAL_LIMIT: '1000'
       RATING_USER_LIMIT: '1000'
       COMMENT_USER_LIMIT: '1000'
+      REPORT_USER_LIMIT: '1000'
       PORT: '3000'
       HOST: 127.0.0.1
     steps:

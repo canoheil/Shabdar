@@ -4,7 +4,7 @@
 
 **Architecture:** One migration, focused `blocks.rs`, `reports.rs`, and moderation services, thin Axum routes, transaction-level target/report locks, optional-viewer comment reads, and local Nuxt page state. Public SSR stays anonymous; personalized comments are private and hydrate only for a valid viewer.
 
-**Spec:** `docs/superpowers/specs/2026-10-27-phase9-trust-safety-design.md`. Scope, admin-only comment hiding, and blocker-only comment filtering were approved by the user on 2026-10-27. This written plan requires approval before Task 1.
+**Spec:** `docs/superpowers/specs/2026-10-27-phase9-trust-safety-design.md`. Scope, admin-only comment hiding, and blocker-only comment filtering were approved by the user on 2026-10-27. The user approved this written implementation plan on 2026-10-27 and authorized Task 1 to begin.
 
 **Base:** `860f1b1` on `main` (Phase 8 merged through PR #13). Work only on `arena/d645adc0-shabdar`; update the workflow's push branch before expecting CI.
 
@@ -45,7 +45,7 @@ The exact component split may remain smaller where a page is clearer; do not int
 
 **Files:** migration, `config.rs`, all Config constructors, API/web reset helpers, migration tests, workflow.
 
-- [ ] **Step 1: Add failing schema/config tests and enable this branch in CI**
+- [x] **Step 1: Add failing schema/config tests and enable this branch in CI**
 
 Assert both tables, report enums/unique/indexes/resolution action, block composite PK/self-check/both indexes, FK actions, and clean migration reapplication. Add `REPORT_USER_LIMIT=20` and `REPORT_USER_WINDOW_SECS=600` to every Config constructor and env-name test. Add `reports` and `blocks` to every reset/drop list before users. Change the workflow push branch to `arena/d645adc0-shabdar` without removing pull-request verification.
 

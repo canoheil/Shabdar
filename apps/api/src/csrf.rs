@@ -123,6 +123,8 @@ mod tests {
             rating_user_window_secs: 600,
             comment_user_limit: 20,
             comment_user_window_secs: 600,
+            report_user_limit: 20,
+            report_user_window_secs: 600,
             session_ttl_secs: 2_592_000,
             cookie_name: "shabdar_session".to_string(),
             cookie_secure,
