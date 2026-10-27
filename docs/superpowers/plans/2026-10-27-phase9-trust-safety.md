@@ -181,13 +181,13 @@ Fetch report pages first, then at most one target batch per represented type. Ma
 
 Lock the report and recorded resolution before acting. Reuse shared listing/user transition helpers; add comment hide/restore using listing-then-comment lock order. Update report + target + one audit atomically. Dismiss never changes target state; restore never revives a soft-deleted comment.
 
-- [ ] **Step 6: Run GREEN and complete API suite**
+- [x] **Step 6: Run GREEN and complete API suite**
 
-Include concurrent admin/user/comment mutations, old listing moderation, ratings/favorites counters, fmt, and Clippy.
+GREEN evidence: run `40485259323`, job `122125325715`, head `1a8efe8`. All 6 admin-report tests passed, including exact concurrent hide/delete/restore/create counters and one-audit idempotency, alongside the complete MariaDB API suite and older listing/rating/favorite suites. All 66 browser tests, web typecheck/build, Lighthouse, and bundle/performance gates passed; Home/Detail remained 93,101 / 95,474 gzip bytes with 3 scripts each.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
-`feat(api): add report moderation workflows`
+`feat(api): add report moderation workflows` — implementation `cf34fad`, final rustfmt/GREEN head `1a8efe8`.
 
 ## Task 6: Block controls, personalized comments, and `/me/blocks`
 
