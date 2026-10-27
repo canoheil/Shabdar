@@ -21,6 +21,7 @@
       <div class="dashboard__welcome">
         <p class="dashboard__hello">خوش آمدید، {{ me.display_name ?? 'کاربر شبدر' }}</p>
         <NuxtLink to="/me/favorites" class="btn btn--secondary">علاقه‌مندی‌های من</NuxtLink>
+        <NuxtLink to="/me/blocks" class="btn btn--secondary">مدیریت مسدودشدگان</NuxtLink>
       </div>
 
       <ul class="stats" aria-label="خلاصهٔ آگهی‌ها">

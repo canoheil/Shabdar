@@ -197,15 +197,15 @@ GREEN evidence: run `40485259323`, job `122125325715`, head `1a8efe8`. All 6 adm
 
 Prove anonymous SSR has no block controls/state and retains unfiltered comments. Cover login/self omission, confirmed block/unblock, failure/401 retry, two-viewer isolation, global-count stability, private first-read failure preserving SSR items, and forward pagination. Cover `/me/blocks` login/loading/error/empty/pages/unblock and deleted-cursor anchors.
 
-- [ ] **Step 2: Run canonical RED**
+- [x] **Step 2: Run canonical RED**
 
-All older browser tests must run; expected failures are only the new block/personalization contracts. Record evidence.
+Canonical RED: run `40486304471`, job `122128825832`, head `d363e9d`. Exactly the 4 new block/personalization browser tests failed on absent UI/contracts; all 66 older browser tests and all API/typecheck/build gates passed.
 
-- [ ] **Step 3: Implement hydrated block UI and private comment revalidation**
+- [x] **Step 3: Implement hydrated block UI and private comment revalidation**
 
 After authenticated hydration, fetch the first comment page privately and replace public items only on success. Keep the global count and show the authenticated filtering note. On confirmed block, remove that author's loaded comments for the current viewer only. Preserve confirmed state and drafts on all failures.
 
-- [ ] **Step 4: Implement `/me/blocks` and route-chunk safety**
+- [x] **Step 4: Implement `/me/blocks` and route-chunk safety**
 
 Reuse the private favorites page pattern for loading/error/empty/pagination/unblock. Keep detail-only block controls out of the Home shell chunk with a narrow exclusion; do not change budgets.
 

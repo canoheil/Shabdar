@@ -86,6 +86,12 @@ export interface ApiRatingState {
   my_stars: number | null
 }
 
+export interface ApiBlockItem {
+  public_id: string
+  display_name: string | null
+  blocked_at: string
+}
+
 export interface ApiComment {
   public_id: string
   body: string

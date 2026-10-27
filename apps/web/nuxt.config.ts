@@ -30,7 +30,7 @@ export default defineNuxtConfig({
               if (id.endsWith('/app/app.vue')) return 'shell'
               // Detail-only engagement stays in the existing detail route chunk;
               // putting its mutation UI in the shell penalizes every Home visit.
-              if (/\/app\/components\/Listing(?:Rating|Comments)\.vue/.test(id)) return
+              if (/\/app\/components\/(?:Listing(?:Rating|Comments)|BlockControl)\.vue/.test(id)) return
               if (/\/app\/(components|layouts|composables)\//.test(id)) return 'shell'
             },
           },
