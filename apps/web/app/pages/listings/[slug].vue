@@ -98,8 +98,16 @@ const route = useRoute()
 const slug = route.params.slug as string
 const detailUrl = `/api/v1/listings/${encodeURIComponent(slug)}`
 
-// Keep this original read public: personal state is fetched after hydration.
-const { data: listing, pending, error } = await useFetch<ApiListingDetail>(detailUrl)
+// Keep these original reads public on SSR and client navigation: personal
+// state is fetched separately after hydration, never by forwarding a session.
+const publicReadOptions = {
+  headers: { cookie: '' },
+  credentials: 'omit' as const,
+}
+const { data: listing, pending, error } = await useFetch<ApiListingDetail>(
+  detailUrl,
+  publicReadOptions,
+)
 
 if (error.value) {
   const statusCode = [404, 410].includes(error.value.statusCode ?? 0)
@@ -114,7 +122,7 @@ if (error.value) {
 const commentsUrl = `/api/v1/listings/${encodeURIComponent(slug)}/comments`
 const { data: initialComments, error: initialCommentsError } = await useFetch<ApiPage<ApiComment>>(
   commentsUrl,
-  { key: `listing-comments:${slug}` },
+  { key: `listing-comments:${slug}`, ...publicReadOptions },
 )
 const commentsReadFailed = computed(() => Boolean(initialCommentsError.value))
 

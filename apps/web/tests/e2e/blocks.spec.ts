@@ -174,7 +174,7 @@ test('@blocks only confirmed mutations filter one viewer and failures or 401 pre
 test('@blocks private page covers login empty error and confirmed-only unblock', async ({ page }) => {
   await page.goto('/me/blocks')
   await expect(page.getByRole('heading', { name: 'کاربران مسدودشده', exact: true })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'ورود', exact: true })).toBeVisible()
+  await expect(page.getByRole('main').getByRole('link', { name: 'ورود', exact: true })).toBeVisible()
 
   await applyStorage(page, readFixtures().buyerStorage)
   await page.goto('/me/blocks')
