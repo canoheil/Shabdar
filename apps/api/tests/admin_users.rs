@@ -270,7 +270,10 @@ async fn admin_user_routes_require_admin_csrf_and_prevent_self_suspend() {
     let (status, _, body) = list_users(t.app.clone(), &user, "").await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(body["error"]["code"], "forbidden");
-    assert_eq!(list_users(t.app.clone(), &admin, "").await.0, StatusCode::OK);
+    assert_eq!(
+        list_users(t.app.clone(), &admin, "").await.0,
+        StatusCode::OK
+    );
 
     let uri = format!("/api/v1/admin/users/{}/suspend", user.public_id);
     let reason = serde_json::json!({"reason": "abuse"});
@@ -352,7 +355,10 @@ async fn admin_user_search_escapes_like_and_validates_unicode_length() {
 
     let exactly_100 = "🙂".repeat(100);
     let query = format!("?query={}", percent_encode(&exactly_100));
-    assert_eq!(list_users(t.app.clone(), &admin, &query).await.0, StatusCode::OK);
+    assert_eq!(
+        list_users(t.app.clone(), &admin, &query).await.0,
+        StatusCode::OK
+    );
     let too_long = "🙂".repeat(101);
     let query = format!("?query={}", percent_encode(&too_long));
     let (status, _, body) = list_users(t.app.clone(), &admin, &query).await;
@@ -401,12 +407,8 @@ async fn admin_user_list_is_newest_keyset_and_survives_anchor_status_change() {
         .execute(&t.pool)
         .await
         .expect("anchor status fixture");
-    let (status, _, second_page) = list_users(
-        t.app.clone(),
-        &admin,
-        &format!("?limit=2&cursor={cursor}"),
-    )
-    .await;
+    let (status, _, second_page) =
+        list_users(t.app.clone(), &admin, &format!("?limit=2&cursor={cursor}")).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(second_page["page"]["has_more"], false);
     assert_eq!(
@@ -432,12 +434,18 @@ async fn admin_user_list_defaults_to_twenty_and_caps_at_fifty() {
     }
     let (status, _, default_page) = list_users(t.app.clone(), &admin, "").await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(default_page["data"].as_array().expect("default data").len(), 20);
+    assert_eq!(
+        default_page["data"].as_array().expect("default data").len(),
+        20
+    );
     assert_eq!(default_page["page"]["has_more"], true);
 
     let (status, _, capped_page) = list_users(t.app.clone(), &admin, "?limit=100").await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(capped_page["data"].as_array().expect("capped data").len(), 50);
+    assert_eq!(
+        capped_page["data"].as_array().expect("capped data").len(),
+        50
+    );
     assert_eq!(capped_page["page"]["has_more"], true);
 }
 
@@ -520,12 +528,35 @@ async fn user_transitions_validate_reason_and_are_idempotent_with_exact_audits()
     .await
     .expect("audit rows");
     assert_eq!(audits.len(), 2);
-    assert_eq!(audits[0].try_get::<String, _>("action").expect("action"), "user.suspend");
-    assert_eq!(audits[0].try_get::<String, _>("target_type").expect("target"), "user");
-    assert_eq!(audits[0].try_get::<u64, _>("target_id").expect("target ID"), target.id);
-    assert_eq!(audits[0].try_get::<Option<String>, _>("reason").expect("reason").as_deref(), Some(reason.as_str()));
-    assert_eq!(audits[1].try_get::<String, _>("action").expect("action"), "user.unsuspend");
-    assert!(audits[1].try_get::<Option<String>, _>("reason").expect("reason").is_none());
+    assert_eq!(
+        audits[0].try_get::<String, _>("action").expect("action"),
+        "user.suspend"
+    );
+    assert_eq!(
+        audits[0]
+            .try_get::<String, _>("target_type")
+            .expect("target"),
+        "user"
+    );
+    assert_eq!(
+        audits[0].try_get::<u64, _>("target_id").expect("target ID"),
+        target.id
+    );
+    assert_eq!(
+        audits[0]
+            .try_get::<Option<String>, _>("reason")
+            .expect("reason")
+            .as_deref(),
+        Some(reason.as_str())
+    );
+    assert_eq!(
+        audits[1].try_get::<String, _>("action").expect("action"),
+        "user.unsuspend"
+    );
+    assert!(audits[1]
+        .try_get::<Option<String>, _>("reason")
+        .expect("reason")
+        .is_none());
 
     let (status, _, _) = transition(
         t.app.clone(),
@@ -616,7 +647,11 @@ async fn suspension_revokes_every_session_and_unsuspend_does_not_restore_them() 
             None,
         )
         .await;
-        assert_eq!(status, StatusCode::UNAUTHORIZED, "old sessions stay revoked");
+        assert_eq!(
+            status,
+            StatusCode::UNAUTHORIZED,
+            "old sessions stay revoked"
+        );
     }
 
     let new_token = shabdar_api::session::create_session(&t.pool, &t.cfg, target.id)
