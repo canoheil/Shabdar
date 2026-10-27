@@ -194,15 +194,7 @@ async fn post_report(
     csrf: Option<&str>,
     body: serde_json::Value,
 ) -> (StatusCode, HeaderMap, serde_json::Value) {
-    send(
-        app,
-        Method::POST,
-        "/api/v1/reports",
-        user,
-        csrf,
-        Some(body),
-    )
-    .await
+    send(app, Method::POST, "/api/v1/reports", user, csrf, Some(body)).await
 }
 
 async fn report_target(
@@ -371,11 +363,12 @@ async fn report_validation_unknown_fields_and_unicode_details() {
     .await;
     assert_eq!(status, StatusCode::OK, "{response}");
     let public_id = assert_report_shape(&response, "open");
-    let details: Option<String> = sqlx::query_scalar("SELECT details FROM reports WHERE public_id = ?")
-        .bind(public_id)
-        .fetch_one(&t.pool)
-        .await
-        .expect("500-character details");
+    let details: Option<String> =
+        sqlx::query_scalar("SELECT details FROM reports WHERE public_id = ?")
+            .bind(public_id)
+            .fetch_one(&t.pool)
+            .await
+            .expect("500-character details");
     assert_eq!(details.as_deref(), Some(exact.as_str()));
     assert_eq!(report_count(&t.pool).await, 4);
 }
@@ -421,17 +414,19 @@ async fn reports_cover_every_target_and_reason_without_side_effects() {
         assert_eq!(status, StatusCode::OK, "{response}");
         let public_id = assert_report_shape(&response, "open");
         public_ids.insert(public_id.clone());
-        let stored_reason: String = sqlx::query_scalar("SELECT reason FROM reports WHERE public_id = ?")
-            .bind(&public_id)
-            .fetch_one(&t.pool)
-            .await
-            .expect("stored reason");
+        let stored_reason: String =
+            sqlx::query_scalar("SELECT reason FROM reports WHERE public_id = ?")
+                .bind(&public_id)
+                .fetch_one(&t.pool)
+                .await
+                .expect("stored reason");
         assert_eq!(stored_reason, reason);
-        let details: Option<String> = sqlx::query_scalar("SELECT details FROM reports WHERE public_id = ?")
-            .bind(public_id)
-            .fetch_one(&t.pool)
-            .await
-            .expect("stored details");
+        let details: Option<String> =
+            sqlx::query_scalar("SELECT details FROM reports WHERE public_id = ?")
+                .bind(public_id)
+                .fetch_one(&t.pool)
+                .await
+                .expect("stored details");
         assert_eq!(details.as_deref(), Some("evidence"));
     }
     assert_eq!(public_ids.len(), 6);
@@ -446,17 +441,48 @@ async fn reports_cover_every_target_and_reason_without_side_effects() {
     .fetch_one(&t.pool)
     .await
     .expect("listing state");
-    assert_eq!(listing_state.try_get::<String, _>("status").expect("status"), "active");
-    assert_eq!(listing_state.try_get::<u32, _>("comment_count").expect("comments"), 1);
-    assert_eq!(listing_state.try_get::<u32, _>("rating_sum").expect("rating sum"), 0);
-    assert_eq!(listing_state.try_get::<u32, _>("rating_count").expect("ratings"), 0);
-    assert_eq!(listing_state.try_get::<u32, _>("favorite_count").expect("favorites"), 0);
-    let comment_state = sqlx::query("SELECT status, deleted_at FROM listing_comments WHERE public_id = ?")
-        .bind(&comment_id)
-        .fetch_one(&t.pool)
-        .await
-        .expect("comment state");
-    assert_eq!(comment_state.try_get::<String, _>("status").expect("comment status"), "visible");
+    assert_eq!(
+        listing_state
+            .try_get::<String, _>("status")
+            .expect("status"),
+        "active"
+    );
+    assert_eq!(
+        listing_state
+            .try_get::<u32, _>("comment_count")
+            .expect("comments"),
+        1
+    );
+    assert_eq!(
+        listing_state
+            .try_get::<u32, _>("rating_sum")
+            .expect("rating sum"),
+        0
+    );
+    assert_eq!(
+        listing_state
+            .try_get::<u32, _>("rating_count")
+            .expect("ratings"),
+        0
+    );
+    assert_eq!(
+        listing_state
+            .try_get::<u32, _>("favorite_count")
+            .expect("favorites"),
+        0
+    );
+    let comment_state =
+        sqlx::query("SELECT status, deleted_at FROM listing_comments WHERE public_id = ?")
+            .bind(&comment_id)
+            .fetch_one(&t.pool)
+            .await
+            .expect("comment state");
+    assert_eq!(
+        comment_state
+            .try_get::<String, _>("status")
+            .expect("comment status"),
+        "visible"
+    );
     assert!(comment_state
         .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("deleted_at")
         .expect("comment deletion")
@@ -497,7 +523,11 @@ async fn listing_report_visibility_and_self_report() {
             None,
         )
         .await;
-        assert_eq!(http_status, StatusCode::NOT_FOUND, "status {status}: {body}");
+        assert_eq!(
+            http_status,
+            StatusCode::NOT_FOUND,
+            "status {status}: {body}"
+        );
         assert_eq!(body["error"]["code"], "not_found");
     }
     sqlx::query("UPDATE listings SET status = 'removed' WHERE id = ?")
@@ -506,7 +536,16 @@ async fn listing_report_visibility_and_self_report() {
         .await
         .expect("removed fixture");
     assert_eq!(
-        report_target(t.app.clone(), &reporter, "listing", &listing.slug, "spam", None).await.0,
+        report_target(
+            t.app.clone(),
+            &reporter,
+            "listing",
+            &listing.slug,
+            "spam",
+            None
+        )
+        .await
+        .0,
         StatusCode::GONE
     );
     sqlx::query("UPDATE listings SET status = 'active', deleted_at = NOW(3) WHERE id = ?")
@@ -515,11 +554,29 @@ async fn listing_report_visibility_and_self_report() {
         .await
         .expect("deleted fixture");
     assert_eq!(
-        report_target(t.app.clone(), &reporter, "listing", &listing.slug, "spam", None).await.0,
+        report_target(
+            t.app.clone(),
+            &reporter,
+            "listing",
+            &listing.slug,
+            "spam",
+            None
+        )
+        .await
+        .0,
         StatusCode::GONE
     );
     assert_eq!(
-        report_target(t.app.clone(), &reporter, "listing", "unknown-slug", "spam", None).await.0,
+        report_target(
+            t.app.clone(),
+            &reporter,
+            "listing",
+            "unknown-slug",
+            "spam",
+            None
+        )
+        .await
+        .0,
         StatusCode::NOT_FOUND
     );
     assert_eq!(report_count(&t.pool).await, 0);
@@ -533,7 +590,11 @@ async fn listing_report_visibility_and_self_report() {
         None,
     )
     .await;
-    assert_eq!(status, StatusCode::GONE, "visibility precedes ownership: {body}");
+    assert_eq!(
+        status,
+        StatusCode::GONE,
+        "visibility precedes ownership: {body}"
+    );
     sqlx::query("UPDATE listings SET deleted_at = NULL WHERE id = ?")
         .bind(listing.id)
         .execute(&t.pool)
@@ -583,22 +644,53 @@ async fn comment_report_visibility_and_self_report() {
             None,
         )
         .await;
-        assert_eq!(http_status, StatusCode::NOT_FOUND, "{status}/{deleted}: {body}");
+        assert_eq!(
+            http_status,
+            StatusCode::NOT_FOUND,
+            "{status}/{deleted}: {body}"
+        );
     }
     let pending = create_listing(&t.pool, seller.id, "pending").await;
     let pending_comment = insert_comment(&t.pool, pending.id, author.id, "visible", false).await;
     assert_eq!(
-        report_target(t.app.clone(), &reporter, "comment", &pending_comment, "abuse", None).await.0,
+        report_target(
+            t.app.clone(),
+            &reporter,
+            "comment",
+            &pending_comment,
+            "abuse",
+            None
+        )
+        .await
+        .0,
         StatusCode::NOT_FOUND
     );
     let removed = create_listing(&t.pool, seller.id, "removed").await;
     let removed_comment = insert_comment(&t.pool, removed.id, author.id, "visible", false).await;
     assert_eq!(
-        report_target(t.app.clone(), &reporter, "comment", &removed_comment, "abuse", None).await.0,
+        report_target(
+            t.app.clone(),
+            &reporter,
+            "comment",
+            &removed_comment,
+            "abuse",
+            None
+        )
+        .await
+        .0,
         StatusCode::GONE
     );
     assert_eq!(
-        report_target(t.app.clone(), &reporter, "comment", &"0".repeat(26), "abuse", None).await.0,
+        report_target(
+            t.app.clone(),
+            &reporter,
+            "comment",
+            &"0".repeat(26),
+            "abuse",
+            None
+        )
+        .await
+        .0,
         StatusCode::NOT_FOUND
     );
 
@@ -617,15 +709,8 @@ async fn comment_report_visibility_and_self_report() {
     assert_eq!(report_count(&t.pool).await, 0);
 
     let visible = insert_comment(&t.pool, listing.id, author.id, "visible", false).await;
-    let (status, _, response) = report_target(
-        t.app.clone(),
-        &reporter,
-        "comment",
-        &visible,
-        "abuse",
-        None,
-    )
-    .await;
+    let (status, _, response) =
+        report_target(t.app.clone(), &reporter, "comment", &visible, "abuse", None).await;
     assert_eq!(status, StatusCode::OK, "{response}");
     assert_report_shape(&response, "open");
     assert_eq!(report_count(&t.pool).await, 1);
@@ -662,7 +747,16 @@ async fn user_report_requires_active_target_and_rejects_self() {
         assert_eq!(status, StatusCode::NOT_FOUND);
     }
     assert_eq!(
-        report_target(t.app.clone(), &reporter, "user", &"0".repeat(26), "abuse", None).await.0,
+        report_target(
+            t.app.clone(),
+            &reporter,
+            "user",
+            &"0".repeat(26),
+            "abuse",
+            None
+        )
+        .await
+        .0,
         StatusCode::NOT_FOUND
     );
     let (status, _, body) = report_target(
@@ -738,8 +832,17 @@ async fn duplicate_reports_return_existing_without_overwriting() {
         .await
         .expect("unchanged report");
     assert_eq!(row.try_get::<String, _>("reason").expect("reason"), "spam");
-    assert_eq!(row.try_get::<Option<String>, _>("details").expect("details").as_deref(), Some("original"));
-    assert_eq!(row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at").expect("timestamp"), created_at);
+    assert_eq!(
+        row.try_get::<Option<String>, _>("details")
+            .expect("details")
+            .as_deref(),
+        Some("original")
+    );
+    assert_eq!(
+        row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
+            .expect("timestamp"),
+        created_at
+    );
 
     sqlx::query("UPDATE reports SET status = 'dismissed', resolution_action = 'dismiss' WHERE public_id = ?")
         .bind(&public_id)
@@ -756,7 +859,10 @@ async fn duplicate_reports_return_existing_without_overwriting() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(assert_report_shape(&closed_duplicate, "dismissed"), public_id);
+    assert_eq!(
+        assert_report_shape(&closed_duplicate, "dismissed"),
+        public_id
+    );
 
     let (status, _, independent) = report_target(
         t.app.clone(),
@@ -778,7 +884,14 @@ async fn concurrent_duplicate_reports_create_one_row() {
     let seller = create_user(&t.pool, &t.cfg, "+989100000001").await;
     let reporter = create_user(&t.pool, &t.cfg, "+989100000002").await;
     let listing = create_listing(&t.pool, seller.id, "active").await;
-    let reasons = ["spam", "abuse", "fraud", "prohibited_item", "offensive", "other"];
+    let reasons = [
+        "spam",
+        "abuse",
+        "fraud",
+        "prohibited_item",
+        "offensive",
+        "other",
+    ];
     let mut tasks = Vec::new();
     for reason in reasons {
         let app = t.app.clone();
@@ -826,12 +939,21 @@ async fn report_limit_is_per_user_after_validation_csrf_and_independent() {
     });
 
     assert_eq!(
-        post_report(t.app.clone(), Some(&first), Some(&first.csrf), invalid.clone()).await.0,
+        post_report(
+            t.app.clone(),
+            Some(&first),
+            Some(&first.csrf),
+            invalid.clone()
+        )
+        .await
+        .0,
         StatusCode::BAD_REQUEST,
         "validation precedes the limiter"
     );
     assert_eq!(
-        post_report(t.app.clone(), Some(&first), None, valid.clone()).await.0,
+        post_report(t.app.clone(), Some(&first), None, valid.clone())
+            .await
+            .0,
         StatusCode::FORBIDDEN,
         "CSRF precedes the limiter"
     );
@@ -847,7 +969,11 @@ async fn report_limit_is_per_user_after_validation_csrf_and_independent() {
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
     }
-    assert_eq!(report_count(&t.pool).await, 1, "the second attempt is a duplicate");
+    assert_eq!(
+        report_count(&t.pool).await,
+        1,
+        "the second attempt is a duplicate"
+    );
 
     let (status, headers, body) = report_target(
         t.app.clone(),
@@ -867,12 +993,16 @@ async fn report_limit_is_per_user_after_validation_csrf_and_independent() {
         .expect("numeric Retry-After");
     assert!((1..=60).contains(&retry_after));
     assert_eq!(
-        post_report(t.app.clone(), Some(&first), Some(&first.csrf), invalid).await.0,
+        post_report(t.app.clone(), Some(&first), Some(&first.csrf), invalid)
+            .await
+            .0,
         StatusCode::BAD_REQUEST,
         "validation still precedes an exhausted limiter"
     );
     assert_eq!(
-        post_report(t.app.clone(), Some(&first), None, valid).await.0,
+        post_report(t.app.clone(), Some(&first), None, valid)
+            .await
+            .0,
         StatusCode::FORBIDDEN,
         "CSRF still precedes an exhausted limiter"
     );
@@ -886,7 +1016,11 @@ async fn report_limit_is_per_user_after_validation_csrf_and_independent() {
         None,
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "another user has an independent window");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "another user has an independent window"
+    );
 
     // Report limits use their own keys, not the rating/comment allowances.
     let (status, _, comment) = send(
