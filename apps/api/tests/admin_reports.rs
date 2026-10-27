@@ -353,7 +353,7 @@ async fn audit_count(pool: &MySqlPool) -> i64 {
         .expect("audit count")
 }
 
-async fn listing_count(pool: &MySqlPool, listing_id: u64) -> i64 {
+async fn listing_count(pool: &MySqlPool, listing_id: u64) -> u32 {
     sqlx::query_scalar("SELECT comment_count FROM listings WHERE id = ?")
         .bind(listing_id)
         .fetch_one(pool)
