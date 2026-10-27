@@ -305,14 +305,7 @@ async fn action(
     if let Some(reason) = reason {
         body["reason"] = serde_json::json!(reason);
     }
-    decide(
-        app,
-        Some(admin),
-        Some(&admin.csrf),
-        report_public_id,
-        body,
-    )
-    .await
+    decide(app, Some(admin), Some(&admin.csrf), report_public_id, body).await
 }
 
 fn report_ids(body: &serde_json::Value) -> Vec<String> {
@@ -390,12 +383,17 @@ async fn admin_report_queue_filters_keysets_and_shapes_current_targets() {
     let listing = insert_listing(&t.pool, seller.id, "آگهی <script>safe</script>").await;
     let comment = insert_comment(&t.pool, listing.id, seller.id, "متن <b>کامنت</b>").await;
     let created_at = chrono::Utc::now();
-    let listing_report = insert_report(&t.pool, reporter.id, "listing", listing.id, created_at).await;
-    let comment_report = insert_report(&t.pool, reporter.id, "comment", comment.id, created_at).await;
+    let listing_report =
+        insert_report(&t.pool, reporter.id, "listing", listing.id, created_at).await;
+    let comment_report =
+        insert_report(&t.pool, reporter.id, "comment", comment.id, created_at).await;
     let user_report = insert_report(&t.pool, reporter.id, "user", target_user.id, created_at).await;
     let missing_report = insert_report(&t.pool, reporter.id, "user", 9_999_999, created_at).await;
 
-    assert_eq!(queue(t.app.clone(), None, "").await.0, StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        queue(t.app.clone(), None, "").await.0,
+        StatusCode::UNAUTHORIZED
+    );
     assert_eq!(
         queue(t.app.clone(), Some(&non_admin), "").await.0,
         StatusCode::FORBIDDEN
@@ -411,7 +409,10 @@ async fn admin_report_queue_filters_keysets_and_shapes_current_targets() {
     assert_eq!(first["page"]["has_more"], true);
     assert_eq!(
         report_ids(&first),
-        vec![listing_report.public_id.clone(), comment_report.public_id.clone()]
+        vec![
+            listing_report.public_id.clone(),
+            comment_report.public_id.clone()
+        ]
     );
     let listing_item = &first["data"][0];
     assert_report_shape(listing_item);
@@ -424,12 +425,22 @@ async fn admin_report_queue_filters_keysets_and_shapes_current_targets() {
     );
     assert_eq!(listing_item["target"]["public_id"], listing.public_id);
     assert_eq!(listing_item["target"]["slug"], listing.slug);
-    assert_eq!(listing_item["target"]["title"], "آگهی <script>safe</script>");
+    assert_eq!(
+        listing_item["target"]["title"],
+        "آگهی <script>safe</script>"
+    );
     assert_eq!(listing_item["target"]["deleted"], false);
     let comment_item = &first["data"][1];
     assert_keys(
         &comment_item["target"],
-        &["public_id", "body", "status", "deleted", "author", "listing_slug"],
+        &[
+            "public_id",
+            "body",
+            "status",
+            "deleted",
+            "author",
+            "listing_slug",
+        ],
     );
     assert_eq!(comment_item["target"]["body"], "متن <b>کامنت</b>");
     assert_eq!(comment_item["target"]["listing_slug"], listing.slug);
@@ -437,7 +448,10 @@ async fn admin_report_queue_filters_keysets_and_shapes_current_targets() {
         &comment_item["target"]["author"],
         &["public_id", "display_name"],
     );
-    let cursor = first["page"]["next_cursor"].as_str().expect("cursor").to_string();
+    let cursor = first["page"]["next_cursor"]
+        .as_str()
+        .expect("cursor")
+        .to_string();
 
     let (status, _, dismissed) = action(
         t.app.clone(),
@@ -461,14 +475,26 @@ async fn admin_report_queue_filters_keysets_and_shapes_current_targets() {
     assert_eq!(second["page"]["has_more"], false);
     assert_eq!(
         report_ids(&second),
-        vec![user_report.public_id.clone(), missing_report.public_id.clone()]
+        vec![
+            user_report.public_id.clone(),
+            missing_report.public_id.clone()
+        ]
     );
-    assert_keys(&second["data"][0]["target"], &["public_id", "display_name", "status"]);
-    assert_eq!(second["data"][0]["target"]["public_id"], target_user.public_id);
+    assert_keys(
+        &second["data"][0]["target"],
+        &["public_id", "display_name", "status"],
+    );
+    assert_eq!(
+        second["data"][0]["target"]["public_id"],
+        target_user.public_id
+    );
     assert_eq!(second["data"][1]["target"], serde_json::Value::Null);
 
     let (_, _, dismissed_page) = queue(t.app.clone(), Some(&admin), "?status=dismissed").await;
-    assert_eq!(report_ids(&dismissed_page), vec![comment_report.public_id.clone()]);
+    assert_eq!(
+        report_ids(&dismissed_page),
+        vec![comment_report.public_id.clone()]
+    );
     assert_eq!(dismissed_page["data"][0]["resolution_action"], "dismiss");
     assert!(dismissed_page["data"][0]["handled_at"].is_string());
     let (_, _, all) = queue(t.app.clone(), Some(&admin), "?status=all&limit=50").await;
@@ -498,13 +524,7 @@ async fn admin_report_queue_defaults_to_twenty_and_caps_at_fifty() {
     let created_at = chrono::Utc::now();
     let mut expected = Vec::new();
     for index in 0..55 {
-        let reporter = insert_user(
-            &t.pool,
-            &format!("+98930{index:07}"),
-            None,
-            created_at,
-        )
-        .await;
+        let reporter = insert_user(&t.pool, &format!("+98930{index:07}"), None, created_at).await;
         let report = insert_report(&t.pool, reporter.id, "user", target.id, created_at).await;
         expected.push(report.public_id);
     }
@@ -548,12 +568,27 @@ async fn actions_validate_reason_target_and_closed_retries() {
 
     let valid = serde_json::json!({"action":"dismiss"});
     assert_eq!(
-        decide(t.app.clone(), Some(&non_admin), Some(&non_admin.csrf), &user_report.public_id, valid.clone())
-            .await.0,
+        decide(
+            t.app.clone(),
+            Some(&non_admin),
+            Some(&non_admin.csrf),
+            &user_report.public_id,
+            valid.clone()
+        )
+        .await
+        .0,
         StatusCode::FORBIDDEN
     );
     assert_eq!(
-        decide(t.app.clone(), Some(&admin), None, &user_report.public_id, valid).await.0,
+        decide(
+            t.app.clone(),
+            Some(&admin),
+            None,
+            &user_report.public_id,
+            valid
+        )
+        .await
+        .0,
         StatusCode::FORBIDDEN
     );
     for body in [
@@ -643,7 +678,9 @@ async fn actions_validate_reason_target_and_closed_retries() {
     assert_eq!(audit_count(&t.pool).await, 1);
 
     assert_eq!(
-        action(t.app.clone(), &admin, &"0".repeat(26), "dismiss", None).await.0,
+        action(t.app.clone(), &admin, &"0".repeat(26), "dismiss", None)
+            .await
+            .0,
         StatusCode::NOT_FOUND
     );
 }
@@ -721,14 +758,7 @@ async fn comment_hide_restore_is_exact_and_audited() {
     assert_eq!(listing_count(&t.pool, listing.id).await, 2);
     assert_eq!(audit_count(&t.pool).await, 2);
 
-    let (status, _, _) = action(
-        t.app.clone(),
-        &admin,
-        &report.public_id,
-        "dismiss",
-        None,
-    )
-    .await;
+    let (status, _, _) = action(t.app.clone(), &admin, &report.public_id, "dismiss", None).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let (status, _, response) = action(
         t.app.clone(),
@@ -773,8 +803,16 @@ async fn listing_and_user_actions_apply_shared_effects_once() {
     assert_eq!(removed["target"]["status"], "removed");
     assert_eq!(audit_count(&t.pool).await, 1);
     assert_eq!(
-        send(t.app.clone(), Method::GET, &format!("/api/v1/listings/{}", listing.slug), None, None, None)
-            .await.0,
+        send(
+            t.app.clone(),
+            Method::GET,
+            &format!("/api/v1/listings/{}", listing.slug),
+            None,
+            None,
+            None
+        )
+        .await
+        .0,
         StatusCode::GONE
     );
     let (status, _, repeated) = action(
@@ -829,8 +867,14 @@ async fn listing_and_user_actions_apply_shared_effects_once() {
     .fetch_all(&t.pool)
     .await
     .expect("audits");
-    assert_eq!(audits[0].try_get::<String, _>("action").expect("action"), "report.remove_listing");
-    assert_eq!(audits[1].try_get::<String, _>("action").expect("action"), "report.suspend_user");
+    assert_eq!(
+        audits[0].try_get::<String, _>("action").expect("action"),
+        "report.remove_listing"
+    );
+    assert_eq!(
+        audits[1].try_get::<String, _>("action").expect("action"),
+        "report.suspend_user"
+    );
     for row in audits {
         let metadata: String = row.try_get("metadata").expect("metadata");
         assert!(metadata.contains("report_public_id"));
