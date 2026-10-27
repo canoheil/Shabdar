@@ -163,9 +163,8 @@ pub async fn admin_detail(
         "status": row.try_get::<String, _>("seller_status").map_err(|_| ApiError::Internal)?,
     });
     let listing_id = row.try_get("id").map_err(|_| ApiError::Internal)?;
-    listing["report_history"] = serde_json::json!(
-        crate::admin_reports::history_for_listing(pool, listing_id).await?
-    );
+    listing["report_history"] =
+        serde_json::json!(crate::admin_reports::history_for_listing(pool, listing_id).await?);
     Ok(listing)
 }
 
@@ -278,9 +277,8 @@ pub async fn remove_by_id_in_tx(
         .await
         .map_err(|_| ApiError::Internal)?
         .ok_or(ApiError::NotFound)?;
-    let deleted_at: Option<chrono::DateTime<Utc>> = row
-        .try_get("deleted_at")
-        .map_err(|_| ApiError::Internal)?;
+    let deleted_at: Option<chrono::DateTime<Utc>> =
+        row.try_get("deleted_at").map_err(|_| ApiError::Internal)?;
     if deleted_at.is_some() {
         return Err(ApiError::NotFound);
     }

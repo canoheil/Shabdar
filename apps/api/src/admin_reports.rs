@@ -132,10 +132,7 @@ fn in_sql(prefix: &str, ids: &BTreeSet<u64>) -> String {
     format!("{prefix} IN ({placeholders})")
 }
 
-async fn load_targets(
-    pool: &MySqlPool,
-    refs: &[(String, u64)],
-) -> Result<TargetMaps, ApiError> {
+async fn load_targets(pool: &MySqlPool, refs: &[(String, u64)]) -> Result<TargetMaps, ApiError> {
     let mut listing_ids = BTreeSet::new();
     let mut comment_ids = BTreeSet::new();
     let mut user_ids = BTreeSet::new();
@@ -163,11 +160,13 @@ async fn load_targets(
         for id in &listing_ids {
             query = query.bind(id);
         }
-        let rows = query.fetch_all(pool).await.map_err(|_| ApiError::Internal)?;
+        let rows = query
+            .fetch_all(pool)
+            .await
+            .map_err(|_| ApiError::Internal)?;
         for row in rows {
-            let deleted_at: Option<DateTime<Utc>> = row
-                .try_get("deleted_at")
-                .map_err(|_| ApiError::Internal)?;
+            let deleted_at: Option<DateTime<Utc>> =
+                row.try_get("deleted_at").map_err(|_| ApiError::Internal)?;
             let id = row.try_get("id").map_err(|_| ApiError::Internal)?;
             maps.listings.insert(
                 id,
@@ -194,11 +193,13 @@ async fn load_targets(
         for id in &comment_ids {
             query = query.bind(id);
         }
-        let rows = query.fetch_all(pool).await.map_err(|_| ApiError::Internal)?;
+        let rows = query
+            .fetch_all(pool)
+            .await
+            .map_err(|_| ApiError::Internal)?;
         for row in rows {
-            let deleted_at: Option<DateTime<Utc>> = row
-                .try_get("deleted_at")
-                .map_err(|_| ApiError::Internal)?;
+            let deleted_at: Option<DateTime<Utc>> =
+                row.try_get("deleted_at").map_err(|_| ApiError::Internal)?;
             let id = row.try_get("id").map_err(|_| ApiError::Internal)?;
             maps.comments.insert(
                 id,
@@ -225,7 +226,10 @@ async fn load_targets(
         for id in &user_ids {
             query = query.bind(id);
         }
-        let rows = query.fetch_all(pool).await.map_err(|_| ApiError::Internal)?;
+        let rows = query
+            .fetch_all(pool)
+            .await
+            .map_err(|_| ApiError::Internal)?;
         for row in rows {
             let id = row.try_get("id").map_err(|_| ApiError::Internal)?;
             maps.users.insert(
@@ -290,7 +294,10 @@ pub async fn queue(
         query = query.bind(created_at).bind(id);
     }
     query = query.bind((limit + 1) as i64);
-    let mut rows = query.fetch_all(pool).await.map_err(|_| ApiError::Internal)?;
+    let mut rows = query
+        .fetch_all(pool)
+        .await
+        .map_err(|_| ApiError::Internal)?;
     let has_more = rows.len() > limit;
     rows.truncate(limit);
     let next_cursor = if has_more {
@@ -314,10 +321,7 @@ pub async fn queue(
     }))
 }
 
-async fn get_report(
-    pool: &MySqlPool,
-    public_id: &str,
-) -> Result<serde_json::Value, ApiError> {
+async fn get_report(pool: &MySqlPool, public_id: &str) -> Result<serde_json::Value, ApiError> {
     let row = sqlx::query(&format!("{} WHERE r.public_id = ?", report_select()))
         .bind(public_id)
         .fetch_optional(pool)
@@ -381,12 +385,13 @@ async fn moderate_comment_in_tx(
 ) -> Result<(), ApiError> {
     // The listing ID is immutable and was obtained before this transaction;
     // this is the first comment/listing lock and preserves listing → comment.
-    let count: u32 = sqlx::query_scalar("SELECT comment_count FROM listings WHERE id = ? FOR UPDATE")
-        .bind(listing_id)
-        .fetch_optional(&mut **tx)
-        .await
-        .map_err(|_| ApiError::Internal)?
-        .ok_or_else(invalid_transition)?;
+    let count: u32 =
+        sqlx::query_scalar("SELECT comment_count FROM listings WHERE id = ? FOR UPDATE")
+            .bind(listing_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(|_| ApiError::Internal)?
+            .ok_or_else(invalid_transition)?;
     let row = sqlx::query(
         "SELECT status, deleted_at FROM listing_comments \
          WHERE id = ? AND listing_id = ? FOR UPDATE",
@@ -397,24 +402,22 @@ async fn moderate_comment_in_tx(
     .await
     .map_err(|_| ApiError::Internal)?
     .ok_or_else(invalid_transition)?;
-    let deleted_at: Option<DateTime<Utc>> = row
-        .try_get("deleted_at")
-        .map_err(|_| ApiError::Internal)?;
+    let deleted_at: Option<DateTime<Utc>> =
+        row.try_get("deleted_at").map_err(|_| ApiError::Internal)?;
     let status: String = row.try_get("status").map_err(|_| ApiError::Internal)?;
     let expected = if restore { "hidden" } else { "visible" };
     if deleted_at.is_some() || status != expected {
         return Err(invalid_transition());
     }
     let desired = if restore { "visible" } else { "hidden" };
-    let updated = sqlx::query(
-        "UPDATE listing_comments SET status = ?, updated_at = ? WHERE id = ?",
-    )
-    .bind(desired)
-    .bind(Utc::now())
-    .bind(comment_id)
-    .execute(&mut **tx)
-    .await
-    .map_err(|_| ApiError::Internal)?;
+    let updated =
+        sqlx::query("UPDATE listing_comments SET status = ?, updated_at = ? WHERE id = ?")
+            .bind(desired)
+            .bind(Utc::now())
+            .bind(comment_id)
+            .execute(&mut **tx)
+            .await
+            .map_err(|_| ApiError::Internal)?;
     if updated.rows_affected() != 1 {
         return Err(ApiError::Internal);
     }
@@ -480,17 +483,16 @@ pub async fn act(
     let preliminary_id: u64 = preliminary
         .try_get("target_id")
         .map_err(|_| ApiError::Internal)?;
-    let comment_listing_id = if matches!(action, "hide_comment" | "restore_comment")
-        && preliminary_type == "comment"
-    {
-        sqlx::query_scalar::<_, u64>("SELECT listing_id FROM listing_comments WHERE id = ?")
-            .bind(preliminary_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|_| ApiError::Internal)?
-    } else {
-        None
-    };
+    let comment_listing_id =
+        if matches!(action, "hide_comment" | "restore_comment") && preliminary_type == "comment" {
+            sqlx::query_scalar::<_, u64>("SELECT listing_id FROM listing_comments WHERE id = ?")
+                .bind(preliminary_id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|_| ApiError::Internal)?
+        } else {
+            None
+        };
 
     let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
     let row = sqlx::query("SELECT * FROM reports WHERE public_id = ? FOR UPDATE")
