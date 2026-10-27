@@ -59,19 +59,21 @@ RED evidence: run `40474523848`, job `122089351913`, passed fmt and Clippy, then
 
 Create exactly `0009_reports_blocks.sql`; do not edit old migrations or backfill counters. Parse the two new env values with startup errors naming invalid variables.
 
-- [ ] **Step 4: Run GREEN and all older reset suites**
+- [x] **Step 4: Run GREEN and all older reset suites**
 
 Required: empty-schema migrations, listings/comments/ratings/favorites/session/image/admin suites, and web fixture initialization. Confirm the new FK/reset order everywhere.
 
-- [ ] **Step 5: Commit**
+GREEN evidence: run `40474830167`, job `122090364331`, head `03a3b4f41c6de371be77f7552d89bff1efa8f98c`. Full MariaDB API suite, 66/66 browser tests, typecheck/build, independent Home/Detail budgets, and enforcing Lighthouse passed. Home remained 93,101 gzip bytes / 3 scripts; Detail remained 95,474 / 3. Lighthouse medians: Home FCP 704.27435ms, LCP 2406.9135ms, CLS 0.0066187523, TBT 152ms, accessibility 100; Detail FCP 705.93655ms, LCP 2405.4325ms, CLS 0.0036143110, TBT 198.5ms, accessibility 100.
 
-`feat(api): add reports and blocks schema`
+- [x] **Step 5: Commit**
+
+`feat(api): add reports and blocks schema` — commit `03a3b4f`.
 
 ## Task 2: Blocks API and viewer-filtered comments
 
 **Files:** `blocks.rs`, `comments.rs`, routes, `tests/blocks.rs`, comment/detail privacy tests.
 
-- [ ] **Step 1: Write failing block and privacy tests**
+- [x] **Step 1: Write failing block and privacy tests**
 
 Cover session/CSRF, self-block, unknown/deleted targets, PUT/DELETE idempotency, exact `{blocked:boolean}` bodies, private list default/cap/cursor/deleted-anchor behavior, and no phone/internal IDs. Cover anonymous/stale unfiltered comments, one-way filtering for each valid viewer across multiple users, private `no-store`, unchanged global counts, and no added viewer fields.
 
