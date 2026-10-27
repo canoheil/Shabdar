@@ -386,12 +386,8 @@ async fn admin_user_list_is_newest_keyset_and_survives_anchor_status_change() {
         users.push(insert_user(&t.pool, phone, Some(name), created_at).await);
     }
 
-    let (status, _, first_page) = list_users(
-        t.app.clone(),
-        &admin,
-        "?limit=2&query=98910000001",
-    )
-    .await;
+    let (status, _, first_page) =
+        list_users(t.app.clone(), &admin, "?limit=2&query=98910000001").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(first_page["page"]["has_more"], true);
     assert_eq!(
@@ -412,13 +408,12 @@ async fn admin_user_list_is_newest_keyset_and_survives_anchor_status_change() {
         .execute(&t.pool)
         .await
         .expect("anchor status fixture");
-    let (status, _, second_page) =
-        list_users(
-            t.app.clone(),
-            &admin,
-            &format!("?limit=2&query=98910000001&cursor={cursor}"),
-        )
-        .await;
+    let (status, _, second_page) = list_users(
+        t.app.clone(),
+        &admin,
+        &format!("?limit=2&query=98910000001&cursor={cursor}"),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(second_page["page"]["has_more"], false);
     assert_eq!(
