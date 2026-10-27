@@ -149,13 +149,13 @@ Canonical RED: run `40480334868`, job `122108741051`, head `ff27165`. All 6 new 
 
 Add bounded admin search and public-ID user lookup. Implement suspend/unsuspend in reusable transaction helpers that lock the user, re-evaluate state, revoke sessions on actual suspension, and write one generic audit. Keep the existing `CurrentUser` non-active behavior unchanged.
 
-- [ ] **Step 5: Run GREEN and all auth/admin regression suites**
+- [x] **Step 5: Run GREEN and all auth/admin regression suites**
 
-Verify existing admin listing routes and OTP/session behavior are unchanged.
+GREEN evidence: run `40482532749`, job `122116156340`, head `7590871`. All 6 admin-user tests and the complete MariaDB API suite passed, including exact audit counts, concurrent suspension, and revocation of every session; existing admin-listing and OTP/session suites passed. The full web gate also passed with 66/66 browser tests and unchanged Home/Detail JS at 93,101 / 95,474 gzip bytes.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
-`feat(api): add admin user moderation`
+`feat(api): add admin user moderation` — implementation `0d01cac`; concurrency/search fixes and final verified head through `7590871`.
 
 ## Task 5: Admin report queue and atomic moderation decisions
 
