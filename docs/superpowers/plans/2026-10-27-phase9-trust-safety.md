@@ -87,23 +87,25 @@ RED evidence: run `40476350854`, job `122095420649`, head `b84399c`. Formatting 
 
 Use the composite PK for idempotent writes and `(created_at,blocked_id)` keyset pages. Add `NOT EXISTS` filtering by `(viewer,author)` only for a valid viewer. Treat `Unauthorized` optional sessions as anonymous and set `private, no-store` only on valid-viewer responses. Keep cursor/comment shapes unchanged.
 
-- [ ] **Step 4: Run GREEN plus older comment/favorite/detail suites**
+- [x] **Step 4: Run GREEN plus older comment/favorite/detail suites**
 
 Prove one user's block does not alter another user's or anonymous results, listing `comment_count`, rating JSON-LD inputs, or deletion behavior.
 
-- [ ] **Step 5: Commit**
+GREEN evidence: run `40476993669`, job `122097554833`, final head `fbb6baf`. All 7 new block/privacy tests and the full MariaDB API suite passed, alongside 66/66 browser tests, typecheck/build, both independent bundle budgets, and enforcing Lighthouse. Home/Detail remained 93,101 / 95,474 gzip bytes with 3 scripts each.
 
-`feat(api): add private user blocks`
+- [x] **Step 5: Commit**
+
+`feat(api): add private user blocks` — implementation `05a82b7`, final rustfmt `fbb6baf`.
 
 ## Task 3: Report creation with safe idempotency and limits
 
 **Files:** `reports.rs`, routes, `tests/reports.rs`, shared fixtures.
 
-- [ ] **Step 1: Write failing report API tests**
+- [x] **Step 1: Write failing report API tests**
 
 Cover session/CSRF, every target/reason, required/unknown fields, Unicode details at 0/500/501, listing 404/410, hidden/deleted/non-public comment targets, active-user targets, self-report, and public-ID-only responses. Assert immediate report creation leaves comment/listing/user status and counters untouched.
 
-- [ ] **Step 2: Add duplicate and limiter RED cases**
+- [x] **Step 2: Add duplicate and limiter RED cases**
 
 Same and changed duplicate bodies must return the existing report without changing it or adding a row. Use small test-only limits to prove per-user isolation, 20/600 defaults in config, `Retry-After`, and independent rating/comment/report keys.
 
