@@ -209,13 +209,13 @@ After authenticated hydration, fetch the first comment page privately and replac
 
 Reuse the private favorites page pattern for loading/error/empty/pagination/unblock. Keep detail-only block controls out of the Home shell chunk with a narrow exclusion; do not change budgets.
 
-- [ ] **Step 5: Run browser GREEN and quality/type/build checks**
+- [x] **Step 5: Run browser GREEN and quality/type/build checks**
 
-Include both themes, responsive sizes, keyboard/focus/targets, axe, overflow, reduced motion, and every older comments/ratings/favorites test.
+Canonical GREEN: run `40489601436`, job `122139909976`, head `189ec00`. All 70 browser tests, the complete API suite, typecheck/build, axe/quality gates, and enforcing Lighthouse passed. Three-run mobile medians were Home FCP/LCP/TBT `696.6/2404.9/116 ms`, CLS `0.00662`; Detail `695.6/2409.8/143.5 ms`, CLS `0.00361`; accessibility was `1.0` for both. Home/Detail retained three scripts each at `93,144 / 96,259` gzip bytes.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
-`feat(web): add user blocking experience`
+`feat(web): add user blocking experience` (`1acd882`), with the viewer-independent SSR correction in `189ec00`.
 
 ## Task 7: Report controls for listings, comments, and users
 
