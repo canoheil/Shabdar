@@ -216,11 +216,11 @@ fn assert_public_block_shape(item: &serde_json::Value, target: &TestUser) {
 async fn insert_block(pool: &MySqlPool, blocker_id: u64, blocked_id: u64) {
     sqlx::query("INSERT INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)")
         .bind(blocker_id)
-    .bind(blocked_id)
-    .bind(fixture_created_at())
-    .execute(pool)
-    .await
-    .expect("block page fixture");
+        .bind(blocked_id)
+        .bind(fixture_created_at())
+        .execute(pool)
+        .await
+        .expect("block page fixture");
 }
 
 async fn insert_comment(pool: &MySqlPool, listing_id: u64, author_id: u64, body: &str) -> String {
