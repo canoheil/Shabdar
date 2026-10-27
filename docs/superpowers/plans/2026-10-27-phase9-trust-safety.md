@@ -161,11 +161,11 @@ GREEN evidence: run `40482532749`, job `122116156340`, head `7590871`. All 6 adm
 
 **Files:** `moderation.rs`/report service, `admin.rs`, routes, `tests/admin_reports.rs`, comments/listings/admin integration tests.
 
-- [ ] **Step 1: Write failing report queue tests**
+- [x] **Step 1: Write failing report queue tests**
 
 Cover status filters, oldest-first default/cap/cursors, equal timestamps, anchors leaving a filter, reporter/handler summaries, safe current targets, `target:null`, batched lookup behavior, and real listing `report_history` replacing the placeholder.
 
-- [ ] **Step 2: Write failing action and concurrency tests**
+- [x] **Step 2: Write failing action and concurrency tests**
 
 Cover every action-target pair, reason validation, unknown/deleted targets, closed-report conflicts, same-resolution idempotency, restore-only-after-hide, and one-audit transactions. Race hide/delete/restore/create operations and assert exact counters without clamping. Prove report-driven remove returns public 410 and suspension revokes sessions.
 
