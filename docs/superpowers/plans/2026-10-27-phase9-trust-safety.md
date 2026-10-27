@@ -193,7 +193,7 @@ GREEN evidence: run `40485259323`, job `122125325715`, head `1a8efe8`. All 6 adm
 
 **Files:** Detail, `BlockControl.vue`, `ListingComments.vue`, new blocks page, types, block browser tests, chunk config.
 
-- [ ] **Step 1: Write browser RED coverage**
+- [x] **Step 1: Write browser RED coverage**
 
 Prove anonymous SSR has no block controls/state and retains unfiltered comments. Cover login/self omission, confirmed block/unblock, failure/401 retry, two-viewer isolation, global-count stability, private first-read failure preserving SSR items, and forward pagination. Cover `/me/blocks` login/loading/error/empty/pages/unblock and deleted-cursor anchors.
 
