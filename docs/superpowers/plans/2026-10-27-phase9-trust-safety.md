@@ -245,7 +245,7 @@ Canonical GREEN: run `40652939366`, job `122697074782`, head `e4343ba`. All 73 b
 
 **Files:** `/admin/reports`, `/admin/users`, admin navigation/shared types, browser tests.
 
-- [ ] **Step 1: Write failing admin browser coverage**
+- [x] **Step 1: Write failing admin browser coverage**
 
 Cover non-admin/login gates, filters/search/cursors, loading/error/empty states, safe target and phone rendering, unavailable targets, valid action visibility, required reasons, pending states, confirmed queue updates, failure/retry preservation, suspension/unsuspension, and no duplicate submission.
 
