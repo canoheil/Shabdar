@@ -71,8 +71,8 @@ test('@admin-trust gates navigation safe rendering filters and confirmed dismiss
   await expect(page.getByText('دسترسی ندارید (ویژهٔ مدیر).', { exact: true })).toBeVisible()
   await applyStorage(page, readFixtures().adminStorage)
   await page.goto('/me')
-  await expect(page.getByRole('navigation', { name: 'ناوبری اصلی' }).getByRole('link', { name: 'گزارش‌ها', exact: true })).toBeVisible()
-  await expect(page.getByRole('navigation', { name: 'ناوبری اصلی' }).getByRole('link', { name: 'کاربران', exact: true })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'ناوبری مدیریت' }).getByRole('link', { name: 'گزارش‌ها', exact: true })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'ناوبری مدیریت' }).getByRole('link', { name: 'کاربران', exact: true })).toBeVisible()
 
   await page.goto('/admin/reports')
   const row = page.locator(`[data-report-id="${report.public_id}"]`)
@@ -132,14 +132,14 @@ test('@admin-trust comment moderation preserves failures and supports confirmed 
   await expect(row).toHaveCount(0)
   await page.unroute(`**/api/v1/admin/reports/${report.public_id}/actions`)
   expect(await runSql(`SELECT status FROM listing_comments WHERE public_id = '${comment.public_id}'`)).toBe('hidden')
-  expect(await runSql(`SELECT comment_count FROM listings WHERE public_id = '${created.public_id}'`)).toBe('0')
+  expect(await runSql(`SELECT comment_count FROM listings WHERE public_id = '${created.publicId}'`)).toBe('0')
 
   await page.getByRole('button', { name: 'اقدام‌شده', exact: true }).click()
   await expect(row).toBeVisible()
   await row.locator('[data-action="restore_comment"]').click()
   await expect(row.getByText('بازیابی دیدگاه', { exact: true })).toBeVisible()
   expect(await runSql(`SELECT status FROM listing_comments WHERE public_id = '${comment.public_id}'`)).toBe('visible')
-  expect(await runSql(`SELECT comment_count FROM listings WHERE public_id = '${created.public_id}'`)).toBe('1')
+  expect(await runSql(`SELECT comment_count FROM listings WHERE public_id = '${created.publicId}'`)).toBe('1')
 })
 
 test('@admin-trust user search keeps failure drafts and confirms suspend unsuspend', async ({ page }) => {

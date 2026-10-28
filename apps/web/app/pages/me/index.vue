@@ -24,6 +24,12 @@
         <NuxtLink to="/me/blocks" class="btn btn--secondary">مدیریت مسدودشدگان</NuxtLink>
       </div>
 
+      <nav v-if="me.is_admin" class="dashboard__admin" aria-label="ناوبری مدیریت">
+        <NuxtLink to="/admin/queue">صف بررسی</NuxtLink>
+        <NuxtLink to="/admin/reports">گزارش‌ها</NuxtLink>
+        <NuxtLink to="/admin/users">کاربران</NuxtLink>
+      </nav>
+
       <ul class="stats" aria-label="خلاصهٔ آگهی‌ها">
         <li v-for="tile in tiles" :key="tile.label" class="stat">
           <span class="stat__value">{{ tile.value }}</span>
@@ -128,6 +134,23 @@ function statusLabel(status: string): string {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
+}
+
+.dashboard__admin {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+
+.dashboard__admin a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  padding-inline: var(--space-3);
 }
 
 .dashboard__header h1,

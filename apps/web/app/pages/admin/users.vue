@@ -102,6 +102,7 @@ const nextCursor = ref(initial.value?.page.next_cursor ?? null)
 const hasMore = ref(initial.value?.page.has_more ?? false)
 const hasLoaded = ref(Boolean(initial.value))
 const query = ref('')
+const appliedQuery = ref('')
 const firstPending = ref(false)
 const loadingMore = ref(false)
 const actingId = ref<string | null>(null)
@@ -124,16 +125,24 @@ function replacePage(page: ApiPage<ApiAdminUser>): void {
 }
 
 async function search(): Promise<void> {
+  if (debounceTimer) {
+    clearTimeout(debounceTimer)
+    debounceTimer = undefined
+  }
+  const requestedQuery = query.value.trim()
   const version = ++searchVersion
   firstPending.value = true
   loadError.value = ''
   loadMoreError.value = ''
   try {
     const page = await $fetch<ApiPage<ApiAdminUser>>('/api/v1/admin/users', {
-      query: { query: query.value.trim(), limit: 20 },
+      query: { query: requestedQuery, limit: 20 },
       cache: 'no-store',
     })
-    if (version === searchVersion) replacePage(page)
+    if (version === searchVersion) {
+      appliedQuery.value = requestedQuery
+      replacePage(page)
+    }
   } catch {
     if (version === searchVersion) loadError.value = 'خواندن کاربران ممکن نشد؛ دوباره تلاش کنید.'
   } finally {
@@ -142,6 +151,9 @@ async function search(): Promise<void> {
 }
 
 watch(query, () => {
+  // Invalidate the old query/cursor immediately, not only after the debounce.
+  searchVersion += 1
+  firstPending.value = true
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(() => void search(), 300)
 })
@@ -151,14 +163,17 @@ onUnmounted(() => {
 })
 
 async function loadMore(): Promise<void> {
-  if (loadingMore.value || !nextCursor.value) return
+  if (loadingMore.value || firstPending.value || !nextCursor.value) return
+  const requestedQuery = appliedQuery.value
+  const version = searchVersion
   loadingMore.value = true
   loadMoreError.value = ''
   try {
     const page = await $fetch<ApiPage<ApiAdminUser>>('/api/v1/admin/users', {
-      query: { query: query.value.trim(), cursor: nextCursor.value, limit: 20 },
+      query: { query: requestedQuery, cursor: nextCursor.value, limit: 20 },
       cache: 'no-store',
     })
+    if (version !== searchVersion || requestedQuery !== appliedQuery.value) return
     const known = new Set(items.value.map((item) => item.public_id))
     items.value = [...items.value, ...page.data.filter((item) => !known.has(item.public_id))]
     nextCursor.value = page.page.next_cursor
