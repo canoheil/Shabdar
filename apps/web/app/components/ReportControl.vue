@@ -21,7 +21,7 @@
             :id="id"
             ref="reasonInput"
             v-model="reason"
-            class="input"
+            class="field__input"
             required
             :disabled="pending || reported"
             :aria-describedby="describedBy"
@@ -46,7 +46,7 @@
           <textarea
             :id="id"
             v-model="details"
-            class="input"
+            class="field__input"
             rows="4"
             maxlength="500"
             :disabled="pending || reported"

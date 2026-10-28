@@ -18,7 +18,7 @@
           <input
             id="admin-user-search"
             v-model="query"
-            class="input"
+            class="field__input"
             type="search"
             maxlength="100"
             autocomplete="off"
@@ -45,7 +45,7 @@
             <input
               :id="`suspend-reason-${item.public_id}`"
               v-model="reasons[item.public_id]"
-              class="input"
+              class="field__input"
               type="text"
               maxlength="500"
               :disabled="actingId !== null"
@@ -266,7 +266,7 @@ useHead({ title: 'مدیریت کاربران | شبدر' })
   gap: var(--space-2);
 }
 
-.admin-users__search .input {
+.admin-users__search .field__input {
   flex: 1 1 16rem;
 }
 

@@ -48,7 +48,7 @@
             <input
               :id="`report-reason-${item.public_id}`"
               v-model="reasons[item.public_id]"
-              class="input"
+              class="field__input"
               type="text"
               maxlength="500"
               :disabled="actingId !== null"
