@@ -261,13 +261,13 @@ Add status tabs/filters, target/reporter/handler summaries, forward pages, and a
 
 Add debounced search, status/admin labels, paginated results, and guarded suspend/unsuspend. Keep phone inside the admin-only page and preserve the existing listing queue. Reuse design tokens and existing controls; no global store.
 
-- [ ] **Step 5: Run browser GREEN and complete quality gate**
+- [x] **Step 5: Run browser GREEN and complete quality gate**
 
-Include keyboard/focus/targets, axe, both themes, mobile/desktop, overflow, runtime-request guards, and all older admin/error tests. Typecheck/build must pass.
+Canonical GREEN: run `40656130023`, job `122707481515`, head `e612ff6`. All 77 browser tests and every API/typecheck/build/quality/Lighthouse gate passed. Home/Detail retained three scripts at `93,395 / 97,811` gzip bytes. Three-run mobile medians were Home FCP/LCP/TBT `673.3/2404.2/76 ms`, CLS `0.00662`; Detail `668.0/2402.9/79 ms`, CLS `0.00530`; accessibility was `1.0`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
-`feat(web): add trust and safety admin`
+`feat(web): add trust and safety admin` (`c9a1e72`), with search/pagination and navigation corrections in `470adab` and `e612ff6`.
 
 ## Task 9: Whole-stack regression and performance gate
 
