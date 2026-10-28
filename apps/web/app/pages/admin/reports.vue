@@ -30,7 +30,8 @@
         <li v-for="item in items" :key="item.public_id" :data-report-id="item.public_id" class="admin-report">
           <div class="admin-report__summary">
             <strong>{{ targetTitle(item) }}</strong>
-            <span class="meta">{{ statusLabel(item.status) }} · {{ reasonLabel(item.reason) }}</span>
+            <span class="meta">{{ statusLabel(item.status) }}</span>
+            <span class="meta">{{ reasonLabel(item.reason) }}</span>
           </div>
           <p v-if="item.details" class="admin-report__details">{{ item.details }}</p>
           <p v-if="item.target" class="meta">وضعیت هدف: {{ item.target.status ?? 'نامشخص' }}</p>
