@@ -92,6 +92,11 @@ export interface ApiBlockItem {
   blocked_at: string
 }
 
+export interface ApiReport {
+  public_id: string
+  status: 'open' | 'actioned' | 'dismissed'
+}
+
 export interface ApiComment {
   public_id: string
   body: string

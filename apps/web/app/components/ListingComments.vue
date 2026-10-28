@@ -134,6 +134,22 @@
           @confirmed="applyBlock(comment.author.public_id, $event)"
           @expired="expireBlockSession"
         />
+        <ReportControl
+          v-if="hydrated && authStatus !== 'unavailable' && viewer?.public_id !== comment.author.public_id"
+          target-type="comment"
+          :target-id="comment.public_id"
+          control-key="comment"
+          button-label="گزارش دیدگاه"
+          :anonymous="authStatus !== 'authenticated'"
+        />
+        <ReportControl
+          v-if="hydrated && authStatus !== 'unavailable' && viewer?.public_id !== comment.author.public_id"
+          target-type="user"
+          :target-id="comment.author.public_id"
+          control-key="author"
+          button-label="گزارش نویسنده"
+          :anonymous="authStatus !== 'authenticated'"
+        />
       </li>
     </ol>
 

@@ -225,11 +225,11 @@ Canonical GREEN: run `40489601436`, job `122139909976`, head `189ec00`. All 70 b
 
 Cover anonymous SSR/control privacy, login path, every target type, required reason, optional 500-character details, safe interpolation/XSS, pending duplicate prevention, confirmed success/already-reported states, self-target omission, 401, network failure/retry, and draft preservation.
 
-- [ ] **Step 2: Run canonical RED**
+- [x] **Step 2: Run canonical RED**
 
-Expected failures are only the new report UI contracts; all older suites remain enabled. Record evidence.
+Canonical RED: run `40490601085`, job `122143277278`, head `8554d66`. Exactly the 3 new report browser tests failed on absent controls; all 70 older browser tests and the other gates passed.
 
-- [ ] **Step 3: Implement accessible report controls**
+- [x] **Step 3: Implement accessible report controls**
 
 Use native labelled fields and an inline expandable panel or native dialog with reliable focus return. Provide hydrated auth-only controls for listing, seller, comment, and comment author. Submit only the documented public target identifiers and update from confirmed responses alone. Keep failures and drafts local.
 
