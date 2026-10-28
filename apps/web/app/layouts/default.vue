@@ -46,6 +46,18 @@
               <span>صف بررسی</span>
             </NuxtLink>
           </li>
+          <li v-if="user?.is_admin" class="shell__nav-item shell__nav-item--admin">
+            <NuxtLink to="/admin/reports" class="shell__nav-action">
+              <PhShieldCheck :size="22" aria-hidden="true" />
+              <span>گزارش‌ها</span>
+            </NuxtLink>
+          </li>
+          <li v-if="user?.is_admin" class="shell__nav-item shell__nav-item--admin">
+            <NuxtLink to="/admin/users" class="shell__nav-action">
+              <PhShieldCheck :size="22" aria-hidden="true" />
+              <span>کاربران</span>
+            </NuxtLink>
+          </li>
         </ul>
       </nav>
     </header>

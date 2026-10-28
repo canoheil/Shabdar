@@ -249,15 +249,15 @@ Canonical GREEN: run `40652939366`, job `122697074782`, head `e4343ba`. All 73 b
 
 Cover non-admin/login gates, filters/search/cursors, loading/error/empty states, safe target and phone rendering, unavailable targets, valid action visibility, required reasons, pending states, confirmed queue updates, failure/retry preservation, suspension/unsuspension, and no duplicate submission.
 
-- [ ] **Step 2: Run canonical RED**
+- [x] **Step 2: Run canonical RED**
 
-Expected failures are limited to the two new admin experiences; older admin listing queue tests remain green. Record evidence.
+Canonical RED: run `40653729595`, job `122699662402`, head `c99d482`. Exactly the 4 new admin browser tests failed on absent pages/contracts; all 73 older browser tests and the other gates passed.
 
-- [ ] **Step 3: Implement admin report queue**
+- [x] **Step 3: Implement admin report queue**
 
 Add status tabs/filters, target/reporter/handler summaries, forward pages, and action forms driven by report state/target type. Preserve entered reasons and report rows on failure; update only from the confirmed admin report object.
 
-- [ ] **Step 4: Implement admin users and navigation**
+- [x] **Step 4: Implement admin users and navigation**
 
 Add debounced search, status/admin labels, paginated results, and guarded suspend/unsuspend. Keep phone inside the admin-only page and preserve the existing listing queue. Reuse design tokens and existing controls; no global store.
 
