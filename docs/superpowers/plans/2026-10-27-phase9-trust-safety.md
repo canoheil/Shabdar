@@ -271,31 +271,31 @@ Canonical GREEN: run `40656130023`, job `122707481515`, head `e612ff6`. All 77 b
 
 ## Task 9: Whole-stack regression and performance gate
 
-- [ ] **Step 1: Run every required check in CI**
+- [x] **Step 1: Run every required check in CI**
 
 `cargo fmt --check`, full `cargo test`, `cargo clippy --all-targets -- -D warnings`, `nuxi typecheck`, production build, all old and new Playwright tests, independent Home/Detail JS budgets, and `test:lighthouse` with three enforced mobile medians per route.
 
-- [ ] **Step 2: Fix and rerun every regression**
+- [x] **Step 2: Fix and rerun every regression**
 
-Do not narrow tests, hide reset failures, skip MariaDB, weaken budgets, or accept a collection-only Lighthouse result. Normal fixture reset must leave reports/blocks/ratings/comments empty for comparable anonymous Lighthouse measurements.
+The expanded quality matrix caught 34px admin inputs; the established 44px field control was applied and the complete gate rerun. No test, MariaDB step, reset, or budget was narrowed or skipped. Fixture reset leaves reports/blocks/ratings/comments empty for anonymous Lighthouse measurements.
 
-- [ ] **Step 3: Record evidence and commit**
+- [x] **Step 3: Record evidence and commit**
 
-`test: verify trust and safety across the stack`
+`test: verify trust and safety across the stack` (`b9b52f2`), with the 44px correction in `f2d1ad9`.
 
-Record the canonical run/job, exact browser count, route bytes, and measured medians only after observing them.
+Final whole-stack GREEN: run `40657436917`, job `122711793120`, head `f2d1ad9`. All **81/81 browser tests**, the full MariaDB API suite, fmt/Clippy, typecheck/build, axe/quality gates, both route budgets, and all six enforcing Lighthouse runs passed. Home/Detail retained three scripts at **93,395 / 97,814 gzip bytes**. Three-run mobile medians: Home FCP/LCP/TBT **701.3/2404.5/141 ms**, CLS **0.0066187523**; Detail **699.1/2407.2/144 ms**, CLS **0.0053043629**; accessibility **1.0** for both.
 
 ## Task 10: Contracts and honest phase evidence
 
-- [ ] **Step 1: Update API/database/README contracts**
+- [x] **Step 1: Update API/database/README contracts**
 
 Document exact report/block/admin routes, duplicate/idempotency rules, private comment caching/filtering, queue/action state machine, cursor semantics, session revocation, audit/counter invariants, env limits, and curl reproduction. Mark migration 0009 built. Remove the superseded immediate-hide proposal and explicitly retain profanity/chat/notifications as deferred.
 
-- [ ] **Step 2: Update STATUS once**
+- [x] **Step 2: Update STATUS once**
 
 Record implementation commit range, every canonical RED/GREEN run, final full gate measurements, and accepted ceilings. Keep process-local scaling, profanity launch blocker, target-snapshot limitation, physical-phone/RUM, and chat enforcement honest. Name the next domain only after Phase 9 is green.
 
-- [ ] **Step 3: Final review and push**
+- [x] **Step 3: Final review and push**
 
 Inspect the cumulative diff for secrets, unscoped artifacts, dependency changes, internal-ID leaks, and unchecked claims. Commit `docs: record phase 9 verification` and push only `arena/d645adc0-shabdar`. Open a PR when requested; never merge automatically.
 

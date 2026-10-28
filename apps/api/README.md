@@ -1,6 +1,6 @@
 # Shabdar API (`apps/api`)
 
-Rust + Axum REST API for the Shabdar marketplace. Phase 1–8 scope: MariaDB
+Rust + Axum REST API for the Shabdar marketplace. Phase 1–9 scope: MariaDB
 via sqlx (runtime queries only — no compile-time macros), `GET /api/v1/health`,
 dev-mode OTP login (`POST /api/v1/auth/otp/request` +
 `POST /api/v1/auth/otp/verify`) issuing a 30-day session cookie + a CSRF
@@ -10,10 +10,12 @@ domain: reference reads (categories, provinces/cities), seller listing
 write (draft → pending → sold/archived/deleted), public feed/detail/sitemap,
 local-disk image uploads, the admin approve/reject/remove queue with
 audit rows, atomic personal favorites, one-rating-per-user listing ratings,
-and immediate paginated comments with exact listing counters. The Nuxt
-frontend lives in `apps/web` and talks to this API through its same-origin
-`/api` proxy. Reports, blocks, chat, notifications, and profanity filtering
-are later phases.
+immediate paginated comments with exact listing counters, idempotent reports
+and directed blocks, blocker-only comment filtering, and the admin report/user
+moderation surfaces. The Nuxt frontend lives in `apps/web` and talks to this
+API through its same-origin `/api` proxy. Reports never automatically hide
+content; only an admin decision does. Chat, notifications, and profanity
+filtering remain later phases.
 
 Development happens on Termux (Android). No Docker; MariaDB runs as a native
 service on the phone.
@@ -36,6 +38,8 @@ files**: no `.env` is committed, and credentials are exported in the shell.
 | `RATING_USER_WINDOW_SECS` | no | `600` | Rating limiter window; limit responses include `Retry-After` |
 | `COMMENT_USER_LIMIT` | no | `20` | Per-user new-comment allowance per window, shared across listings; deletes do not consume it |
 | `COMMENT_USER_WINDOW_SECS` | no | `600` | Comment creation limiter window; limit responses include `Retry-After` |
+| `REPORT_USER_LIMIT` | no | `20` | Per-user validated report submissions per window, including idempotent duplicates |
+| `REPORT_USER_WINDOW_SECS` | no | `600` | Report limiter window; process-local like the rating/comment windows |
 | `SESSION_TTL_SECS` | no | `2592000` | Session lifetime (30 days); also the cookie `Max-Age` |
 | `COOKIE_NAME` | no | `shabdar_session` | Session cookie name |
 | `COOKIE_SECURE` | no | `false` | Set `true` behind HTTPS. `false` is correct for `http://localhost` only — never expose real sessions over plain HTTP |
@@ -71,10 +75,10 @@ FLUSH PRIVILEGES;
 into `DATABASE_URL` / `TEST_DATABASE_URL` — never into any file in the
 repository.
 
-Migrations (`migrations/0001_users_otp_challenges.sql` … `0008_ratings_comments.sql`:
+Migrations (`migrations/0001_users_otp_challenges.sql` … `0009_reports_blocks.sql`:
 users, OTP challenges, sessions, provinces/cities/categories + Rasht and
 7-category seeds, listings, listing_images, admin_audit_logs, favorites,
-listing_ratings, listing_comments) are applied
+listing_ratings, listing_comments, reports, blocks) are applied
 automatically at startup by sqlx's
 runtime `Migrator` (no compile-time `migrate!` macro). The migrator reads the
 `migrations/` directory at runtime, so **start the server from the crate
@@ -104,7 +108,7 @@ Keep the phone awake during long runs: `termux-wake-lock`.
   edit: seconds. Measure and record the first cold `cargo build` / `cargo test`
   on your device when you run them.
 
-## Endpoints (Phase 1–8)
+## Endpoints (Phase 1–9)
 
 | Method | Path | Summary |
 |---|---|---|
@@ -134,15 +138,24 @@ Keep the phone awake during long runs: `termux-wake-lock`.
 | PUT | `/api/v1/me/favorites/{public_id}` | Session + CSRF; save an active listing idempotently → exactly `{favorited:true}` |
 | DELETE | `/api/v1/me/favorites/{public_id}` | Session + CSRF; unsave any known listing idempotently → exactly `{favorited:false}` |
 | GET | `/api/v1/me/favorites?cursor=…&limit=…` | Session; caller's active saved cards, newest save first, default 20 / max 50 + page envelope |
+| POST | `/api/v1/reports` | Session + CSRF; one idempotent report per caller/target; never hides content automatically |
+| PUT | `/api/v1/me/blocks/{public_id}` | Session + CSRF; directed idempotent block → `{blocked:true}` |
+| DELETE | `/api/v1/me/blocks/{public_id}` | Session + CSRF; idempotent unblock → `{blocked:false}` |
+| GET | `/api/v1/me/blocks?cursor=…&limit=…` | Session; flat blocked-user items, newest-first keyset pages |
 | GET | `/api/v1/sitemap/listings` | Active `{url,updated_at}` + page envelope |
 | POST | `/api/v1/listings/{public_id}/images` | Owner, `draft`/`rejected` only. Multipart `file` field; JPEG/PNG/WebP by signature, size + count limits → `{id,storage_key,url,sort_order}` |
 | DELETE | `…/images/{image_id}` | Owner → removes row + file |
 | PATCH | `…/images/order` | Owner, body `{image_ids:[…]}` (exact set) |
 | GET | `/api/v1/admin/listings/queue` | Admin, `pending` oldest first + page envelope |
-| GET | `/api/v1/admin/listings/{public_id}` | Admin, full listing + seller info (phone included) + `report_history: []` |
+| GET | `/api/v1/admin/listings/{public_id}` | Admin, full listing + seller info (phone included) + real public-ID report history |
 | POST | `…/approve` | Admin, `pending` → `active` (+ `published_at`), writes `listing.approve` audit |
 | POST | `…/reject` | Admin, body `{reason}` required → `rejected` + `listing.reject` audit |
 | POST | `…/remove` | Admin, body `{reason}` required, `active` → `removed` (410 publicly) + `listing.remove` audit |
+| GET | `/api/v1/admin/reports?status=open&cursor=…` | Admin; filtered oldest-first reports with current public target/reporter/handler summaries |
+| POST | `/api/v1/admin/reports/{public_id}/actions` | Admin + CSRF; atomic hide/restore/remove/suspend/dismiss decision + one audit |
+| GET | `/api/v1/admin/users?query=…&cursor=…` | Admin; literal name/phone search, newest-first pages, admin-only phone field |
+| POST | `/api/v1/admin/users/{public_id}/suspend` | Admin + CSRF; required reason, status transition + immediate revocation of all target sessions |
+| POST | `/api/v1/admin/users/{public_id}/unsuspend` | Admin + CSRF; permits a fresh login without restoring revoked sessions |
 
 Error envelope (all endpoints): `{"error":{"code","message","fields"?},"request_id"}`.
 Auth error codes: `validation_error`, `invalid_phone`, `invalid_purpose`,

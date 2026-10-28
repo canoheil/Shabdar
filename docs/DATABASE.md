@@ -12,7 +12,7 @@
 - Soft delete (`deleted_at`) for users and listings. Hard delete only for personal data on request, after a retention review.
 - Uniqueness and check constraints are enforced in the database.
 - This is a logical design, not executable migration SQL. Migrations are written after approval. Each migration is tested on an empty database.
-- Phase 8 status (2026-10-25): `provinces`, `cities` (+ Gilan/Rasht seed, Rasht = launch city), `categories` (+ the 7 launch seeds), `listings` (price CHECK: fixed requires a price, negotiable optional, free must be NULL), `listing_images`, `admin_audit_logs`, `favorites`, `listing_ratings`, and `listing_comments` are built (migrations 0003–0008) with seeds applied. Still deferred: `listing_locations`, `support_tickets`, profanity keyword table, reports, blocks, conversations, messages, and notifications.
+- Phase 9 status (2026-10-28): `provinces`, `cities` (+ Gilan/Rasht seed, Rasht = launch city), `categories` (+ the 7 launch seeds), `listings` (price CHECK: fixed requires a price, negotiable optional, free must be NULL), `listing_images`, `admin_audit_logs`, `favorites`, `listing_ratings`, `listing_comments`, `reports`, and `blocks` are built (migrations 0003–0009) with seeds applied. Reset/drop helpers delete reports and blocks before their referenced rows. Still deferred: `listing_locations`, `support_tickets`, profanity keyword table, conversations, messages, and notifications.
 
 ## 2. Tables
 
@@ -152,7 +152,7 @@ Rules enforced in the service layer and tested: the rater is not the seller, sta
 - Index: `(listing_id, status, created_at, id)` for the newest-first visible keyset feed
 - Index: `(author_id, created_at, id)`
 
-Reasoning: Phase 8 publishes trimmed 1–1000-character comments immediately as `visible`. Only `status='visible' AND deleted_at IS NULL` rows appear publicly and count toward `listings.comment_count`. Creation and author-only deletion hold the listing row lock and update the visible counter in the same transaction; repeated deletion changes neither `deleted_at` nor the counter again. `hidden`/`removed` and `hidden_reason` are reserved for the future reports/admin domain—Phase 8 exposes no route that sets them. Profanity filtering remains required before public launch. Listing deletion cascades comments; author hard-delete is restricted pending a reviewed retention flow.
+Reasoning: trimmed 1–1000-character comments publish immediately as `visible`. Only `status='visible' AND deleted_at IS NULL` rows appear and count toward `listings.comment_count`; an authenticated viewer's own blocks additionally filter authors only for that viewer. Creation, author-only deletion, and Phase 9 admin hide/restore hold the listing → comment lock order and update the exact visible counter once. Reports alone never set `hidden`; only an admin report action can hide or restore. `removed` remains reserved for a future workflow. Profanity filtering remains required before public launch. Listing deletion cascades comments; author hard-delete is restricted pending a reviewed retention flow.
 
 ### `favorites`
 
@@ -168,6 +168,9 @@ Reasoning: Phase 8 publishes trimmed 1–1000-character comments immediately as 
 The integration reset/drop helpers include `favorites`, so a fresh test schema and migration reapplication remain compatible. Save/unsave changes the row and `listings.favorite_count` in the same transaction while holding the listing row lock; only an actual insert/delete changes the counter. Personal queries filter to active, non-deleted listings without deleting hidden favorite rows. Listing deletion cascades remove rows; a future user hard-delete workflow must reconcile affected listing counters in its transaction before cascading user favorites. Current user deletion is soft.
 
 ### `reports`
+
+**Built in migration `0009_reports_blocks.sql` (Phase 9).**
+
 - `id BIGINT UNSIGNED PK`
 - `public_id CHAR(26) UNIQUE NOT NULL`
 - `reporter_id BIGINT UNSIGNED NOT NULL` FK → `users.id`
@@ -176,13 +179,17 @@ The integration reset/drop helpers include `favorites`, so a fresh test schema a
 - `reason ENUM('spam','abuse','fraud','prohibited_item','offensive','other') NOT NULL`
 - `details VARCHAR(500) NULL`
 - `status ENUM('open','actioned','dismissed') NOT NULL DEFAULT 'open'`
-- `handled_by BIGINT UNSIGNED NULL` FK → `users.id`
+- `resolution_action VARCHAR(40) NULL` — confirmed admin action; no automatic action on report creation
+- `handled_by BIGINT UNSIGNED NULL` FK → `users.id` (ON DELETE SET NULL)
 - `handled_at DATETIME(3) NULL`
 - `created_at DATETIME(3) NOT NULL`
 - Unique: `(reporter_id, target_type, target_id)` (one report per user per target)
 - Indexes: `(status, created_at, id)` for the admin queue, `(target_type, target_id)`
 
 ### `blocks`
+
+**Built in migration `0009_reports_blocks.sql` (Phase 9).** The composite key makes directed block/unblock idempotent and preserves the original `created_at` on duplicate PUT. The list keyset uses `(created_at, blocked_id)` newest first; deleting an anchor row does not invalidate its cursor. Blocks filter only the blocker’s comment view and never change global counters.
+
 - `blocker_id BIGINT UNSIGNED NOT NULL` FK → `users.id` (ON DELETE CASCADE)
 - `blocked_id BIGINT UNSIGNED NOT NULL` FK → `users.id` (ON DELETE CASCADE)
 - `created_at DATETIME(3) NOT NULL`
