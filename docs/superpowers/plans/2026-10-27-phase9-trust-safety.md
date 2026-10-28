@@ -233,13 +233,13 @@ Canonical RED: run `40490601085`, job `122143277278`, head `8554d66`. Exactly th
 
 Use native labelled fields and an inline expandable panel or native dialog with reliable focus return. Provide hydrated auth-only controls for listing, seller, comment, and comment author. Submit only the documented public target identifiers and update from confirmed responses alone. Keep failures and drafts local.
 
-- [ ] **Step 4: Run browser GREEN and full quality checks**
+- [x] **Step 4: Run browser GREEN and full quality checks**
 
-Verify report text cannot inject markup, controls work with keyboard/touch in both themes, and Detail/Home route chunks remain independently within budget. Typecheck/build are required.
+Canonical GREEN: run `40652939366`, job `122697074782`, head `e4343ba`. All 73 browser tests and every API/typecheck/build/quality/Lighthouse gate passed. Three-run mobile medians were Home FCP/LCP/TBT `690.7/2407.4/119 ms`, CLS `0.00662`; Detail `691.8/2404.3/131 ms`, CLS `0.00530`; accessibility was `1.0`. Home/Detail retained three scripts at `93,222 / 97,639` gzip bytes.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
-`feat(web): add accessible abuse reporting`
+`feat(web): add accessible abuse reporting` (`de89a8c`), with the stable pending locator correction in `e4343ba`.
 
 ## Task 8: Admin reports and users UI
 
