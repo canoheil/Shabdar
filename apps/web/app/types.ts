@@ -86,6 +86,50 @@ export interface ApiRatingState {
   my_stars: number | null
 }
 
+export interface ApiBlockItem {
+  public_id: string
+  display_name: string | null
+  blocked_at: string
+}
+
+export interface ApiReport {
+  public_id: string
+  status: 'open' | 'actioned' | 'dismissed'
+}
+
+export interface ApiAdminTarget {
+  public_id: string
+  display_name?: string | null
+  slug?: string
+  title?: string
+  body?: string
+  status?: string
+  deleted?: boolean
+  listing_slug?: string
+  author?: { public_id: string; display_name: string | null }
+}
+
+export interface ApiAdminReport extends ApiReport {
+  target_type: 'listing' | 'comment' | 'user'
+  reason: string
+  details: string | null
+  resolution_action: string | null
+  created_at: string
+  handled_at: string | null
+  reporter: { public_id: string; display_name: string | null }
+  handled_by: { public_id: string; display_name: string | null } | null
+  target: ApiAdminTarget | null
+}
+
+export interface ApiAdminUser {
+  public_id: string
+  display_name: string | null
+  phone_e164: string
+  status: 'active' | 'suspended' | 'deleted'
+  is_admin: boolean
+  created_at: string
+}
+
 export interface ApiComment {
   public_id: string
   body: string

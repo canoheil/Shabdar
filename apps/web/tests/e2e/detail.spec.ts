@@ -11,7 +11,7 @@ async function applyStorage(page: Page, storagePath: string): Promise<void> {
 }
 
 function isDetailRead(url: string): boolean {
-  return new URL(url).pathname.startsWith('/api/v1/listings/')
+  return /^\/api\/v1\/listings\/[^/]+$/.test(new URL(url).pathname)
 }
 
 test('@detail eight-image gallery is keyboard operable and responsively composed', async ({ page }) => {

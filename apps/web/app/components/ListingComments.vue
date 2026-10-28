@@ -21,7 +21,17 @@
       </AppButton>
     </template>
 
+    <template v-if="privateReadError">
+      <AppAlert tone="error">بارگذاری فهرست خصوصی دیدگاه‌ها ممکن نشد؛ دوباره تلاش کنید.</AppAlert>
+      <AppButton variant="secondary" :loading="privateReadPending" @click="loadPrivateFirstPage">
+        تلاش دوباره فهرست خصوصی
+      </AppButton>
+    </template>
+
     <div v-if="hydrated" class="listing-comments__auth">
+      <p v-if="authStatus === 'authenticated'" class="meta">
+        دیدگاه‌های نویسندگان مسدودشده برای شما پنهان می‌شود.
+      </p>
       <NuxtLink
         v-if="authStatus === 'anonymous' || authExpired"
         to="/login"
@@ -117,6 +127,29 @@
         >
           حذف دیدگاه
         </AppButton>
+        <BlockControl
+          v-if="hydrated && authStatus === 'authenticated' && !authExpired && viewer && viewer.public_id !== comment.author.public_id"
+          :target-public-id="comment.author.public_id"
+          :viewer-public-id="viewer.public_id"
+          @confirmed="applyBlock(comment.author.public_id, $event)"
+          @expired="expireBlockSession"
+        />
+        <ReportControl
+          v-if="hydrated && authStatus !== 'unavailable' && viewer?.public_id !== comment.author.public_id"
+          target-type="comment"
+          :target-id="comment.public_id"
+          control-key="comment"
+          button-label="گزارش دیدگاه"
+          :anonymous="authStatus !== 'authenticated'"
+        />
+        <ReportControl
+          v-if="hydrated && authStatus !== 'unavailable' && viewer?.public_id !== comment.author.public_id"
+          target-type="user"
+          :target-id="comment.author.public_id"
+          control-key="author"
+          button-label="گزارش نویسنده"
+          :anonymous="authStatus !== 'authenticated'"
+        />
       </li>
     </ol>
 
@@ -166,6 +199,10 @@ const nextCursor = ref(props.initialPage?.page.next_cursor ?? null)
 const hasMore = ref(props.initialPage?.page.has_more ?? false)
 const readPending = ref(false)
 const readError = ref(props.initialError)
+const privateReadPending = ref(false)
+const privateReadError = ref(false)
+const blockedAuthors = ref(new Set<string>())
+const mutationVersion = ref(0)
 const draft = ref('')
 const createPending = ref(false)
 const createError = ref('')
@@ -180,6 +217,7 @@ const commentsUrl = computed(() => `/api/v1/listings/${encodeURIComponent(props.
 
 onMounted(() => {
   hydrated.value = true
+  if (props.authStatus === 'authenticated' && props.viewer) void loadPrivateFirstPage()
 })
 
 function requestStatus(requestError: unknown): number | undefined {
@@ -200,6 +238,50 @@ function validationReason(requestError: unknown): string | undefined {
   }
   const reason = candidate?.data?.error?.fields?.body
   return typeof reason === 'string' ? reason : undefined
+}
+
+function applyBlock(authorPublicId: string, blocked: boolean): void {
+  mutationVersion.value += 1
+  if (blocked) {
+    blockedAuthors.value.add(authorPublicId)
+    comments.value = comments.value.filter(
+      (comment) => comment.author.public_id !== authorPublicId,
+    )
+    // Blocking is viewer-only: neither the global count nor the cursor changes.
+    notice.value = 'دیدگاه‌های این نویسنده برای شما پنهان شد.'
+  } else {
+    blockedAuthors.value.delete(authorPublicId)
+  }
+}
+
+function expireBlockSession(): void {
+  notice.value = 'نشست شما منقضی شده است؛ دوباره وارد شوید.'
+  emit('expired')
+}
+
+async function loadPrivateFirstPage(): Promise<void> {
+  if (privateReadPending.value || props.authStatus !== 'authenticated') return
+  const startedAtVersion = mutationVersion.value
+  privateReadPending.value = true
+  privateReadError.value = false
+  try {
+    const page = await $fetch<ApiPage<ApiComment>>(commentsUrl.value, { cache: 'no-store' })
+    if (startedAtVersion !== mutationVersion.value) return
+    comments.value = page.data
+    nextCursor.value = page.page.next_cursor
+    hasMore.value = page.page.has_more
+    readError.value = false
+    paginationError.value = ''
+  } catch (requestError) {
+    if (requestStatus(requestError) === 401) {
+      expireBlockSession()
+    } else {
+      // Public SSR items and their cursor are confirmed state; retain both.
+      privateReadError.value = true
+    }
+  } finally {
+    privateReadPending.value = false
+  }
 }
 
 async function focusCreateError(): Promise<void> {
@@ -230,6 +312,7 @@ async function create(): Promise<void> {
       body: { body: draft.value },
     })
     // Prepend the server's trimmed, public representation only after success.
+    mutationVersion.value += 1
     comments.value = [
       created,
       ...comments.value.filter((comment) => comment.public_id !== created.public_id),
@@ -269,6 +352,7 @@ async function removeComment(comment: ApiComment): Promise<void> {
   notice.value = 'در حال حذف دیدگاه…'
   try {
     await $fetch(`/api/v1/comments/${comment.public_id}`, { method: 'DELETE' })
+    mutationVersion.value += 1
     comments.value = comments.value.filter((item) => item.public_id !== comment.public_id)
     visibleCount.value -= 1
     deleteAttempt.value = null
@@ -320,7 +404,10 @@ async function loadMore(): Promise<void> {
     const known = new Set(comments.value.map((comment) => comment.public_id))
     comments.value = [
       ...comments.value,
-      ...page.data.filter((comment) => !known.has(comment.public_id)),
+      ...page.data.filter(
+        (comment) => !known.has(comment.public_id)
+          && !blockedAuthors.value.has(comment.author.public_id),
+      ),
     ]
     // Only a confirmed response may advance the cursor.
     nextCursor.value = page.page.next_cursor

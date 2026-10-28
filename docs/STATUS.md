@@ -1,18 +1,98 @@
-# Status — Phase 8 ratings & comments
+# Status — Phase 9 trust & safety
 
-Updated 2026-10-25 on Arena.ai Agent Mode after the final enforcing GitHub
+Updated 2026-10-28 on Arena.ai Agent Mode after the final enforcing GitHub
 Actions gate on the real Axum/Nuxt/MariaDB stack.
 
-- **Phase 8 is COMPLETE — lean Ratings & Comments (Tasks 1–8).**
-- **Branch: `arena/4fdc08a7-shabdar`.** The approved design/plan is in
-  `0fe4c36`; schema, API, privacy, UI, and fixes are in `c65f69d..c8e39fa`.
-  The final code gate ran at `c8e39fab653eeb242e6c39ae2d79973bac35308b`.
-  `ff6339d` records the whole-stack evidence; Task 8 then updates the API,
-  database, README, plan, and this status entry. No agent merge or PR close was
-  performed.
-- **Next product domain: Reports & Blocks / trust and safety, after separate
-  scope approval.** Profanity filtering and the other public-launch blockers
-  remain independent requirements, not consequences of this PASS.
+- **Phase 9 is COMPLETE — approved Reports + Blocks + admin queue (Tasks 1–10).**
+- **Branch: `arena/d645adc0-shabdar`.** The approved design/plan began in
+  `f15a8c6`; implementation and verification are in `f15a8c6..f2d1ad9`.
+  The final code gate ran at `f2d1ad9d47dcccefd5e4d56546735b5151bc5d60`.
+  Task 10 updates the API, database, README, plan, and this status entry. No
+  agent merge or PR close was performed.
+- **Next product domain: launch-blocking profanity filtering and launch-safety
+  hardening, after separate scope approval.** Chat, notifications, attachments,
+  seller reviews, and distributed abuse controls are not implied by this PASS.
+
+## What Phase 9 built
+
+- DB — migration `0009_reports_blocks.sql` creates reports with a unique
+  reporter/target key, open/actioned/dismissed states, resolution metadata,
+  polymorphic internal target IDs, and directed blocks with composite keys and
+  keyset indexes. Empty-schema migration and every older reset/drop helper are
+  FK-safe and green.
+- Reports — authenticated CSRF-protected creation supports listing slugs and
+  comment/user public IDs, six reasons, and optional 500-character details.
+  Duplicate/concurrent submissions preserve the original report through the
+  unique key. The default process-local allowance is 20 validated submissions
+  per user per 600 seconds with env overrides and `Retry-After`.
+- Admin moderation — filtered oldest-first report pages include public
+  reporter/handler and current target summaries without internal IDs. Atomic
+  decisions hide/restore comments, remove listings, suspend users, or dismiss;
+  each actual decision writes exactly one audit. Admin user search supports
+  literal name/phone matching, newest-first pages, guarded suspend/unsuspend,
+  and immediate revocation of every target session. Unsuspension never restores
+  old sessions.
+- Blocks and privacy — directed PUT/DELETE/list APIs are idempotent. Only the
+  blocker's authenticated comment view excludes that author's comments;
+  anonymous SSR, other viewers, global counters, and other interactions are
+  unchanged. Public Detail/comment SSR omits credentials, then private
+  hydration reads viewer state with `no-store`; failed private reads preserve
+  confirmed public items and cursors.
+- Web — accessible hydrated report/block controls cover every approved target,
+  self-omission, pending duplicate prevention, safe text, confirmed-only state,
+  401/failure recovery, and draft preservation. RTL `/me/blocks`,
+  `/admin/reports`, and `/admin/users` include gates, loading/error/empty,
+  filtering/search, stable forward pagination, and valid actions. The existing
+  admin listing queue remains enabled. No dependency or global store was added.
+
+## Verification results (Phase 9 — PASS)
+
+| Vertical slice | Canonical RED run | Canonical GREEN run |
+|---|---:|---:|
+| Migration + FK-safe resets | `40474523848` | `40474830167` |
+| Report creation + limits | `40476350854` | `40476993669` |
+| Directed blocks + private filtering | `40478332831` | `40479044446` |
+| Admin users + session revocation | `40480334868` | `40482532749` |
+| Admin report decisions + counters/audit | `40484182498` | `40485259323` |
+| Block UI + `/me/blocks` | `40486304471` | `40489601436` |
+| Accessible report controls | `40490601085` | `40652939366` |
+| Admin reports/users UI | `40653729595` | `40656130023` |
+
+- **Final enforcing run `40657436917`**, job `122711793120`, head `f2d1ad9`:
+  `cargo fmt --check`, full MariaDB `cargo test`, Clippy with warnings denied,
+  Nuxt typecheck, production build, both independent route JS budgets, and all
+  Lighthouse assertions passed. All **81/81 real-stack Playwright tests** ran,
+  including every older contract plus responsive 375/768/1024/1440px light/dark
+  checks for the new authenticated/admin surfaces, landscape, reduced motion,
+  keyboard/focus/44px targets, axe, overflow, and runtime-request guards.
+- Initial production JS is Home **93,395 gzip bytes / 3 scripts** and Detail
+  **97,814 gzip bytes / 3 scripts**, against their separate 114,627-byte
+  ceilings. Detail-only report/block components remain excluded from the Home
+  shell chunk; each route budget was evaluated independently.
+- Enforced mobile medians of three Lighthouse runs: Home FCP **701.27ms**, LCP
+  **2404.54ms**, CLS **0.0066187523**, TBT **141ms**, Accessibility **100**;
+  Detail FCP **699.14ms**, LCP **2407.24ms**, CLS **0.0053043629**, TBT **144ms**,
+  Accessibility **100**. Normal fixture reset left reports, blocks, ratings,
+  and comments empty for comparable anonymous measurements. Raw reports and
+  the client manifest uploaded as `web-performance-40657436917`.
+
+## Phase 9 accepted ceilings and remaining work
+
+- Report/rating/comment limiters are process-local and reset on restart. Move
+  them to shared storage before multiple API replicas; these defaults are not
+  a distributed abuse-control system.
+- Advanced Persian profanity filtering remains a **public-launch blocker** and
+  was deliberately outside Phase 9. Blocking currently filters comments only;
+  chat/message enforcement belongs to the separately scoped chat domain.
+- Admin report targets are current summaries, not immutable historical
+  snapshots. A deleted target renders unavailable; audit history retains the
+  decision but not a full former target payload.
+- Suspension revokes existing sessions; unsuspension permits a fresh login but
+  cannot restore them. Counter/audit guarantees cover current application
+  flows, not an unreviewed future hard-delete workflow.
+- Lighthouse used simulated mobile throttling in headless Chromium, not a
+  physical phone. Physical-device/RUM measurements and image resize,
+  thumbnail, and modern-format pipelines remain open.
 
 ## What Phase 8 built
 

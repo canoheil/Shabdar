@@ -3,7 +3,7 @@ name: Web verification
 on:
   push:
     branches:
-      - arena/4fdc08a7-shabdar
+      - arena/d645adc0-shabdar
     paths:
       - apps/api/**
       - apps/web/**
@@ -62,6 +62,7 @@ jobs:
       OTP_SMS_GLOBAL_LIMIT: '1000'
       RATING_USER_LIMIT: '1000'
       COMMENT_USER_LIMIT: '1000'
+      REPORT_USER_LIMIT: '1000'
       PORT: '3000'
       HOST: 127.0.0.1
     steps:
@@ -97,7 +98,25 @@ jobs:
 
       - name: Check Rust formatting
         working-directory: apps/api
-        run: cargo fmt --check
+        run: |
+          set +e
+          cargo fmt --check > /tmp/shabdar-fmt.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            cargo fmt
+            git diff --binary > /tmp/shabdar-fmt.patch
+            python - <<'PY'
+          import base64
+          import gzip
+          from pathlib import Path
+
+          payload = gzip.compress(Path('/tmp/shabdar-fmt.patch').read_bytes())
+          encoded = base64.b64encode(payload).decode()
+          for offset in range(0, len(encoded), 3500):
+              print(f'::error::FMT_PATCH_BASE64={encoded[offset:offset + 3500]}')
+          PY
+          fi
+          exit "$status"
 
       - name: Lint every Rust target
         working-directory: apps/api

@@ -56,6 +56,23 @@
             </template>
             <p class="meta" role="status" aria-live="polite" aria-atomic="true">{{ favoriteNotice }}</p>
           </div>
+
+          <ReportControl
+            v-if="hydrated && !mePending && authStatus !== 'unavailable' && me?.public_id !== listing.seller.public_id"
+            target-type="listing"
+            :target-id="listing.slug"
+            control-key="listing"
+            button-label="گزارش آگهی"
+            :anonymous="authStatus !== 'authenticated'"
+          />
+          <ReportControl
+            v-if="hydrated && !mePending && authStatus !== 'unavailable' && me?.public_id !== listing.seller.public_id"
+            target-type="user"
+            :target-id="listing.seller.public_id"
+            control-key="seller"
+            button-label="گزارش فروشنده"
+            :anonymous="authStatus !== 'authenticated'"
+          />
         </aside>
       </div>
       <section class="detail__body" aria-labelledby="detail-description-title">
@@ -98,8 +115,16 @@ const route = useRoute()
 const slug = route.params.slug as string
 const detailUrl = `/api/v1/listings/${encodeURIComponent(slug)}`
 
-// Keep this original read public: personal state is fetched after hydration.
-const { data: listing, pending, error } = await useFetch<ApiListingDetail>(detailUrl)
+// Keep these original reads public on SSR and client navigation: personal
+// state is fetched separately after hydration, never by forwarding a session.
+const publicReadOptions = {
+  headers: { cookie: '' },
+  credentials: 'omit' as const,
+}
+const { data: listing, pending, error } = await useFetch<ApiListingDetail>(
+  detailUrl,
+  publicReadOptions,
+)
 
 if (error.value) {
   const statusCode = [404, 410].includes(error.value.statusCode ?? 0)
@@ -114,7 +139,7 @@ if (error.value) {
 const commentsUrl = `/api/v1/listings/${encodeURIComponent(slug)}/comments`
 const { data: initialComments, error: initialCommentsError } = await useFetch<ApiPage<ApiComment>>(
   commentsUrl,
-  { key: `listing-comments:${slug}` },
+  { key: `listing-comments:${slug}`, ...publicReadOptions },
 )
 const commentsReadFailed = computed(() => Boolean(initialCommentsError.value))
 
@@ -137,6 +162,7 @@ const favoritePending = ref(false)
 const favoriteAuthExpired = ref(false)
 const favoriteError = ref('')
 const favoriteNotice = ref('')
+const hydrated = ref(false)
 
 function requestStatus(error: unknown): number | undefined {
   const candidate = error as {
@@ -221,6 +247,7 @@ function applyRatingState(state: ApiRatingState): void {
 }
 
 onMounted(() => {
+  hydrated.value = true
   if (authStatus.value === 'authenticated' && me.value && listing.value) void loadFavoriteState()
 })
 

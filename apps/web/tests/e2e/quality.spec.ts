@@ -70,7 +70,11 @@ const routes = [
   { label: 'post', path: () => '/post', role: 'seller' },
   { label: 'dashboard', path: () => '/me', role: 'seller' },
   { label: 'favorites', path: () => '/me/favorites', role: 'seller' },
+  { label: 'blocks', path: () => '/me/blocks', role: 'seller' },
+  { label: 'detail-auth', path: () => readFixtures().detailPath, role: 'buyer' },
   { label: 'admin', path: () => '/admin/queue', role: 'admin' },
+  { label: 'admin-reports', path: () => '/admin/reports', role: 'admin' },
+  { label: 'admin-users', path: () => '/admin/users', role: 'admin' },
 ] as const
 
 for (const route of routes) {

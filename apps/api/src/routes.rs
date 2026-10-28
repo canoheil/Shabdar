@@ -41,8 +41,14 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/me/favorites/{public_id}",
             put(save_favorite).delete(unsave_favorite),
         )
+        .route("/api/v1/me/blocks", get(my_blocks))
+        .route(
+            "/api/v1/me/blocks/{public_id}",
+            put(block_user).delete(unblock_user),
+        )
         .route("/api/v1/me/listings", get(my_listings))
         .route("/api/v1/me/dashboard/summary", get(dashboard_summary))
+        .route("/api/v1/reports", post(create_report))
         .route("/api/v1/listings", post(create_listing).get(feed_listings))
         .route(
             "/api/v1/listings/{slug}/comments",
@@ -79,6 +85,20 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/v1/listings/{public_id}/images/order",
             patch(images_order),
+        )
+        .route("/api/v1/admin/reports", get(admin_reports_queue))
+        .route(
+            "/api/v1/admin/reports/{public_id}/actions",
+            post(admin_report_action),
+        )
+        .route("/api/v1/admin/users", get(admin_users_search))
+        .route(
+            "/api/v1/admin/users/{public_id}/suspend",
+            post(admin_suspend_user),
+        )
+        .route(
+            "/api/v1/admin/users/{public_id}/unsuspend",
+            post(admin_unsuspend_user),
         )
         .route("/api/v1/admin/listings/queue", get(admin_queue))
         .route("/api/v1/admin/listings/{public_id}", get(admin_detail))
@@ -125,6 +145,18 @@ fn two_set_cookies(first: String, second: String) -> HeaderMap {
         second.parse().expect("server-built cookie is ascii"),
     );
     map
+}
+
+fn mark_private_viewer(response: &mut axum::response::Response) {
+    let headers = response.headers_mut();
+    headers.insert(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("private, no-store"),
+    );
+    headers.insert(
+        axum::http::header::VARY,
+        axum::http::HeaderValue::from_static("Cookie"),
+    );
 }
 
 /// Fallback: unknown paths get 404 `not_found` in the documented envelope
@@ -255,6 +287,71 @@ async fn unsave_favorite(
     Ok(Json(serde_json::json!({ "favorited": false })))
 }
 
+/// GET /api/v1/me/blocks — the current viewer's private block list.
+async fn my_blocks(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<axum::response::Response, ApiError> {
+    let body = crate::blocks::list(
+        &state.pool,
+        user.user_id,
+        params.get("cursor").map(String::as_str),
+        params.get("limit").map(String::as_str),
+    )
+    .await?;
+    let mut response = Json(body).into_response();
+    mark_private_viewer(&mut response);
+    Ok(response)
+}
+
+/// PUT /api/v1/me/blocks/{public_id} — idempotently block another user.
+async fn block_user(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::blocks::put(&state.pool, user.user_id, &public_id).await?;
+    Ok(Json(serde_json::json!({ "blocked": true })))
+}
+
+/// DELETE /api/v1/me/blocks/{public_id} — idempotently unblock a known user.
+async fn unblock_user(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::blocks::delete(&state.pool, user.user_id, &public_id).await?;
+    Ok(Json(serde_json::json!({ "blocked": false })))
+}
+
+/// POST /api/v1/reports — validate first, then spend the independent report
+/// allowance, then resolve and insert/return the idempotent report.
+async fn create_report(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    ApiJson(body): ApiJson<crate::reports::ReportBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    let input = body.validate()?;
+    state
+        .limiter
+        .hit(
+            &format!("report:user:{}", user.user_id),
+            state.config.report_user_limit,
+            Duration::from_secs(u64::from(state.config.report_user_window_secs)),
+        )
+        .into_result()?;
+    Ok(Json(
+        crate::reports::create(&state.pool, user.user_id, input).await?,
+    ))
+}
+
 #[derive(Deserialize)]
 struct RatingBody {
     stars: Option<serde_json::Value>,
@@ -309,21 +406,32 @@ struct CommentBody {
     body: Option<String>,
 }
 
-/// GET /api/v1/listings/{slug}/comments — public viewer-independent page.
+/// GET /api/v1/listings/{slug}/comments — public by default, with private
+/// outgoing-block filtering only when a valid viewer session is present.
 async fn listing_comments(
     State(state): State<AppState>,
     Path(slug): Path<String>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    Ok(Json(
-        crate::comments::list(
-            &state.pool,
-            &slug,
-            params.get("cursor").map(String::as_str),
-            params.get("limit").map(String::as_str),
-        )
-        .await?,
-    ))
+    current_user: Result<CurrentUser, ApiError>,
+) -> Result<axum::response::Response, ApiError> {
+    let viewer_user_id = match current_user {
+        Ok(user) => Some(user.user_id),
+        Err(ApiError::Unauthorized) => None,
+        Err(error) => return Err(error),
+    };
+    let body = crate::comments::list(
+        &state.pool,
+        &slug,
+        viewer_user_id,
+        params.get("cursor").map(String::as_str),
+        params.get("limit").map(String::as_str),
+    )
+    .await?;
+    let mut response = Json(body).into_response();
+    if viewer_user_id.is_some() {
+        mark_private_viewer(&mut response);
+    }
+    Ok(response)
 }
 
 /// POST /api/v1/listings/{slug}/comments — publish one visible comment.
@@ -528,6 +636,113 @@ struct AdminReasonBody {
     reason: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct AdminReportActionBody {
+    action: Option<String>,
+    reason: Option<String>,
+}
+
+/// GET /api/v1/admin/reports — oldest-first filtered report queue.
+async fn admin_reports_queue(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::admin_reports::queue(
+            &state.pool,
+            params.get("status").map(String::as_str),
+            params.get("cursor").map(String::as_str),
+            params.get("limit").map(String::as_str),
+        )
+        .await?,
+    ))
+}
+
+/// POST /api/v1/admin/reports/{public_id}/actions — one atomic decision.
+async fn admin_report_action(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    ApiJson(body): ApiJson<AdminReportActionBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::admin_reports::act(
+            &state.pool,
+            user.user_id,
+            &public_id,
+            body.action.as_deref(),
+            body.reason.as_deref(),
+        )
+        .await?,
+    ))
+}
+
+/// GET /api/v1/admin/users — admin-only search and newest-first keyset pages.
+async fn admin_users_search(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::admin_users::search(
+            &state.pool,
+            params.get("query").map(String::as_str),
+            params.get("cursor").map(String::as_str),
+            params.get("limit").map(String::as_str),
+        )
+        .await?,
+    ))
+}
+
+/// POST /api/v1/admin/users/{public_id}/suspend — revoke every target session.
+async fn admin_suspend_user(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    ApiJson(body): ApiJson<AdminReasonBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::admin_users::transition(
+            &state.pool,
+            user.user_id,
+            &public_id,
+            crate::admin_users::UserTransition::Suspend,
+            body.reason.as_deref(),
+        )
+        .await?,
+    ))
+}
+
+/// POST /api/v1/admin/users/{public_id}/unsuspend — permit a fresh login only.
+async fn admin_unsuspend_user(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::admin_users::transition(
+            &state.pool,
+            user.user_id,
+            &public_id,
+            crate::admin_users::UserTransition::Unsuspend,
+            None,
+        )
+        .await?,
+    ))
+}
+
 /// GET /api/v1/admin/listings/queue — pending oldest first (admin only).
 async fn admin_queue(
     State(state): State<AppState>,
@@ -660,10 +875,7 @@ async fn listing_detail(
     let body = crate::listings::detail(&state.pool, &slug, viewer_user_id).await?;
     let mut response = Json(body).into_response();
     if viewer_user_id.is_some() {
-        response.headers_mut().insert(
-            axum::http::header::CACHE_CONTROL,
-            axum::http::HeaderValue::from_static("private, no-store"),
-        );
+        mark_private_viewer(&mut response);
     }
     Ok(response)
 }

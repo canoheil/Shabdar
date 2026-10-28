@@ -1,6 +1,6 @@
 # REST API Proposal
 
-> **خلاصه فارسی:** API به‌صورت REST زیر `/api/v1` است. مسیرهای عمومی بدون ورود قابل استفاده‌اند و کارهای شخصی یا مدیریتی نشست معتبر می‌خواهند. ورود با کد پیامکی یک‌بار مصرف انجام می‌شود. آگهی‌ها قبل از تأیید ادمین عمومی نمی‌شوند. امتیاز و دیدگاه در فاز ۸ پیاده‌سازی شده‌اند؛ ریپورت، بلاک و صف مدیریت آن‌ها هنوز برای فاز بعد پیشنهادی‌اند.
+> **خلاصه فارسی:** API به‌صورت REST زیر `/api/v1` است. مسیرهای عمومی بدون ورود قابل استفاده‌اند و کارهای شخصی یا مدیریتی نشست معتبر می‌خواهند. ورود با کد پیامکی یک‌بار مصرف انجام می‌شود. آگهی‌ها قبل از تأیید ادمین عمومی نمی‌شوند. امتیاز، دیدگاه، گزارش، بلاک و صف مدیریت Trust & Safety در فازهای ۸ و ۹ پیاده‌سازی شده‌اند. گزارش به‌تنهایی هیچ محتوایی را پنهان نمی‌کند؛ تصمیم نهایی فقط با مدیر است.
 
 ## 1. Conventions
 
@@ -87,7 +87,7 @@ Error codes used by the auth and session endpoints:
 
 Listing card shape: `{ public_id, slug, title, price_toman, price_type, city, province, category, cover_image, rating_average, rating_count, published_at }`.
 
-Public detail keeps the existing visibility rules. For a valid logged-in viewer it also contains `favorited: true|false` and `my_stars: 1|2|3|4|5|null`; anonymous, invalid, expired, or non-active sessions receive the normal public payload with **both keys omitted**. A response containing viewer state is `Cache-Control: private, no-store`; it must not be placed in public SSR/cached HTML. Public comment pages never contain viewer state or a `can_delete` field.
+Public detail keeps the existing visibility rules. For a valid logged-in viewer it also contains `favorited: true|false` and `my_stars: 1|2|3|4|5|null`; anonymous, invalid, expired, or non-active sessions receive the normal public payload with **both keys omitted**. A response containing viewer state is `Cache-Control: private, no-store`; it must not be placed in public SSR/cached HTML. Comment pages contain no `can_delete`, block, or report state. A valid viewer's comment page additionally excludes authors that viewer blocked and is `Cache-Control: private, no-store`; anonymous comment reads remain unfiltered and publicly cacheable.
 
 ### Search and sorting (Phase 4)
 
@@ -192,9 +192,9 @@ The per-user allowance is 60 PUT/DELETE mutations per 600 seconds by default, sh
 
 A comment object is `{ public_id, body, author: { public_id, display_name }, created_at }`. `display_name` is nullable. Text is trimmed; after trimming it must contain 1–1000 Unicode scalar values. Missing/blank input is `400 validation_error` with `fields.body = "required"`; over 1000 characters is `fields.body = "too_long"`. Self-comments are allowed. Clients must render the body as text, never HTML. Comment profanity filtering remains a public-launch blocker and is not implemented in Phase 8.
 
-The public list defaults to 20 and clamps `limit` to 1–50. Order is `created_at DESC, id DESC`; the opaque cursor is `<created-at-micros>:<id>`. Send `page.next_cursor` unchanged until `has_more` is false. Equal timestamps are disambiguated by ID, and deleting the anchor between pages does not invalidate the cursor. A malformed cursor is `400 validation_error` with `fields.cursor = "invalid_cursor"`. Only `status = 'visible' AND deleted_at IS NULL` rows appear; `hidden` and `removed` are reserved for the future trust-and-safety domain.
+The comment list defaults to 20 and clamps `limit` to 1–50. Order is `created_at DESC, id DESC`; the opaque cursor is `<created-at-micros>:<id>`. Send `page.next_cursor` unchanged until `has_more` is false. Equal timestamps are disambiguated by ID, and deleting the anchor between pages does not invalidate the cursor. A malformed cursor is `400 validation_error` with `fields.cursor = "invalid_cursor"`. Only `status = 'visible' AND deleted_at IS NULL` rows appear. For an anonymous caller this is the complete public page; for a valid authenticated caller it additionally excludes authors in that caller's blocks and is private `no-store`.
 
-Creating a comment locks the listing and increments `listings.comment_count` in the same transaction. Deletion sets only `deleted_at` and decrements the visible counter on the first delete; repeated deletes return `{ "ok": true }` without another decrement. Another author's comment returns `403 forbidden`; an unknown comment ID returns `404 not_found`. Comment targets use the same listing 404/410 visibility rules as ratings. Reports, blocks, report-driven hiding, editing, replies, and reactions are not part of these routes.
+Creating a comment locks the listing and increments `listings.comment_count` in the same transaction. Deletion sets only `deleted_at` and decrements the visible counter on the first delete; repeated deletes return `{ "ok": true }` without another decrement. Another author's comment returns `403 forbidden`; an unknown comment ID returns `404 not_found`. Comment targets use the same listing 404/410 visibility rules as ratings. Admin-only report decisions can set `hidden` or restore `visible`; each transition holds the listing → comment lock order and changes the exact visible counter once. Blocking never changes this global counter or another viewer's page. Editing, replies, and reactions remain outside these routes.
 
 The creation allowance is 20 comments per user per 600 seconds by default, shared across listings. `COMMENT_USER_LIMIT` and `COMMENT_USER_WINDOW_SECS` override it. Validated creation attempts consume the allowance; deletion never does. Limit failures are `429 rate_limited` with `Retry-After`. These counters are process-local and require a shared store before running multiple API replicas.
 
@@ -222,18 +222,39 @@ curl -s -X DELETE "$API/comments/$COMMENT_ID" \
   -H "$AUTH" -H "x-csrf-token: $CSRF"
 ```
 
-## 9. Reports and blocks (deferred — not implemented in Phase 8)
-
-The following routes remain a proposed future contract; Phase 8 does not expose them or filter comments by blocks/reports.
+## 9. Reports and blocks (Phase 9 — built)
 
 | Method | Path | Auth | Summary |
 |---|---|---|---|
-| POST | `/reports` | User | Body: `{ target_type: "listing" \| "comment" \| "user", target_id, reason, details? }`. Target IDs are `public_id` or slug depending on type. One report per user per target. A comment report hides the comment immediately. Returns `{ public_id, status }`. |
-| PUT | `/me/blocks/{public_id}` | User | Blocks a user. Idempotent. |
-| DELETE | `/me/blocks/{public_id}` | User | Unblocks. |
-| GET | `/me/blocks` | User | Blocked users list. |
+| POST | `/reports` | User + CSRF | Body: `{ target_type: "listing" \| "comment" \| "user", target_id, reason, details? }`. Creates or returns the caller's existing report for that target. Returns `{ public_id, status }`. |
+| PUT | `/me/blocks/{public_id}` | User + CSRF | Idempotently blocks another active user. Returns exactly `{ "blocked": true }`. |
+| DELETE | `/me/blocks/{public_id}` | User + CSRF | Idempotently removes the directed block. Returns exactly `{ "blocked": false }`. |
+| GET | `/me/blocks?cursor=…&limit=…` | User | Flat items `{ public_id, display_name, blocked_at }`, newest block first. |
 
-Reporters are never told the result of an admin action beyond the report status.
+Report targets use the listing **slug**, comment **public_id**, or user **public_id** respectively. `reason` is one of `spam`, `abuse`, `fraud`, `prohibited_item`, `offensive`, `other`; optional details are trimmed to at most 500 Unicode characters. Self-reports, unknown/invisible targets, unknown fields, and invalid reasons are rejected without a write. The unique `(reporter_id, target_type, target_id)` key is the concurrency boundary: `INSERT IGNORE` plus reading the stored row makes duplicate/retry submission idempotent and preserves the original reason, details, status, and timestamp.
+
+**Reports never automatically hide a comment or otherwise punish a target.** Only an admin decision in §12 can hide/restore a comment, remove a listing, suspend a user, or dismiss the report. The reporter receives only the current report `public_id` and `status`, never admin notes or internal target IDs.
+
+The default report creation allowance is 20 validated submissions per user per 600 seconds, including idempotent duplicates. `REPORT_USER_LIMIT` and `REPORT_USER_WINDOW_SECS` override it; 429 includes `Retry-After`. Like the rating/comment windows, this limiter is process-local and must move to shared storage before multiple API replicas.
+
+Blocks are directed and idempotent; self-block is `400 validation_error` with `fields.public_id = "self_block"`, and an unknown or deleted target is 404 (suspended users remain valid block targets). Blocking has exactly one content effect: the blocker's authenticated comment reads exclude that author's comments. It does not alter anonymous SSR, global `comment_count`, other viewers, favorites, ratings, conversations, or any other interaction. Chat/block enforcement is deferred with the chat domain.
+
+The block list defaults to 20 and clamps `limit` to 1–50. Its keyset order is `(created_at, blocked_id) DESC`; send the opaque cursor unchanged. Unblocking the user referenced by an anchor does not invalidate the next page. Browser SSR deliberately reads the first comment page without credentials, then privately revalidates it after hydration; failed private reads preserve the confirmed public items and cursor.
+
+```sh
+API='http://127.0.0.1:8080/api/v1'
+AUTH="cookie: shabdar_session=$SESSION; shabdar_csrf=$CSRF"
+
+curl -s -X POST "$API/reports" \
+  -H "$AUTH" -H 'content-type: application/json' \
+  -H "x-csrf-token: $CSRF" \
+  -d '{"target_type":"comment","target_id":"'$COMMENT_ID'","reason":"abuse","details":"شرح اختیاری"}'
+curl -s -X PUT "$API/me/blocks/$USER_ID" \
+  -H "$AUTH" -H "x-csrf-token: $CSRF"
+curl -s "$API/me/blocks?limit=20" -H "cookie: shabdar_session=$SESSION"
+curl -s -X DELETE "$API/me/blocks/$USER_ID" \
+  -H "$AUTH" -H "x-csrf-token: $CSRF"
+```
 
 ## 10. Conversations and messages
 
@@ -259,7 +280,7 @@ Notification kinds in v1: `listing_approved`, `listing_rejected`, `new_message`,
 
 ## 12. Admin API
 
-All endpoints are under `/api/v1/admin`. Each requires `is_admin = true`. Each mutation writes an audit log row.
+All endpoints are under `/api/v1/admin`. Each requires `is_admin = true` and mutations require CSRF. Every actual moderation decision writes exactly one audit row in the same transaction; an idempotent no-op does not duplicate the audit.
 
 | Method | Path | Summary |
 |---|---|---|
@@ -272,7 +293,11 @@ All endpoints are under `/api/v1/admin`. Each requires `is_admin = true`. Each m
 | POST | `/admin/reports/{public_id}/actions` | Body: `{ action: "hide_comment" \| "restore_comment" \| "remove_listing" \| "suspend_user" \| "dismiss", reason? }`. Sets report status. |
 | GET | `/admin/users?query=…&cursor=…` | Search users by phone or display name. Phone is shown only in the admin view. |
 | POST | `/admin/users/{public_id}/suspend` | Body: `{ reason }`. Ends the user's sessions. |
-| POST | `/admin/users/{public_id}/unsuspend` | Restores a suspended user. |
+| POST | `/admin/users/{public_id}/unsuspend` | `suspended` → `active`; old sessions stay revoked and a fresh login is required. |
+
+Report queue filters are `status=open|actioned|dismissed|all` (default `open`), oldest first on `(created_at, id)` with forward opaque cursors. Each item contains the report, public reporter/handler summaries, and a **current** target summary or `target:null` when the target no longer exists; it is not a historical target snapshot. Open reports accept only compatible actions. `hide_comment`, `remove_listing`, and `suspend_user` require a trimmed 1–500-character reason; `restore_comment` and `dismiss` accept an optional reason with the same bound. Decisions lock and recheck report/target state, write the target transition and audit atomically, and return the confirmed admin report object. Repeating the same decided action is idempotent; an incompatible second action is `400 fields.status = "invalid_transition"`. Only `actioned + hide_comment` can subsequently accept `restore_comment`.
+
+Comment hide/restore preserves exact global `listings.comment_count`; listing removal and user suspension reuse the same locked transition helpers as direct admin commands. Suspension deletes every target session in that transaction and cannot target the acting admin. Unsuspension never resurrects those sessions. Admin user search accepts at most 100 characters, escapes LIKE wildcards literally, returns newest-first `(created_at, id)` pages, and includes `phone_e164` only in this admin response. Direct suspend requires a reason; direct unsuspend has no JSON body. Internal database IDs never appear in these responses.
 
 ## 13. Sitemap and SEO endpoints
 
