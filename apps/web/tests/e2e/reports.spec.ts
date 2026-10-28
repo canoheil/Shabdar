@@ -95,7 +95,7 @@ test('@reports anonymous login and all four targets submit once with safe confir
     }
     await route.continue()
   })
-  const submit = listingPanel.getByRole('button', { name: 'ثبت گزارش', exact: true })
+  const submit = listingPanel.locator('button[type="submit"]')
   await submit.click()
   await expect(submit).toBeDisabled()
   await submit.evaluate((element) => (element as HTMLButtonElement).click())
