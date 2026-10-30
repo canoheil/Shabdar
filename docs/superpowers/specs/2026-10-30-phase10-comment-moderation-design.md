@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-30
 
-**Status:** Written spec for user review. All four conversational design sections were approved; application code and implementation planning have not been approved.
+**Status:** Written spec approved by the user on 2026-10-30. The implementation plan is written separately and awaits user review and execution-method selection; application code has not been approved.
 
 **Base:** `main` merge `4dc1c4c` includes the completed Phase 9 trust-and-safety vertical slice.
 
