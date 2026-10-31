@@ -99,6 +99,10 @@ pub fn router(state: AppState) -> Router {
             get(admin_moderation_comments),
         )
         .route(
+            "/api/v1/admin/moderation/rescan",
+            post(admin_moderation_rescan),
+        )
+        .route(
             "/api/v1/admin/moderation/comments/{public_id}/actions",
             post(admin_moderation_comment_action),
         )
@@ -676,6 +680,33 @@ struct AdminModerationRulePatchBody {
     reason: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct AdminModerationRescanBody {
+    cursor: Option<String>,
+    rules_revision: Option<u64>,
+    limit: Option<serde_json::Value>,
+}
+
+fn admin_rescan_limit(raw: Option<serde_json::Value>) -> Result<Option<u64>, ApiError> {
+    let reason = match raw {
+        None | Some(serde_json::Value::Null) => return Ok(None),
+        Some(serde_json::Value::Number(number)) => {
+            if let Some(value) = number.as_u64() {
+                return Ok(Some(value));
+            }
+            if number.as_i64().is_some() {
+                "out_of_range"
+            } else {
+                "invalid"
+            }
+        }
+        Some(_) => "invalid",
+    };
+    let mut fields = BTreeMap::new();
+    fields.insert("limit".to_string(), reason.to_string());
+    Err(ApiError::Validation { fields })
+}
+
 /// GET /api/v1/admin/moderation/rules — private newest-first rule pages.
 async fn admin_moderation_rules(
     State(state): State<AppState>,
@@ -778,6 +809,28 @@ async fn admin_moderation_comment_action(
             &public_id,
             body.action.as_deref(),
             body.reason.as_deref(),
+        )
+        .await?,
+    ))
+}
+
+/// POST /api/v1/admin/moderation/rescan — one revision-checked bounded batch.
+async fn admin_moderation_rescan(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    ApiJson(body): ApiJson<AdminModerationRescanBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    let limit = admin_rescan_limit(body.limit)?;
+    Ok(Json(
+        crate::comment_moderation::rescan(
+            &state.pool,
+            user.user_id,
+            body.cursor.as_deref(),
+            body.rules_revision,
+            limit,
         )
         .await?,
     ))

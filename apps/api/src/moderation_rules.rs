@@ -95,13 +95,17 @@ fn validation(field: &str, reason: &str) -> ApiError {
     ApiError::Validation { fields }
 }
 
+pub async fn lock_settings_revision(
+    tx: &mut Transaction<'_, sqlx::MySql>,
+) -> Result<u64, ApiError> {
+    sqlx::query_scalar("SELECT revision FROM moderation_settings WHERE id = 1 FOR UPDATE")
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(|_| ApiError::Internal)
+}
+
 async fn lock_settings(tx: &mut Transaction<'_, sqlx::MySql>) -> Result<(), ApiError> {
-    let _revision: u64 =
-        sqlx::query_scalar("SELECT revision FROM moderation_settings WHERE id = 1 FOR UPDATE")
-            .fetch_one(&mut **tx)
-            .await
-            .map_err(|_| ApiError::Internal)?;
-    Ok(())
+    lock_settings_revision(tx).await.map(|_| ())
 }
 
 async fn increment_settings_revision(
@@ -348,6 +352,12 @@ pub async fn update(
     Ok(body)
 }
 
+fn matcher_rules(rows: &[MySqlRow]) -> Result<Vec<ModerationRule>, ApiError> {
+    rows.iter()
+        .map(|row| RuleRecord::from_row(row).map(|rule| rule.matcher_rule()))
+        .collect()
+}
+
 /// Load one consistent, deterministic active-rule snapshot for comment writes.
 pub async fn active_rules(pool: &MySqlPool) -> Result<Vec<ModerationRule>, ApiError> {
     let rows = sqlx::query(&format!(
@@ -356,7 +366,18 @@ pub async fn active_rules(pool: &MySqlPool) -> Result<Vec<ModerationRule>, ApiEr
     .fetch_all(pool)
     .await
     .map_err(|_| ApiError::Internal)?;
-    rows.iter()
-        .map(|row| RuleRecord::from_row(row).map(|rule| rule.matcher_rule()))
-        .collect()
+    matcher_rules(&rows)
+}
+
+/// Load active rules inside a rescan transaction after its settings lock.
+pub async fn active_rules_in_tx(
+    tx: &mut Transaction<'_, sqlx::MySql>,
+) -> Result<Vec<ModerationRule>, ApiError> {
+    let rows = sqlx::query(&format!(
+        "{RULE_SELECT} WHERE is_active = TRUE ORDER BY id ASC"
+    ))
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|_| ApiError::Internal)?;
+    matcher_rules(&rows)
 }

@@ -222,7 +222,7 @@ Required: all new state/concurrency tests plus every older report/comment/admin 
 
 Cover new/continuation validation, malformed cursors, 0/51/non-integer limits, admin/CSRF, 51 comments across two batches, exact counts/cursors, deleted or hidden anchors, retry without a second decrement, one batch audit per committed request, and zero-active-rule behavior. Change rules between batches and assert `rules_revision="changed"` with zero new writes/audits. Prove unchanged restored rules stay cleared, edited phrase/mode reopens a case, deactivation never restores, and concurrent rescan/delete/report/restore operations preserve counters.
 
-- [ ] **Step 2: Run canonical RED**
+- [x] **Step 2: Run canonical RED**
 
 Expected: `/admin/moderation/rescan` returns 404; previous creation/decision suites remain green. Record evidence.
 
