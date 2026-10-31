@@ -732,8 +732,8 @@ async fn comment_moderation_schema_seed_and_foreign_keys_enforce_invariants() {
     .expect("moderation comment ID");
     sqlx::query(
         "INSERT INTO comment_moderation_cases \
-         (public_id, comment_id, status, matched_rules, handled_by, flagged_at, updated_at) \
-         VALUES ('QQQQQQQQQQQQQQQQQQQQQQQQQQ', ?, 'pending', '[]', ?, NOW(3), NOW(3))",
+         (comment_id, status, matched_rules, handled_by, flagged_at, updated_at) \
+         VALUES (?, 'pending', '[]', ?, NOW(3), NOW(3))",
     )
     .bind(comment)
     .bind(handler)
@@ -746,11 +746,10 @@ async fn comment_moderation_schema_seed_and_foreign_keys_enforce_invariants() {
         .execute(&pool)
         .await
         .expect("handler deletion uses SET NULL");
-    let handled_by: Option<u64> = sqlx::query_scalar(
-        "SELECT handled_by FROM comment_moderation_cases WHERE public_id = \
-         'QQQQQQQQQQQQQQQQQQQQQQQQQQ'",
-    )
-    .fetch_one(&pool)
+    let handled_by: Option<u64> =
+        sqlx::query_scalar("SELECT handled_by FROM comment_moderation_cases WHERE comment_id = ?")
+            .bind(comment)
+            .fetch_one(&pool)
     .await
     .expect("nullable moderation handler");
     assert_eq!(handled_by, None);
@@ -766,11 +765,10 @@ async fn comment_moderation_schema_seed_and_foreign_keys_enforce_invariants() {
     .fetch_one(&pool)
     .await
     .expect("cascaded comment count");
-    let remaining_cases: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM comment_moderation_cases WHERE public_id = \
-         'QQQQQQQQQQQQQQQQQQQQQQQQQQ'",
-    )
-    .fetch_one(&pool)
+    let remaining_cases: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM comment_moderation_cases WHERE comment_id = ?")
+            .bind(comment)
+            .fetch_one(&pool)
     .await
     .expect("cascaded case count");
     assert_eq!((remaining_comments, remaining_cases), (0, 0));

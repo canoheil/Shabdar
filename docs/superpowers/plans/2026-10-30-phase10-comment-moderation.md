@@ -49,11 +49,11 @@
 
 Assert all three tables, rule columns/enums/unique dedupe key, case JSON/FKs/indexes, settings CHECK/revision, listing cascade, handler SET NULL, 143/28/115 seed counts, and clean migration reapplication. Assert `../THIRD_PARTY_NOTICES.md` contains the pinned commit, upstream URL, Thekawasaki copyright, and MIT grant. Add cases before comments/users and rules/settings to every drop/reset list. Change only the workflow push branch to `arena/4b608814-shabdar`; retain pull-request verification.
 
-- [ ] **Step 2: Run canonical RED**
+- [x] **Step 2: Run canonical RED**
 
 Push the focused test/workflow changes. Expected: fmt/Clippy succeed, then real MariaDB migration tests fail because the new tables/notice are absent; no DB test is skipped. Record run, job, head, and failure counts here.
 
-- [ ] **Step 3: Implement migration, deterministic seed, notices, and resets**
+- [x] **Step 3: Implement migration, deterministic seed, notices, and resets**
 
 Create exactly the spec schema without editing older migrations. Fetch the two pinned JSON arrays with `gh api`, use a one-off standard-library generator for the spec normalizers/mode policy, and commit the resulting static SQL plus complete MIT notice—not the downloaded JSON or generator. Use deterministic, unique 26-character Crockford-base32 public IDs in the migration. Web reset deletes cases before comments and only test-created rules whose raw phrase starts with `e2e`; preserve the seed.
 
