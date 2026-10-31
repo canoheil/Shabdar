@@ -93,9 +93,7 @@ impl ApiError {
             ApiError::NotFound => StatusCode::NOT_FOUND,
             ApiError::CsrfFailed | ApiError::Forbidden => StatusCode::FORBIDDEN,
             ApiError::Gone => StatusCode::GONE,
-            ApiError::Internal | ApiError::RetryableDatabase => {
-                StatusCode::INTERNAL_SERVER_ERROR
-            }
+            ApiError::Internal | ApiError::RetryableDatabase => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
