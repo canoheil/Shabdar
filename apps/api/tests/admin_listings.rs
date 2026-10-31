@@ -133,7 +133,7 @@ async fn send_authed(
 
 fn admin_test_config() -> shabdar_api::config::Config {
     let dir = std::env::temp_dir().join(format!("shabdar-admin-review-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(dir);
+    let _ = std::fs::remove_dir_all(&dir);
     let mut cfg = common::test_config();
     cfg.media_dir = dir.to_string_lossy().into_owned();
     cfg
