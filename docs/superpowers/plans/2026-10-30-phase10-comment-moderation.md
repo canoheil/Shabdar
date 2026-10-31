@@ -76,7 +76,7 @@ Required: empty-schema migrations plus comments, reports, blocks, ratings, favor
 - Produces: `NormalizedRule { phrase, normalized_phrase, dedupe_key, match_mode }`, cloneable `ModerationRule { public_id, phrase, normalized_phrase, revision, match_mode }`, and `RuleClearance { public_id, revision }`.
 - Produces: `normalize_rule(&str, MatchMode) -> Result<NormalizedRule,&'static str>` with errors `required|too_long|too_short`; `matching_rules(&str,&[ModerationRule]) -> Vec<ModerationRule>` computes both comment forms once and returns cloned matches in rule order.
 
-- [ ] **Step 1: Add compile-ready failing tests**
+- [x] **Step 1: Add compile-ready failing tests**
 
 Add the interface declarations with `todo!()` bodies only so behavioral tests compile. Define a test-only `matches(rule,body,mode)` helper that constructs one `ModerationRule` and delegates to `matching_rules`. Test empty/121-character/one-alphanumeric rules, Arabic `ي/ى/ك`, diacritics, every listed control range, ASCII case, repeated characters, phrase versus compact dedupe keys, and both match modes. Key assertions include:
 

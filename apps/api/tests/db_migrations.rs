@@ -7,6 +7,7 @@ mod common;
 use sqlx::Row;
 
 use shabdar_api::db::run_migrations;
+use shabdar_api::moderation::{normalize_rule, MatchMode};
 
 /// Both DB tests share one database; run them one at a time.
 static DB_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -771,6 +772,44 @@ async fn comment_moderation_schema_seed_and_foreign_keys_enforce_invariants() {
             .await
             .expect("cascaded case count");
     assert_eq!((remaining_comments, remaining_cases), (0, 0));
+}
+
+#[tokio::test]
+async fn every_seed_key_recomputes_with_the_rust_normalizers() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+
+    drop_owned_tables(&pool).await;
+    run_migrations(&pool).await.expect("migrations apply");
+    let rows = sqlx::query(
+        "SELECT phrase, normalized_phrase, dedupe_key, match_mode \
+         FROM moderation_rules ORDER BY id",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("all seeded rules");
+    assert_eq!(rows.len(), 143);
+
+    let mut phrase_count = 0;
+    let mut compact_count = 0;
+    for row in rows {
+        let phrase: String = row.try_get("phrase").expect("seed phrase");
+        let stored_matcher: String = row.try_get("normalized_phrase").expect("matcher key");
+        let stored_dedupe: String = row.try_get("dedupe_key").expect("dedupe key");
+        let stored_mode: String = row.try_get("match_mode").expect("match mode");
+        let mode = MatchMode::parse(&stored_mode).expect("valid seeded match mode");
+        let normalized = normalize_rule(&phrase, mode).expect("valid seeded rule");
+        assert_eq!(&normalized.phrase, &phrase);
+        assert_eq!(&normalized.normalized_phrase, &stored_matcher, "{phrase}");
+        assert_eq!(&normalized.dedupe_key, &stored_dedupe, "{phrase}");
+        match mode {
+            MatchMode::Phrase => phrase_count += 1,
+            MatchMode::Compact => compact_count += 1,
+        }
+    }
+    assert_eq!((phrase_count, compact_count), (28, 115));
 }
 
 #[test]
