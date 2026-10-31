@@ -1,6 +1,6 @@
 # Shabdar API (`apps/api`)
 
-Rust + Axum REST API for the Shabdar marketplace. Phase 1–10 scope: MariaDB
+Rust + Axum REST API for the Shabdar marketplace. Phase 1–11 scope: MariaDB
 via sqlx (runtime queries only — no compile-time macros), `GET /api/v1/health`,
 dev-mode OTP login (`POST /api/v1/auth/otp/request` +
 `POST /api/v1/auth/otp/verify`) issuing a 30-day session cookie + a CSRF
@@ -8,8 +8,10 @@ cookie, the session surface (`GET`/`PATCH /api/v1/me`,
 `POST /api/v1/auth/logout`), a `404 not_found` fallback, and the listings
 domain: reference reads (categories, provinces/cities), seller listing
 write (draft → pending → sold/archived/deleted), public feed/detail/sitemap,
-local-disk image uploads, the admin approve/reject/remove queue with
-audit rows, atomic personal favorites, one-rating-per-user listing ratings,
+local-disk image uploads with bounded full static JPEG/PNG/WebP decoding,
+authorized/cached media access, exact human image-review attribution and a
+legacy re-review queue, the admin approve/reject/remove queue with audit rows,
+atomic personal favorites, one-rating-per-user listing ratings,
 paginated comments with exact listing counters, deterministic Persian/Finglish
 literal review for new and existing comments, idempotent reports and directed
 blocks, blocker-only comment filtering, and the admin report/user/filter
@@ -46,8 +48,13 @@ files**: no `.env` is committed, and credentials are exported in the shell.
 | `COOKIE_NAME` | no | `shabdar_session` | Session cookie name |
 | `COOKIE_SECURE` | no | `false` | Set `true` behind HTTPS. `false` is correct for `http://localhost` only — never expose real sessions over plain HTTP |
 | `MEDIA_DIR` | no | `./data/media` | Local disk root for listing images (created lazily on first upload; served at `/media/…`); served files never use client paths |
-| `MAX_IMAGE_BYTES` | no | `5242880` | Max bytes per image (5 MB) |
+| `MAX_IMAGE_BYTES` | no | `5242880` | Max encoded bytes per image (5 MiB) |
 | `MAX_IMAGES_PER_LISTING` | no | `8` | Max images per listing |
+
+The local decoder also enforces 8000×8000 dimensions, 16 million pixels, and
+an 80 MiB allocation ceiling. Only static JPEG/PNG/WebP are enabled; malformed,
+truncated, animated, unsupported, and excessive files are rejected. No native
+image library or external content service is required.
 
 Generate a pepper once and keep it safe (any long random string works):
 
@@ -77,15 +84,22 @@ FLUSH PRIVILEGES;
 into `DATABASE_URL` / `TEST_DATABASE_URL` — never into any file in the
 repository.
 
-Migrations (`migrations/0001_users_otp_challenges.sql` … `0010_comment_moderation.sql`:
+Migrations (`migrations/0001_users_otp_challenges.sql` … `0011_image_moderation.sql`:
 users, OTP challenges, sessions, provinces/cities/categories + Rasht and
 7-category seeds, listings, listing_images, admin_audit_logs, favorites,
 listing_ratings, listing_comments, reports, blocks, moderation_rules,
-comment_moderation_cases, moderation_settings) are applied
+comment_moderation_cases, moderation_settings, and exact image-review
+attribution) are applied
 automatically at startup by sqlx's
 runtime `Migrator` (no compile-time `migrate!` macro). The migrator reads the
 `migrations/` directory at runtime, so **start the server from the crate
 directory** (`apps/api`) — `cargo run` and `cargo test` already do.
+
+Migration 0011 does not fabricate review for existing rows. After deployment,
+active listings with images stay non-public until an admin drains
+`/api/v1/admin/listings/image-review-queue`; unreadable/invalid entries require
+rejection/removal or storage repair. Back up `MEDIA_DIR` and the database
+together. Code completion alone does not clear this production rollout step.
 
 ## Commands
 
@@ -111,7 +125,7 @@ Keep the phone awake during long runs: `termux-wake-lock`.
   edit: seconds. Measure and record the first cold `cargo build` / `cargo test`
   on your device when you run them.
 
-## Endpoints (Phase 1–10)
+## Endpoints (Phase 1–11)
 
 | Method | Path | Summary |
 |---|---|---|
@@ -146,12 +160,15 @@ Keep the phone awake during long runs: `termux-wake-lock`.
 | DELETE | `/api/v1/me/blocks/{public_id}` | Session + CSRF; idempotent unblock → `{blocked:false}` |
 | GET | `/api/v1/me/blocks?cursor=…&limit=…` | Session; flat blocked-user items, newest-first keyset pages |
 | GET | `/api/v1/sitemap/listings` | Active `{url,updated_at}` + page envelope |
-| POST | `/api/v1/listings/{public_id}/images` | Owner, `draft`/`rejected` only. Multipart `file` field; JPEG/PNG/WebP by signature, size + count limits → `{id,storage_key,url,sort_order}` |
-| DELETE | `…/images/{image_id}` | Owner → removes row + file |
-| PATCH | `…/images/order` | Owner, body `{image_ids:[…]}` (exact set) |
-| GET | `/api/v1/admin/listings/queue` | Admin, `pending` oldest first + page envelope |
-| GET | `/api/v1/admin/listings/{public_id}` | Admin, full listing + seller info (phone included) + real public-ID report history |
-| POST | `…/approve` | Admin, `pending` → `active` (+ `published_at`), writes `listing.approve` audit |
+| POST | `/api/v1/listings/{public_id}/images` | Owner + CSRF, `draft`/`rejected` only. Multipart `file`; bounded full static JPEG/PNG/WebP decode → `{id,storage_key,url,sort_order,width,height}` |
+| DELETE | `…/images/{image_id}` | Owner + CSRF → removes row + file and clears image review |
+| PATCH | `…/images/order` | Owner + CSRF, body `{image_ids:[…]}` (exact set); preserves review |
+| GET | `/media/{storage_key}` | Reviewed active public media, otherwise owner/admin only; explicit public/private cache and nosniff |
+| GET | `/api/v1/admin/listings/queue` | Admin, private/no-store `pending` oldest first + cover/count + page envelope |
+| GET | `/api/v1/admin/listings/image-review-queue` | Admin, private/no-store active legacy unreviewed image backlog |
+| GET | `/api/v1/admin/listings/{public_id}` | Admin, private/no-store full listing/seller/report data + ordered images + review attribution |
+| POST | `…/approve` | Admin + CSRF, body `{image_ids:[…]}` exact set; atomic review, `pending` → `active`, `listing.approve` audit |
+| POST | `…/images/review` | Admin + CSRF, same exact body for active legacy rows; preserves publication, `listing.images.approve` audit |
 | POST | `…/reject` | Admin, body `{reason}` required → `rejected` + `listing.reject` audit |
 | POST | `…/remove` | Admin, body `{reason}` required, `active` → `removed` (410 publicly) + `listing.remove` audit |
 | GET | `/api/v1/admin/reports?status=open&cursor=…` | Admin; filtered oldest-first reports with current public target/reporter/handler summaries |

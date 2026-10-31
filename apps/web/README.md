@@ -8,16 +8,22 @@ this dev server (:3000) — its Nitro `/api/**` catch-all proxies to the Axum
 API (:8080), forwarding cookies and `X-Forwarded-For` (ARCHITECTURE.md §3).
 On mutations the proxy also copies the `shabdar_csrf` cookie value into the
 `X-CSRF-Token` header, so browser code never handles the CSRF token.
-Public listing photos (`/media/**`) proxy to Axum the same way — the browser
-never talks to :8080 for images either.
+Listing photos (`/media/**`) proxy to Axum the same way — the browser never
+talks to :8080 for images. Axum authorizes reviewed-public versus owner/admin
+access and sets cache/nosniff headers; the proxy preserves them and never sends
+media to a third party.
 
 Pages: `/` (active feed + search/category/city/sort + auth block), `/login`
 (OTP flow), `/listings/[slug]` (SSR detail with canonical + JSON-LD, public
 rating summaries/comments, and hydrated rating/comment controls), `/post` (create/edit/submit
 with photo uploads; login-gated), `/me` (seller dashboard: four counts and the
 seller's own listings, login-gated, responsive one-to-four column stat grid),
-`/me/favorites` (the current user's saved active listings), and `/admin/queue`
-(pending queue + approve/reject-with-reason; the API enforces `is_admin`).
+`/me/favorites` (the current user's saved active listings), `/admin/queue`
+(pending and legacy image-review queues with reasoned rejection), and
+`/admin/listings/[public_id]` (every image, dimensions, attribution, exact-set
+approval/restoration, and reasoned actions; the API enforces `is_admin`).
+Broken/unloaded images cannot be checked; success follows confirmed responses
+only. Admin code stays route-split out of public Home/Detail chunks.
 
 ### Feed state (Phase 4)
 

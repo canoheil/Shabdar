@@ -71,7 +71,7 @@ Error codes used by the auth and session endpoints:
 | 404 | `not_found` | Unknown path (fallback), unknown slug, or non-`active` listing read publicly (no existence signal) |
 | 410 | `gone` | `removed` or soft-deleted listing read publicly; decided 2026-10-11 (Phase 3) |
 | 400 | `invalid_request` | The request body could not be parsed (Phase 5); `fields.body` says why |
-| 413 | `payload_too_large` | The request body is over the 2 MiB limit (Phase 5) |
+| 413 | `payload_too_large` | JSON exceeds 2 MiB, or multipart upload exceeds its route-specific image cap plus 64 KiB overhead |
 | 500 | `internal_error` | Anything else; never leaks SQL details |
 
 ## 3. Public discovery
@@ -88,6 +88,8 @@ Error codes used by the auth and session endpoints:
 Listing card shape: `{ public_id, slug, title, price_toman, price_type, city, province, category, cover_image, rating_average, rating_count, published_at }`.
 
 Public detail keeps the existing visibility rules. For a valid logged-in viewer it also contains `favorited: true|false` and `my_stars: 1|2|3|4|5|null`; anonymous, invalid, expired, or non-active sessions receive the normal public payload with **both keys omitted**. A response containing viewer state is `Cache-Control: private, no-store`; it must not be placed in public SSR/cached HTML. Comment pages contain no `can_delete`, block, or report state. A valid viewer's comment page additionally excludes authors that viewer blocked and is `Cache-Control: private, no-store`; anonymous comment reads remain unfiltered and publicly cacheable.
+
+An `active` listing with one or more images is public only after an admin has reviewed the exact current image set. Feed, detail, sitemap, favorites, and public comment/rating/favorite/report interaction checks all apply this gate; unreviewed active image listings are suppressed rather than treated as human-reviewed. An active listing with zero image rows retains its accepted public behavior. Owner dashboards and admin moderation views are not public feeds and keep their own authorization rules.
 
 ### Search and sorting (Phase 4)
 
@@ -131,11 +133,15 @@ Rejected listings include `rejection_reason` for the owner only.
 
 | Method | Path | Auth | Summary |
 |---|---|---|---|
-| POST | `/listings/{public_id}/images` | Owner | Multipart upload. Checks type (JPEG, PNG, WebP), size, count, and decodes the image. Returns the image record. |
-| DELETE | `/listings/{public_id}/images/{image_id}` | Owner | Removes an image from a `draft` or `rejected` listing. |
-| PATCH | `/listings/{public_id}/images/order` | Owner | Body: `{ image_ids: [...] }`. Sets the display order. |
+| POST | `/listings/{public_id}/images` | Owner + CSRF | Multipart `file`. Fully decodes one static JPEG, PNG, or WebP and returns `{id,url,storage_key,sort_order,width,height}`. |
+| DELETE | `/listings/{public_id}/images/{image_id}` | Owner + CSRF | Removes an image from a `draft` or `rejected` listing and clears any review snapshot. |
+| PATCH | `/listings/{public_id}/images/order` | Owner + CSRF | Body: `{ image_ids: [...] }`, exactly the current set. Reorders without invalidating review. |
 
-Uploads never accept client file paths. The storage adapter writes to the local data directory; the API returns only the image record and a URL.
+Uploads never accept client file paths. The server generates ULID storage keys below the local media directory. Limits are 8 images per listing, 5 MiB encoded bytes per image, 8000×8000 dimensions, 16 million decoded pixels, and an 80 MiB decoder allocation ceiling. The multipart route cap is the configured image-byte cap plus 64 KiB; the global JSON limit remains unchanged. Malformed, truncated, unsupported, animated, or resource-exceeding input is rejected before the image row can become durable: `fields.images` is `invalid_image`, `animated`, `too_large`, or `too_many` as applicable. Decoding establishes file validity, **not content suitability**.
+
+Image add/delete and submit/resubmit clear `image_reviewed_by`, `image_reviewed_at`, and `image_reviewed_ids`; reorder alone preserves them. Image mutations lock the listing before image rows and recheck editable status/count inside their transaction.
+
+`GET /media/{storage_key}` resolves the parent listing before reading disk. Reviewed active images use `Cache-Control: public, no-cache`; owner/admin reads of non-public images use `private, no-store`. Anonymous/other-user access to non-public media, unknown keys, and missing files all return the same 404 without an existence signal. Every media error is `private, no-store` and all media responses include `X-Content-Type-Options: nosniff`. The Nuxt `/media/**` proxy preserves status/cache headers and same-origin cookies; PNG transport may be gzipped without changing decoded bytes.
 
 ## 6. Favorites (Phase 6 — built)
 
@@ -292,9 +298,11 @@ All endpoints are under `/api/v1/admin`. Each requires `is_admin = true` and mut
 
 | Method | Path | Summary |
 |---|---|---|
-| GET | `/admin/listings/queue?cursor=…` | Pending listings, oldest first. |
-| GET | `/admin/listings/{public_id}` | Full listing with seller info and report history. |
-| POST | `/admin/listings/{public_id}/approve` | `pending` → `active`. Sets `published_at`. Sends `listing_approved`. |
+| GET | `/admin/listings/queue?cursor=…` | Pending listings, oldest first, with cover/image count. Private/no-store. |
+| GET | `/admin/listings/image-review-queue?cursor=…` | Oldest-first active legacy image listings with NULL review; excludes zero-image and reviewed rows. Private/no-store. |
+| GET | `/admin/listings/{public_id}` | Full listing/seller/report data, all ordered images, and exact image-review attribution. Private/no-store. |
+| POST | `/admin/listings/{public_id}/approve` | Body `{image_ids:[…]}`; exact-set review, `pending` → `active`, one `listing.approve` audit. |
+| POST | `/admin/listings/{public_id}/images/review` | Same exact body for an active unreviewed legacy listing; restores visibility without rewriting publication and writes one `listing.images.approve` audit. |
 | POST | `/admin/listings/{public_id}/reject` | Body: `{ reason }` (required). `pending` → `rejected`. Sends `listing_rejected`. |
 | POST | `/admin/listings/{public_id}/remove` | Body: `{ reason }`. `active` → `removed`. Returns 410 publicly afterward. |
 | GET | `/admin/reports?status=open&cursor=…` | Report queue. |
@@ -308,6 +316,14 @@ All endpoints are under `/api/v1/admin`. Each requires `is_admin = true` and mut
 | GET | `/admin/moderation/comments?status=pending&cursor=…` | Oldest-first automatic-review cases. |
 | POST | `/admin/moderation/comments/{public_id}/actions` | Confirm hidden or restore a filtered comment. |
 | POST | `/admin/moderation/rescan` | Run one revision-checked batch over existing visible comments. |
+
+### Exact image review (Phase 11)
+
+Admin detail adds `images`, ordered by `(sort_order,id)`, each with `{id,url,alt_text,sort_order,width,height}`. Nullable `image_review` contains `{image_ids,reviewed_at,reviewer:{public_id,display_name}}`; it is null when no current human review exists. Queue items add `cover_image` and `image_count` and use the standard 20-default/50-maximum opaque cursor envelope. The legacy queue orders by `COALESCE(published_at,created_at),id`.
+
+Both review mutations require a JSON array containing **every and only** the current internal image IDs returned by admin detail. Missing or null `image_ids` returns `400 fields.image_ids="required"`; empty, duplicate, incomplete, or foreign sets return `"mismatch"`. The service validates the set before reading files, reads each stored file with the encoded-byte cap, fully decodes sequentially, then locks and rechecks listing state and the exact `(id,storage_key)` sequence. Any change/failure rolls back dimensions, review fields, status, and audit together. Stored-file failures use `fields.images="unreadable"|"invalid_image"|"animated"|"too_large"`.
+
+Pending approval writes dimensions, exact review attribution, `active`/`published_at`/listing decision timestamps, and one metadata-bearing `listing.approve` audit atomically. Legacy review writes only dimensions and image-review attribution, preserves status, original `reviewed_by`/`reviewed_at`/`published_at`/`updated_at`, returns refreshed admin detail, and writes one `listing.images.approve` audit. Repeating either decision after its state has changed returns `fields.status="invalid_transition"` and adds no audit. Managers may instead reject a pending listing or remove an active listing with the existing reasoned actions.
 
 Report queue filters are `status=open|actioned|dismissed|all` (default `open`), oldest first on `(created_at, id)` with forward opaque cursors. Each item contains the report, public reporter/handler summaries, and a **current** target summary or `target:null` when the target no longer exists; it is not a historical target snapshot. Open reports accept only compatible actions. `hide_comment`, `remove_listing`, and `suspend_user` require a trimmed 1–500-character reason; `restore_comment` and `dismiss` accept an optional reason with the same bound. Decisions lock and recheck report/target state, write the target transition and audit atomically, and return the confirmed admin report object. Repeating the same decided action is idempotent; an incompatible second action is `400 fields.status = "invalid_transition"`. Only `actioned + hide_comment` can subsequently accept `restore_comment`.
 
@@ -344,4 +360,4 @@ A rule change returns `fields.rules_revision="changed"` with no batch write/audi
   resend cooldown, attempt limit and the Phase 5 abuse limits are decided.
 - Whether editing an `active` listing is allowed (v1 says no).
 - Keyword search behavior and sort tie-breakers.
-- Phase 3 resolutions (**decided 2026-10-11**): `negotiable` leaves `price_toman` optional (`fixed` requires it, `free` forbids it); public slugs are Persian with numeric-suffix dedup; description bound is 5000 chars; public feed sorts `newest` only (price/popular/search are the discovery follow-up); `/me/listings` ships without a cursor; image validation is magic bytes + size + count (no decode until the image-moderation decision); unknown `category`/`city`/`province` filter slugs → 400 (never an empty list).
+- Phase 3 resolutions (**decided 2026-10-11**): `negotiable` leaves `price_toman` optional (`fixed` requires it, `free` forbids it); public slugs are Persian with numeric-suffix dedup; description bound is 5000 chars; public feed sorts `newest` only (price/popular/search are the discovery follow-up); `/me/listings` ships without a cursor; Phase 11 supersedes the earlier signature-only upload decision with bounded full local decode and exact human image review; unknown `category`/`city`/`province` filter slugs → 400 (never an empty list).

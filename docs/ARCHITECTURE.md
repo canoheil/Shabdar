@@ -93,6 +93,8 @@ Keep folders shallow. Add new layers only when a second module needs them. No ge
 
 Dependencies to start with (final list checked on Termux): `axum`, `tokio`, `sqlx` (MySQL/MariaDB driver, runtime queries), `serde`, `serde_json`, `tracing`, `tracing-subscriber`, a config reader, a password-free hashing crate for OTP codes (chosen after the security review in section 7).
 
+Phase 11 adds exactly `image = 0.25.9` with default features disabled and only `jpeg`, `png`, and `webp`. This avoids native libraries, external moderation services, unrelated format decoders, and the direct crate's later Rust floor. The resolved new dependency entries declare no `rust_version` above 1.85 in the crates.io index; CI still tests stable Rust, so this declaration audit is not represented as a separate 1.85 compile certificate.
+
 ## 6. Moderation and content rules (v1)
 
 - **Listing moderation:** every listing is reviewed by an admin before it becomes public. Automated checks never approve or reject. In v1 there is no automated filter.
@@ -100,7 +102,7 @@ Dependencies to start with (final list checked on Termux): `axum`, `tokio`, `sql
 - **Reports:** one per user per target. Admin actions: hide comment, restore comment, remove listing, suspend user, or dismiss. Each action is audited.
 - **Automatic review privacy and counters:** pending comments never enter public/viewer feeds or increment visible counts. Public 202 responses omit bodies/rules/internal IDs. Restore stores rule/revision clearances; report restore cannot bypass pending/confirmed cases. All comment transitions use listing → comment → case locking; rescan additionally locks the settings revision and audits each committed batch.
 - **Comment moderation (Phase 10):** MariaDB-backed literal phrase/compact rules use deterministic Persian/Arabic mapping, listed diacritic/zero-width/bidi/BOM removal, ASCII lowercasing, repeated-character collapsing, and separator-evasion matching. `moderation.rs` is pure matching; `moderation_rules.rs` and `comment_moderation.rs` own snapshots, revisions, clearances, transactions, and admin/rescan workflows. No arbitrary regex, fuzzy/semantic/transliteration service, or new dependency is used.
-- **Image moderation:** admin review only in v1. Automated image checks are a later decision (they need an external service or heavy local models).
+- **Image moderation (Phase 11):** bounded local full decode proves file validity only. An admin must explicitly confirm every current image before publication; no automated safety score or content-suitability claim exists. Approval persists exact IDs, reviewer, timestamp, dimensions, status where applicable, and one audit atomically. Add/delete/resubmission invalidate the snapshot; reorder preserves it. Legacy active image rows stay unreviewed and non-public until managers clear the dedicated backlog. Thumbnails, resizing, metadata stripping, and modern-format derivatives remain separate measurable work; PNG gzip transport is not an image-processing pipeline.
 
 ## 7. Security and privacy
 
@@ -108,8 +110,9 @@ Dependencies to start with (final list checked on Termux): `axum`, `tokio`, `sql
 - **Session:** opaque cookie (`HttpOnly`, `Secure` in production, `SameSite=Lax`). Session records in MariaDB with expiry and revocation (suspension ends all sessions). Final design is a required decision before implementation.
 - **CSRF:** a token is required on every state-changing request from the browser.
 - **Authorization:** checked in the API for every request. Admin routes check `is_admin` and write audit logs.
-- **Uploads:** check type by file signature, decode the image, limit size and count, random server file names, no path from the client.
-- **Privacy:** phone numbers are never public. Exact coordinates are not stored in v1. Seller profile shows only display name and join date.
+- **Uploads:** accept only static JPEG/PNG/WebP; check signature and fully decode with 5 MiB encoded, 8000×8000, 16-million-pixel, and 80 MiB allocation bounds. Reject malformed, truncated, animated, unsupported, or excessive files. Use random server ULID paths, never client paths. Decode runs on owned bytes in blocking workers; review-time stored-file reads are byte-capped and sequential.
+- **Media authorization and caching:** resolve the image → listing relationship before disk access. Reviewed active media is `public, no-cache`; non-public media is owner/admin only and `private, no-store`. Unknown, unauthorized, and missing media share 404; every media error is private/no-store and every response uses nosniff. Removal/unreview immediately closes public media access without requiring file deletion.
+- **Privacy:** phone numbers are never public. Exact coordinates are not stored in v1. Seller profile shows only display name and join date. Admin listing queue/detail responses are private/no-store; reviewer attribution exposes only a safe public user summary.
 - **Rate limits:** OTP, comments, messages, reports, and ratings each have a per-user limit.
 - **Backups:** database dump and the media directory are backed up together.
 
@@ -129,7 +132,7 @@ Dependencies to start with (final list checked on Termux): `axum`, `tokio`, `sql
 ### Rust/API
 - Unit tests: OTP expiry and attempts, listing state transitions, rating rules (no self-rating, one per user), popular score formula, report uniqueness, slug generation.
 - Integration tests against MariaDB: migrations, auth boundaries, listing lifecycle, admin audits, report-alone no-hide behavior, blocker-only filtering, deterministic 200/202 comment creation, queue/report interoperability, clearances, rescan revisions/retries, and concurrent exact counters.
-- Storage tests with a temporary directory: traversal rejected, invalid image rejected.
+- Storage tests with temporary directories: traversal rejected; real static/corrupt/truncated/animated/oversized JPEG/PNG/WebP fixtures; owner/admin/anonymous media authorization; stored-file review failures and dimension backfill; exact-set review invalidation and listing → image lock ordering. Real-stack Chromium covers full admin review, broken images, failure preservation, backlog restoration, seller feedback, and responsive accessibility.
 - Contract tests for the documented error shape and status codes.
 
 ### Nuxt/UI
@@ -155,7 +158,7 @@ Dependencies to start with (final list checked on Termux): `axum`, `tokio`, `sql
 
 ### Must do before public launch
 - **Comment-moderation rollout.** Phase 10 implements deterministic filtering. Before claiming the existing corpus has passed this launch blocker, run one complete production rescan and review its initial pending backlog; later rule changes require another full rescan. Also recorded in STATUS.md.
-- Image moderation decision.
+- **Image-moderation rollout:** apply migration 0011 normally. Existing active listings with images intentionally become non-public until explicit re-review. Managers must drain `/admin/listings/image-review-queue`; invalid/unreadable entries remain suppressed and need rejection/removal or storage repair. A green test run does not prove this production backlog is empty.
 - Privacy policy and terms of use.
 - Backup and restore test for the database and media files.
 
