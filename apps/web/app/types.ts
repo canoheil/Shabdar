@@ -137,6 +137,20 @@ export interface ApiComment {
   created_at: string
 }
 
+export interface ApiPendingComment {
+  public_id: string
+  status: 'pending_review'
+  created_at: string
+}
+
+export type ApiCommentCreateResult = ApiComment | ApiPendingComment
+
+export function isApiPendingComment(
+  result: ApiCommentCreateResult,
+): result is ApiPendingComment {
+  return 'status' in result && result.status === 'pending_review'
+}
+
 export interface ApiListingOut {
   public_id: string
   slug: string

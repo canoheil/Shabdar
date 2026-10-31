@@ -169,7 +169,13 @@
 
 <script setup lang="ts">
 import type { AuthStatus } from '~/composables/useAuth'
-import type { ApiComment, ApiPage, ApiUser } from '~/types'
+import {
+  isApiPendingComment,
+  type ApiComment,
+  type ApiCommentCreateResult,
+  type ApiPage,
+  type ApiUser,
+} from '~/types'
 
 interface AlertControl {
   focus: () => void
@@ -307,10 +313,17 @@ async function create(): Promise<void> {
   createPending.value = true
   notice.value = 'در حال ثبت دیدگاه…'
   try {
-    const created = await $fetch<ApiComment>(commentsUrl.value, {
+    const created = await $fetch<ApiCommentCreateResult>(commentsUrl.value, {
       method: 'POST',
       body: { body: draft.value },
     })
+    if (isApiPendingComment(created)) {
+      // A pending submission is confirmed, but is not a public comment.
+      draft.value = ''
+      createError.value = ''
+      notice.value = 'دیدگاه شما ثبت شد و پس از بررسی نمایش داده می‌شود.'
+      return
+    }
     // Prepend the server's trimmed, public representation only after success.
     mutationVersion.value += 1
     comments.value = [
