@@ -196,15 +196,15 @@ Assert comment report targets expose admin-only `moderation_status`; report rest
 
 Expected: new moderation routes are 404, `moderation_status` is absent, and the new report-guard assertions fail; older suites execute. Record evidence.
 
-- [ ] **Step 4: Implement shared transitions and queue/actions**
+- [x] **Step 4: Implement shared transitions and queue/actions**
 
 Move the old report visibility helper into `comment_moderation.rs`. `Hide` requires visible and decrements once; `RestoreReport` rejects active filter cases; both return an empty clearance vector. `RestoreFilter` requires pending/confirmed, locks the case after listing/comment, and returns matched clearances. Case services update status/handler/clearances and audit atomically. Batch queue lookups avoid N+1 and render snapshots explicitly.
 
-- [ ] **Step 5: Run GREEN and complete API suite**
+- [x] **Step 5: Run GREEN and complete API suite**
 
 Required: all new state/concurrency tests plus every older report/comment/admin suite. Verify MariaDB lock ordering and unsigned `comment_count` decoding explicitly.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 `feat(api): add filtered comment review workflows`
 
