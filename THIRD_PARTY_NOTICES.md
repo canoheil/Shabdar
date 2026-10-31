@@ -1,5 +1,31 @@
 # Third-party notices
 
+## Phase 11 image-decoder Cargo dependencies
+
+The Phase 11 lockfile adds 18 resolved entries from 17 unique packages
+(`miniz_oxide` occurs at two versions). Exact-version package manifests were
+checked; their declared license choices are permissive and none is copyleft:
+
+| Package(s) | Declared license |
+|---|---|
+| `adler2` | `0BSD OR MIT OR Apache-2.0` |
+| `bytemuck` | `Zlib OR Apache-2.0 OR MIT` |
+| `byteorder-lite` | `Unlicense OR MIT` |
+| `crc32fast`, `fdeflate`, `flate2`, `image`, `image-webp`, `png` | `MIT OR Apache-2.0` |
+| `miniz_oxide` | `MIT OR Zlib OR Apache-2.0` |
+| `moxcms`, `pxfm` | `BSD-3-Clause OR Apache-2.0` |
+| `quick-error` | `MIT/Apache-2.0` (upstream expression) |
+| `simd-adler32` | `MIT` |
+| `zlib-rs` | `Zlib` |
+| `zune-core`, `zune-jpeg` | `MIT OR Apache-2.0 OR Zlib` |
+
+These crates remain Cargo-resolved dependencies; this change does not vendor
+their source or copy new upstream assets into the repository. Release packaging
+that distributes compiled binaries must retain the applicable license texts,
+copyright notices, and any upstream `NOTICE` files for the complete resolved
+dependency tree. This source-tree audit is not a substitute for generating the
+release artifact's complete notice bundle.
+
 ## Persian bad-words seed data
 
 The static moderation-rule seed in `apps/api/migrations/0010_comment_moderation.sql`

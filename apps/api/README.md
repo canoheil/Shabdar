@@ -54,7 +54,9 @@ files**: no `.env` is committed, and credentials are exported in the shell.
 The local decoder also enforces 8000×8000 dimensions, 16 million pixels, and
 an 80 MiB allocation ceiling. Only static JPEG/PNG/WebP are enabled; malformed,
 truncated, animated, unsupported, and excessive files are rejected. No native
-image library or external content service is required.
+image library or external content service is required. Resolved dependency
+MSRV/license findings and compiled-artifact notice obligations are recorded in
+`../../docs/ARCHITECTURE.md` and `../../THIRD_PARTY_NOTICES.md`.
 
 Generate a pepper once and keep it safe (any long random string works):
 

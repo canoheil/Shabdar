@@ -120,6 +120,44 @@
 5. Review the complete diff cumulatively for privacy, authorization, transaction/audit atomicity, lock ordering, fail-closed behavior, fixture integrity, RTL/accessibility, and performance. Native author self-review is explicitly weaker than independent review.
 6. Push only `arena/79a6111c-shabdar`. Open/update a PR if useful, but do not merge or close it without fresh explicit user authorization.
 
+## Recorded implementation gates
+
+| Task | Canonical RED | Canonical GREEN |
+|---|---:|---:|
+| 1 — review schema + bounded decoder base | `41212032144` | `41212299441` at `16dadc9` |
+| 2 — media authorization + public gates | `41214333927` | `41214569711` at `43fab86` |
+| 3 — exact review + legacy backlog | `41216227602` | API gate `41217146342` at `15c5899`; whole-stack gate completed in Task 4 |
+| 4 — seller/admin web | `41217882674` at `cb28c19` | `41219810465` at `778d7d0` |
+| 5 — cumulative review hardening | Review hardening; no intentional behavioral RED | `41221481425` at `63c43b0` |
+
+The post-review candidate run **41221481425**, job **124596772150**, passed the
+complete enforcing workflow. Its head is
+**`63c43b060887989025ef04fb4fb7ca8597e1657b`**. It executed **100/100
+Playwright** tests and the full API suite. The compiled API suite contains
+**270 tests** (64 unit + 206 integration; no ignored tests). Earlier candidate
+runs that stopped at compile or rustfmt are not behavioral evidence.
+
+Candidate production evidence: Home **93,805 gzip bytes / 3 scripts**, Detail
+**98,306 / 3**, unchanged **114,627-byte** per-route ceilings, and **80,832
+bytes** of self-hosted fonts. Three-run mobile Lighthouse medians were Home
+FCP **673.109ms**, LCP **2404.217ms**, CLS **0.00661875**, TBT **68.5ms**,
+Accessibility **100**; Detail FCP **672.471ms**, LCP **2402.942ms**, CLS
+**0.00530436**, TBT **75.5ms**, Accessibility **100**. Raw reports belong to
+that run; these are medians, not claims about every historical iteration.
+
+Cumulative author self-review also unified listing → image mutation lock
+ordering and added explicit private/no-store admin GET assertions. No separate
+seller-profile route exists to gate. No external runtime image service,
+anonymous viewer-state leak, generated artifact, admin code in public chunks,
+or budget relaxation was introduced. Exact-version license expressions for the
+18 new resolved entries (17 unique packages) are permissive/no-copyleft and are
+recorded with compiled-artifact notice obligations in `THIRD_PARTY_NOTICES.md`.
+This self-review is weaker than independent review.
+
+A separate final documentation-head workflow is a required delivery gate and
+its run is reported with the PR; the candidate above is not relabeled as that
+later head.
+
 ## Canonical verification commands
 
 The workflow remains authoritative; equivalent commands are:

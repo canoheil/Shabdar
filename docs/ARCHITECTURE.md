@@ -93,7 +93,7 @@ Keep folders shallow. Add new layers only when a second module needs them. No ge
 
 Dependencies to start with (final list checked on Termux): `axum`, `tokio`, `sqlx` (MySQL/MariaDB driver, runtime queries), `serde`, `serde_json`, `tracing`, `tracing-subscriber`, a config reader, a password-free hashing crate for OTP codes (chosen after the security review in section 7).
 
-Phase 11 adds exactly `image = 0.25.9` with default features disabled and only `jpeg`, `png`, and `webp`. This avoids native libraries, external moderation services, unrelated format decoders, and the direct crate's later Rust floor. The resolved new dependency entries declare no `rust_version` above 1.85 in the crates.io index; CI still tests stable Rust, so this declaration audit is not represented as a separate 1.85 compile certificate.
+Phase 11 adds exactly `image = "=0.25.9"` with default features disabled and only `jpeg`, `png`, and `webp`. This avoids native libraries, external moderation services, unrelated format decoders, and the direct crate's later Rust floor. The 18 resolved new entries (17 unique packages) declare no `rust_version` above 1.85 in the crates.io index; CI still tests stable Rust, so this declaration audit is not represented as a separate 1.85 compile certificate. Exact-version license expressions are recorded in `THIRD_PARTY_NOTICES.md`: all are permissive, none is copyleft, and no crate source is vendored. Compiled release artifacts still need a complete generated notice bundle, including applicable copyright and upstream `NOTICE` files.
 
 ## 6. Moderation and content rules (v1)
 
