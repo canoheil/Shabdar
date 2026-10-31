@@ -83,8 +83,7 @@ async fn lock_comment(
 }
 
 fn clearances_from_json(bytes: &[u8]) -> Result<Vec<RuleClearance>, ApiError> {
-    let value: serde_json::Value =
-        serde_json::from_slice(bytes).map_err(|_| ApiError::Internal)?;
+    let value: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| ApiError::Internal)?;
     let entries = value.as_array().ok_or(ApiError::Internal)?;
     entries
         .iter()
@@ -153,12 +152,8 @@ pub async fn transition_comment_in_tx(
     let comment = lock_comment(tx, listing_id, comment_id).await?;
     let clearances = match transition {
         CommentTransition::Hide => Vec::new(),
-        CommentTransition::RestoreReport => {
-            lock_case_for_restore(tx, comment_id, false).await?
-        }
-        CommentTransition::RestoreFilter => {
-            lock_case_for_restore(tx, comment_id, true).await?
-        }
+        CommentTransition::RestoreReport => lock_case_for_restore(tx, comment_id, false).await?,
+        CommentTransition::RestoreFilter => lock_case_for_restore(tx, comment_id, true).await?,
     };
     let (expected, desired) = match transition {
         CommentTransition::Hide => ("visible", "hidden"),
@@ -170,15 +165,14 @@ pub async fn transition_comment_in_tx(
         return Err(invalid_transition());
     }
 
-    let updated = sqlx::query(
-        "UPDATE listing_comments SET status = ?, updated_at = ? WHERE id = ?",
-    )
-    .bind(desired)
-    .bind(Utc::now())
-    .bind(comment_id)
-    .execute(&mut **tx)
-    .await
-    .map_err(|_| ApiError::Internal)?;
+    let updated =
+        sqlx::query("UPDATE listing_comments SET status = ?, updated_at = ? WHERE id = ?")
+            .bind(desired)
+            .bind(Utc::now())
+            .bind(comment_id)
+            .execute(&mut **tx)
+            .await
+            .map_err(|_| ApiError::Internal)?;
     if updated.rows_affected() != 1 {
         return Err(ApiError::Internal);
     }
@@ -266,9 +260,10 @@ fn item_from_row(row: &sqlx::mysql::MySqlRow) -> Result<serde_json::Value, ApiEr
     let handler_name: Option<String> = row
         .try_get("handler_name")
         .map_err(|_| ApiError::Internal)?;
-    let handled_by = handler_public_id.map_or(serde_json::Value::Null, |public_id| {
-        serde_json::json!({"public_id": public_id, "display_name": handler_name})
-    });
+    let handled_by = handler_public_id.map_or(
+        serde_json::Value::Null,
+        |public_id| serde_json::json!({"public_id": public_id, "display_name": handler_name}),
+    );
     Ok(serde_json::json!({
         "comment": {
             "public_id": row.try_get::<String, _>("comment_public_id").map_err(|_| ApiError::Internal)?,
@@ -328,9 +323,8 @@ pub async fn queue(
     let next_cursor = if has_more {
         rows.last()
             .map(|row| {
-                let flagged_at: DateTime<Utc> = row
-                    .try_get("flagged_at")
-                    .map_err(|_| ApiError::Internal)?;
+                let flagged_at: DateTime<Utc> =
+                    row.try_get("flagged_at").map_err(|_| ApiError::Internal)?;
                 let id: u64 = row.try_get("id").map_err(|_| ApiError::Internal)?;
                 Ok(crate::listings::encode_cursor(&flagged_at, id))
             })
@@ -349,15 +343,12 @@ pub async fn queue(
 }
 
 async fn get_item(pool: &MySqlPool, public_id: &str) -> Result<serde_json::Value, ApiError> {
-    let row = sqlx::query(&format!(
-        "{} WHERE c.public_id = ?",
-        case_select()
-    ))
-    .bind(public_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|_| ApiError::Internal)?
-    .ok_or(ApiError::NotFound)?;
+    let row = sqlx::query(&format!("{} WHERE c.public_id = ?", case_select()))
+        .bind(public_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| ApiError::Internal)?
+        .ok_or(ApiError::NotFound)?;
     item_from_row(&row)
 }
 
@@ -433,17 +424,14 @@ pub async fn act(
     } else {
         optional_reason(reason_raw)?
     };
-    let preliminary = sqlx::query(
-        "SELECT id, listing_id FROM listing_comments WHERE public_id = ?",
-    )
-    .bind(public_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|_| ApiError::Internal)?
-    .ok_or(ApiError::NotFound)?;
-    let comment_id: u64 = preliminary
-        .try_get("id")
-        .map_err(|_| ApiError::Internal)?;
+    let preliminary =
+        sqlx::query("SELECT id, listing_id FROM listing_comments WHERE public_id = ?")
+            .bind(public_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|_| ApiError::Internal)?
+            .ok_or(ApiError::NotFound)?;
+    let comment_id: u64 = preliminary.try_get("id").map_err(|_| ApiError::Internal)?;
     let listing_id: u64 = preliminary
         .try_get("listing_id")
         .map_err(|_| ApiError::Internal)?;
@@ -454,9 +442,7 @@ pub async fn act(
     let case = lock_case(&mut tx, comment_id).await?;
     let repeated = match action {
         "confirm_hidden" => case.status == "confirmed_hidden" && comment.status == "hidden",
-        "restore" => {
-            case.status == "restored" && comment.status == "visible" && !comment.deleted
-        }
+        "restore" => case.status == "restored" && comment.status == "visible" && !comment.deleted,
         _ => false,
     };
     if repeated {
