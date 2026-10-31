@@ -139,7 +139,7 @@
           <AppField
             id="post-images"
             label="تصاویر آگهی"
-            help="حداکثر ۸ تصویر؛ پیش‌نمایش فقط در همین دستگاه ساخته می‌شود."
+            help="JPEG، PNG یا WebP ثابت؛ حداکثر ۸ تصویر. پیش‌نمایش فقط در همین دستگاه ساخته می‌شود."
             :error="fieldErrors.images"
           >
             <template #default="{ id, describedBy, ariaInvalid }">
@@ -148,7 +148,7 @@
                 ref="fileInput"
                 class="field__input"
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 multiple
                 :aria-describedby="describedBy"
                 :aria-invalid="ariaInvalid"
@@ -293,7 +293,18 @@ function showError(err: unknown): void {
   const body = (err as { data?: ApiErrorBody }).data
   const fields = body?.error?.fields
   fieldErrors.value = fields ?? {}
-  if (fields && Object.keys(fields).length > 0) {
+  if (fields?.images) {
+    const messages: Record<string, string> = {
+      invalid_image: 'فایل تصویر معتبر نیست؛ فقط JPEG، PNG یا WebP ثابت و سالم انتخاب کنید.',
+      animated: 'تصویر متحرک پذیرفته نیست؛ یک تصویر ثابت انتخاب کنید.',
+      too_large: 'حجم یا ابعاد تصویر بیش از حد مجاز است.',
+      too_many: 'حداکثر ۸ تصویر برای هر آگهی انتخاب کنید.',
+      unreadable: 'خواندن فایل تصویر ممکن نشد؛ دوباره تلاش کنید.',
+    }
+    const message = messages[fields.images] ?? 'تصویر قابل پذیرش نیست؛ فایل را بررسی و دوباره تلاش کنید.'
+    fieldErrors.value = { ...fields, images: message }
+    errorMessage.value = `خطا در تصاویر: ${message}`
+  } else if (fields && Object.keys(fields).length > 0) {
     const first = Object.entries(fields)[0]!
     errorMessage.value = `خطا در ${first[0]}: ${first[1]}`
   } else {

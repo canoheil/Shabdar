@@ -1162,39 +1162,53 @@ async fn serve_media(
     State(state): State<AppState>,
     Path(key): Path<String>,
     current_user: Result<CurrentUser, ApiError>,
-) -> Result<
-    (
-        StatusCode,
-        [(axum::http::header::HeaderName, &'static str); 4],
-        Vec<u8>,
-    ),
-    ApiError,
-> {
-    let viewer = match current_user {
-        Ok(user) => Some((user.user_id, user.is_admin)),
-        Err(ApiError::Unauthorized) => None,
-        Err(error) => return Err(error),
-    };
-    let (bytes, content_type, public) =
-        crate::listing_images::read_media(&state.pool, &state.config, &key, viewer).await?;
-    let cache_control = if public {
-        "public, no-cache"
-    } else {
-        "private, no-store"
-    };
-    Ok((
-        StatusCode::OK,
-        [
-            (axum::http::header::CONTENT_TYPE, content_type),
-            (axum::http::header::CACHE_CONTROL, cache_control),
-            (axum::http::header::VARY, "Cookie"),
+) -> axum::response::Response {
+    let result = async {
+        let viewer = match current_user {
+            Ok(user) => Some((user.user_id, user.is_admin)),
+            Err(ApiError::Unauthorized) => None,
+            Err(error) => return Err(error),
+        };
+        crate::listing_images::read_media(&state.pool, &state.config, &key, viewer).await
+    }
+    .await;
+    match result {
+        Ok((bytes, content_type, public)) => {
+            let cache_control = if public {
+                "public, no-cache"
+            } else {
+                "private, no-store"
+            };
             (
+                StatusCode::OK,
+                [
+                    (axum::http::header::CONTENT_TYPE, content_type),
+                    (axum::http::header::CACHE_CONTROL, cache_control),
+                    (axum::http::header::VARY, "Cookie"),
+                    (
+                        axum::http::header::HeaderName::from_static("x-content-type-options"),
+                        "nosniff",
+                    ),
+                ],
+                bytes,
+            )
+                .into_response()
+        }
+        Err(error) => {
+            // Media errors must never become a shared-cache negative hit.
+            let mut response = error.into_response();
+            let headers = response.headers_mut();
+            headers.insert(
+                axum::http::header::CACHE_CONTROL,
+                axum::http::HeaderValue::from_static("private, no-store"),
+            );
+            headers.insert(
                 axum::http::header::HeaderName::from_static("x-content-type-options"),
-                "nosniff",
-            ),
-        ],
-        bytes,
-    ))
+                axum::http::HeaderValue::from_static("nosniff"),
+            );
+            response
+        }
+    }
 }
 
 /// GET /api/v1/categories — active categories, sort-ordered (Phase 3 Task 2).
