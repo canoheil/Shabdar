@@ -104,6 +104,7 @@ export interface ApiAdminTarget {
   title?: string
   body?: string
   status?: string
+  moderation_status?: 'pending' | 'confirmed_hidden' | 'restored' | null
   deleted?: boolean
   listing_slug?: string
   author?: { public_id: string; display_name: string | null }
@@ -149,6 +150,51 @@ export function isApiPendingComment(
   result: ApiCommentCreateResult,
 ): result is ApiPendingComment {
   return 'status' in result && result.status === 'pending_review'
+}
+
+export type ApiModerationMatchMode = 'compact' | 'phrase'
+export type ApiModerationCaseStatus = 'pending' | 'confirmed_hidden' | 'restored'
+
+export interface ApiModerationRule {
+  public_id: string
+  phrase: string
+  match_mode: ApiModerationMatchMode
+  is_active: boolean
+  revision: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ApiModerationMatchedRule {
+  public_id: string
+  revision: number
+  phrase: string
+  match_mode: ApiModerationMatchMode
+}
+
+export interface ApiModerationCaseItem {
+  comment: {
+    public_id: string
+    body: string
+    status: string
+    deleted: boolean
+    created_at: string
+    author: { public_id: string; display_name: string | null }
+    listing_slug: string
+  }
+  status: ApiModerationCaseStatus
+  flagged_at: string
+  matched_rules: ApiModerationMatchedRule[]
+  handled_at: string | null
+  handled_by: { public_id: string; display_name: string | null } | null
+}
+
+export interface ApiModerationRescan {
+  rules_revision: number
+  next_cursor: string | null
+  has_more: boolean
+  scanned_count: number
+  flagged_count: number
 }
 
 export interface ApiListingOut {
