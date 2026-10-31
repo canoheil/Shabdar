@@ -91,11 +91,11 @@ assert!(matches("bad", "b a d", MatchMode::Compact));
 
 Also test 1000-character inputs, safe Persian near-matches, and that every seeded row recomputes to its stored matcher/dedupe keys with the expected mode totals.
 
-- [ ] **Step 2: Run canonical RED**
+- [x] **Step 2: Run canonical RED**
 
 Expected: the new normalization/matcher tests fail on `todo!()` or incorrect seed-key assertions after compilation; older suites still run. Record evidence.
 
-- [ ] **Step 3: Implement the pure matcher**
+- [x] **Step 3: Implement the pure matcher**
 
 Use explicit character mapping/removal from spec §3, standard-library alphanumeric checks, boundary-aware phrase matching, compact substring matching, and one normalization pass per comment form. Keep rule matching ordered and deterministic; no regex, cache, transliteration, or dependency.
 
