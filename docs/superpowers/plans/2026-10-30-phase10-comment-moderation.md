@@ -250,23 +250,23 @@ Canonical GREEN: run `41203219015`, job `124543015478`, head `44065099a40b7d0da5
 - Consumes: the Task 4 HTTP union and existing comment fixture/auth helpers.
 - Produces: `ApiPendingComment`, `ApiCommentCreateResult = ApiComment | ApiPendingComment`, and a type guard based on `status === "pending_review"`; public `ApiComment` remains four fields.
 
-- [ ] **Step 1: Write browser RED coverage**
+- [x] **Step 1: Write browser RED coverage**
 
 Create only `e2e`-prefixed synthetic rules through the admin API and clean them in `afterEach`. Cover clean prepend/count +1, matched 202 notice/no prepend/no count/empty draft/no public content after reload, duplicate-submit prevention, 401/429/500 draft preservation, and no rule/case data in anonymous HTML or public GET responses; only the submitting user's 202 exposes the generic pending status. Assert the exact Persian pending announcement from spec §10.
 
-- [ ] **Step 2: Run canonical browser RED**
+- [x] **Step 2: Run canonical browser RED**
 
-Expected: only the new pending-union tests fail; all 81 older browser tests and API/typecheck/build gates run. Record run/job/head and counts.
+Canonical RED: run `41203932136`, job `124545075317`, head `0b00893530c1330fad6470f56e8a546238b1b0fd`. Only the two pending-union scenarios failed; the failure/draft scenario and all 81 older tests passed (82 passed, 2 failed). API, typecheck, and production build had already passed.
 
-- [ ] **Step 3: Implement the result union and confirmed-only UI**
+- [x] **Step 3: Implement the result union and confirmed-only UI**
 
 Keep the existing clean path. On 202 clear the draft, leave items/cursor/count untouched, and announce pending review. On failures preserve the draft and existing auth/error behavior. Do not add a pending card, personal history, global store, or new chunk.
 
-- [ ] **Step 4: Run browser GREEN and quality/type/build checks**
+- [x] **Step 4: Run browser GREEN and quality/type/build checks**
 
-Run all older and new Playwright tests, typecheck, production build, axe/responsive/theme/keyboard/target/overflow checks, and route budgets. Clean up every `e2e` rule/case so later fixtures are deterministic.
+Canonical GREEN: run `41204421066`, job `124546488325`, head `8af11fbd1ccf0ba7569c761ca0f542d8b70817a4`; 84/84 browser tests, full API, typecheck/build, responsive/axe/target/overflow checks, route budgets, and Lighthouse gates passed. Every `e2e` rule/case was cleaned after each scenario.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 `feat(web): handle comments pending moderation`
 
