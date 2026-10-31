@@ -371,10 +371,10 @@ pub async fn add_image(
         .map_err(|_| ApiError::Internal)?;
         clear_review_in_tx(&mut tx, listing_id).await?;
         tx.commit().await.map_err(|_| ApiError::Internal)?;
-        Ok::<_, ApiError>(result)
+        Ok::<_, ApiError>((result, order))
     }
     .await;
-    let result = match outcome {
+    let (result, order) = match outcome {
         Ok(result) => result,
         Err(error) => {
             let _ = tokio::fs::remove_file(&path).await;
