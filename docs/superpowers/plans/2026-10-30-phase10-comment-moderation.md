@@ -280,46 +280,50 @@ Canonical GREEN: run `41204421066`, job `124546488325`, head `8af11fbd1ccf0ba756
 - Consumes: Tasks 3, 5, and 6 API shapes. New local page state only; no global store.
 - Produces: authenticated admin navigation to both pages and report action availability that respects `moderation_status`.
 
-- [ ] **Step 1: Write failing admin browser coverage**
+- [x] **Step 1: Write failing admin browser coverage**
 
 Cover login/non-admin gates, safe XSS text, rule create/edit/toggle/filter/pages/reason validation, failed mutation preservation, queue filters/actions/deleted states, and no duplicate submission. Cover rescan success across 51 rows, stop-after-current-batch, 500 retry with cursor preservation, stale-revision restart, and confirmed-only counts. Assert admin navigation, report-restore suppression for an active filter case, and cleanup of all `e2e` rules/cases in `afterEach`.
 
-- [ ] **Step 2: Run canonical browser RED**
+- [x] **Step 2: Run canonical browser RED**
 
 Expected: only the new admin-moderation tests fail on absent pages/contracts; every older browser test and API gate runs. Record evidence.
 
-- [ ] **Step 3: Implement the two admin pages and navigation**
+- [x] **Step 3: Implement the two admin pages and navigation**
 
 Reuse `AppField`, `AppButton`, `AppAlert`, skeleton/empty states, design tokens, and 44px `field__input`. Drive actions strictly from server state, preserve forms/reasons/cursors on failure, and advance rescan only after confirmed responses. Stop means no request after the current one; stale revision requires explicit restart. Suppress report restore when its target has pending/confirmed moderation.
 
-- [ ] **Step 4: Run browser GREEN and complete quality checks**
+- [x] **Step 4: Run browser GREEN and complete quality checks**
 
 Run every old/new browser test, typecheck/build, light/dark responsive checks, axe, keyboard/focus, reduced motion, 44px targets, overflow, runtime guards, and independent route budgets. Verify admin code does not enter Home/Detail chunks.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 `feat(web): add comment moderation administration`
+
+**Observed evidence:** RED `41205079437` at `617df87ecd4b05503810902d7308c581a1e7be82` failed only the six new admin tests and passed 84 older tests. GREEN `41206350464`, job `124552087869`, head `9e181ecd153377e99a64fff8c388b83d97f1bd84`, passed every gate and **90/90** browser tests. An intermediate implementation run exposed three test fixture/locator assumptions (mobile-hidden navigation, ofetch GET retry, and the global rescan corpus); the fixes changed tests only and the complete gate was rerun. The Task 9 matrix below added the two new admin routes to the responsive/theme/accessibility gate.
 
 ### Task 9: Whole-stack regression and performance gate
 
 **Files:**
 - Modify: `apps/web/tests/e2e/quality.spec.ts`, this plan, and only regression fixes justified by observed failures
 
-- [ ] **Step 1: Expand the established quality matrix**
+- [x] **Step 1: Expand the established quality matrix**
 
 Include `/admin/moderation` and `/admin/moderation/rules` with authenticated admin fixtures at 375/768/1024/1440px in both themes, landscape/reduced motion, keyboard/focus/44px targets, axe, overflow, and unexpected-runtime-request guards. Do not add them to anonymous performance routes.
 
-- [ ] **Step 2: Run every required check in CI**
+- [x] **Step 2: Run every required check in CI**
 
 Run fmt, full MariaDB `cargo test`, Clippy with warnings denied, Nuxt typecheck, production build, all old/new Playwright tests, independent Home/Detail client budgets, and three enforcing mobile Lighthouse runs per route. Record the run/job/head and actual browser count.
 
-- [ ] **Step 3: Fix and rerun every regression**
+- [x] **Step 3: Fix and rerun every regression**
 
 Use observed logs/artifacts; do not narrow a test, skip MariaDB, hide a page from quality checks, or raise a budget. Repeat the complete gate until green and decode final route-byte/Lighthouse annotations.
 
-- [ ] **Step 4: Record evidence and commit**
+- [x] **Step 4: Record evidence and commit**
 
 Add final run IDs, browser count, Home/Detail bytes/scripts, and three-run medians to this plan. Commit `test: verify comment moderation across the stack`.
+
+**Observed evidence:** final enforcing run `41206964350`, job `124553917408`, head `5ea15c2fbdff44e7e053f544c97b03db23bbaae0`: fmt, Clippy with warnings denied, the full MariaDB API suite, Nuxt typecheck/build, **93/93** real-stack browser tests, both independent route budgets, and all three-run Lighthouse assertions passed. Home initial JS is **93,579 gzip bytes / 3 scripts**; Detail is **98,051 / 3**, below the unchanged 114,627-byte ceilings. Three-run mobile medians: Home FCP **691.42ms**, LCP **2402.83ms**, CLS **0.0066187523**, TBT **130.5ms**, Accessibility **100**; Detail FCP **699.34ms**, LCP **2406.71ms**, CLS **0.0053043629**, TBT **151ms**, Accessibility **100**. Decoded artifact provenance is `web-performance-41206964350`.
 
 ### Task 10: Contracts, rollout, and honest phase evidence
 
