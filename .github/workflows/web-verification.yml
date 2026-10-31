@@ -96,24 +96,6 @@ jobs:
         working-directory: apps/api
         run: cargo build
 
-      # Temporary Phase 11 dependency-bootstrap aid. Removed as soon as the
-      # resolved Cargo.lock patch is applied to the branch.
-      - name: Export newly resolved Cargo lockfile
-        working-directory: apps/api
-        run: |
-          if git diff --quiet -- Cargo.lock; then exit 0; fi
-          git diff --binary -- Cargo.lock > /tmp/shabdar-cargo-lock.patch
-          python - <<'PY'
-          import base64
-          import gzip
-          from pathlib import Path
-
-          payload = gzip.compress(Path('/tmp/shabdar-cargo-lock.patch').read_bytes())
-          encoded = base64.b64encode(payload).decode()
-          for offset in range(0, len(encoded), 3500):
-              print(f'::error::CARGO_LOCK_PATCH_BASE64={encoded[offset:offset + 3500]}')
-          PY
-
       - name: Check Rust formatting
         working-directory: apps/api
         run: |

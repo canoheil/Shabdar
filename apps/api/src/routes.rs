@@ -30,6 +30,11 @@ use crate::state::AppState;
 
 /// Builds the full router. New endpoints are added here, not in main.rs.
 pub fn router(state: AppState) -> Router {
+    // Multipart is the largest accepted request. The small overhead allowance
+    // covers boundaries/headers while keeping every route's body buffered cap
+    // explicit; per-file and decoded-image limits remain separate.
+    let max_body_bytes = usize::try_from(state.config.max_image_bytes.saturating_add(64 * 1024))
+        .unwrap_or(usize::MAX);
     Router::new()
         .route("/api/v1/health", get(health))
         .route("/api/v1/auth/otp/request", post(otp_request))
@@ -143,6 +148,7 @@ pub fn router(state: AppState) -> Router {
         )
         // Unknown paths: 404 in the documented envelope (plan Task 4).
         .fallback(not_found)
+        .layer(axum::extract::DefaultBodyLimit::max(max_body_bytes))
         // Request IDs wrap every route, fallback included.
         .layer(middleware::from_fn(request_id_middleware))
         .with_state(state)
@@ -628,7 +634,7 @@ async fn upload_image(
             &state.config,
             user.user_id,
             &public_id,
-            &bytes,
+            bytes,
         )
         .await?,
     ))

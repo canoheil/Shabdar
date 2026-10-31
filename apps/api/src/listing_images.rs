@@ -1,14 +1,21 @@
-//! Listing images: local-disk storage + image rows (Phase 3 Task 5).
+//! Listing images: bounded local decode, local-disk storage, and media access.
 //!
-//! Validation is magic bytes + size + count only (JPEG/PNG/WebP). No image
-//! decode — no `image` crate on Termux (approved decision 5). Width/height
-//! stay NULL until the image-moderation phase. Client filenames are ignored
-//! entirely; the storage key is server-generated.
+//! Client filenames and declared MIME are never trusted. Only static
+//! JPEG/PNG/WebP bytes are accepted, and the pure-Rust decoder runs on the
+//! blocking pool with explicit resource ceilings. The storage key remains
+//! server-generated.
 
+use std::io::Cursor;
+
+use image::{GenericImageView, ImageReader};
 use serde::Serialize;
 use sqlx::{MySqlPool, Row};
 
 use crate::error::ApiError;
+
+const MAX_IMAGE_DIMENSION: u32 = 8_000;
+const MAX_IMAGE_PIXELS: u64 = 16_000_000;
+const MAX_DECODER_ALLOCATION: u64 = 80 * 1024 * 1024;
 
 /// What the API returns per image (`url` is served from `MEDIA_DIR`).
 #[derive(Serialize)]
@@ -17,6 +24,8 @@ pub struct ImageOut {
     pub storage_key: String,
     pub url: String,
     pub sort_order: u8,
+    pub width: u16,
+    pub height: u16,
 }
 
 /// File signature → extension. Lengths are the shortest prefixes that pin
@@ -31,6 +40,146 @@ fn detect_ext(bytes: &[u8]) -> Option<&'static str> {
     } else {
         None
     }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum ImageRejection {
+    InvalidType,
+    InvalidImage,
+    Animated,
+    TooLarge,
+}
+
+impl ImageRejection {
+    fn reason(&self) -> &'static str {
+        match self {
+            Self::InvalidType => "invalid_type",
+            Self::InvalidImage => "invalid_image",
+            Self::Animated => "animated",
+            Self::TooLarge => "too_large",
+        }
+    }
+}
+
+struct ValidatedImage {
+    extension: &'static str,
+    width: u16,
+    height: u16,
+}
+
+fn image_validation(reason: &str) -> ApiError {
+    let mut fields = std::collections::BTreeMap::new();
+    fields.insert("images".to_string(), reason.to_string());
+    ApiError::Validation { fields }
+}
+
+/// Detect APNG structurally. Malformed chunk bounds are left to the full
+/// decoder, which rejects them; this pass only recognizes animation markers.
+fn is_animated_png(bytes: &[u8]) -> bool {
+    let mut offset = 8_usize;
+    while offset.checked_add(8).is_some_and(|end| end <= bytes.len()) {
+        let length = u32::from_be_bytes(bytes[offset..offset + 4].try_into().expect("four bytes"))
+            as usize;
+        let kind = &bytes[offset + 4..offset + 8];
+        if kind == b"acTL" {
+            return true;
+        }
+        let Some(data_end) = (offset + 8).checked_add(length) else {
+            return false;
+        };
+        let Some(next) = data_end.checked_add(4) else {
+            return false;
+        };
+        if next > bytes.len() {
+            return false;
+        }
+        if kind == b"IEND" {
+            return false;
+        }
+        offset = next;
+    }
+    false
+}
+
+/// Reject animated WebP by its VP8X animation flag or animation chunks. RIFF
+/// sizes and payload validity are still verified by the actual decoder.
+fn is_animated_webp(bytes: &[u8]) -> bool {
+    let mut offset = 12_usize;
+    while offset.checked_add(8).is_some_and(|end| end <= bytes.len()) {
+        let kind = &bytes[offset..offset + 4];
+        let length = u32::from_le_bytes(bytes[offset + 4..offset + 8].try_into().expect("four bytes"))
+            as usize;
+        if kind == b"ANIM" || kind == b"ANMF" {
+            return true;
+        }
+        let data_start = offset + 8;
+        if kind == b"VP8X"
+            && length >= 1
+            && data_start < bytes.len()
+            && bytes[data_start] & 0x02 != 0
+        {
+            return true;
+        }
+        let Some(data_end) = data_start.checked_add(length) else {
+            return false;
+        };
+        let Some(next) = data_end.checked_add(length % 2) else {
+            return false;
+        };
+        if next > bytes.len() {
+            return false;
+        }
+        offset = next;
+    }
+    false
+}
+
+fn check_dimensions(width: u32, height: u32) -> Result<(), ImageRejection> {
+    if width == 0 || height == 0 {
+        return Err(ImageRejection::InvalidImage);
+    }
+    if width > MAX_IMAGE_DIMENSION
+        || height > MAX_IMAGE_DIMENSION
+        || u64::from(width) * u64::from(height) > MAX_IMAGE_PIXELS
+    {
+        return Err(ImageRejection::TooLarge);
+    }
+    Ok(())
+}
+
+/// Fully decode one supported static image with bounded dimensions/allocation.
+/// Signature detection chooses the decoder; it is never treated as validity.
+fn decode_image(bytes: &[u8]) -> Result<ValidatedImage, ImageRejection> {
+    let extension = detect_ext(bytes).ok_or(ImageRejection::InvalidType)?;
+    match extension {
+        "png" if is_animated_png(bytes) => return Err(ImageRejection::Animated),
+        "webp" if is_animated_webp(bytes) => return Err(ImageRejection::Animated),
+        _ => {}
+    }
+    let format = match extension {
+        "jpg" => image::ImageFormat::Jpeg,
+        "png" => image::ImageFormat::Png,
+        "webp" => image::ImageFormat::WebP,
+        _ => return Err(ImageRejection::InvalidType),
+    };
+    let mut reader = ImageReader::new(Cursor::new(bytes));
+    reader.set_format(format);
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_IMAGE_DIMENSION);
+    limits.max_image_height = Some(MAX_IMAGE_DIMENSION);
+    limits.max_alloc = Some(MAX_DECODER_ALLOCATION);
+    reader.limits(limits);
+    let decoded = reader.decode().map_err(|error| match error {
+        image::ImageError::Limits(_) => ImageRejection::TooLarge,
+        _ => ImageRejection::InvalidImage,
+    })?;
+    let (width, height) = decoded.dimensions();
+    check_dimensions(width, height)?;
+    Ok(ValidatedImage {
+        extension,
+        width: u16::try_from(width).map_err(|_| ImageRejection::TooLarge)?,
+        height: u16::try_from(height).map_err(|_| ImageRejection::TooLarge)?,
+    })
 }
 
 /// Server-generated key: `<ulid>/<ulid>.<ext>`. No client path segment can
@@ -63,7 +212,7 @@ pub async fn add_image(
     cfg: &crate::config::Config,
     seller_id: u64,
     public_id: &str,
-    bytes: &[u8],
+    bytes: Vec<u8>,
 ) -> Result<ImageOut, ApiError> {
     let listing_id = draft_listing_id(pool, seller_id, public_id).await?;
 
@@ -78,17 +227,17 @@ pub async fn add_image(
         return Err(ApiError::Validation { fields });
     }
     if bytes.len() as u64 > cfg.max_image_bytes {
-        let mut fields = std::collections::BTreeMap::new();
-        fields.insert("images".to_string(), "too_large".to_string());
-        return Err(ApiError::Validation { fields });
+        return Err(image_validation("too_large"));
     }
-    let ext = detect_ext(bytes).ok_or_else(|| {
-        let mut fields = std::collections::BTreeMap::new();
-        fields.insert("images".to_string(), "invalid_type".to_string());
-        ApiError::Validation { fields }
-    })?;
+    let (bytes, validated) = tokio::task::spawn_blocking(move || {
+        let validated = decode_image(&bytes)?;
+        Ok::<_, ImageRejection>((bytes, validated))
+    })
+    .await
+    .map_err(|_| ApiError::Internal)?
+    .map_err(|error| image_validation(error.reason()))?;
 
-    let key = storage_key(ext);
+    let key = storage_key(validated.extension);
     let path = std::path::Path::new(&cfg.media_dir).join(&key);
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent)
@@ -113,12 +262,15 @@ pub async fn add_image(
     // is connection-scoped, and a separate SELECT may land on another pool
     // connection (regression: every upload after the first returned id 1).
     let outcome = sqlx::query(
-        "INSERT INTO listing_images (listing_id, storage_key, sort_order, created_at) \
-         VALUES (?, ?, ?, ?)",
+        "INSERT INTO listing_images \
+         (listing_id, storage_key, sort_order, width, height, created_at) \
+         VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(listing_id)
     .bind(&key)
     .bind(order)
+    .bind(validated.width)
+    .bind(validated.height)
     .bind(now)
     .execute(pool)
     .await;
@@ -134,6 +286,8 @@ pub async fn add_image(
         url: format!("/media/{key}"),
         storage_key: key,
         sort_order: order,
+        width: validated.width,
+        height: validated.height,
     })
 }
 
@@ -284,14 +438,38 @@ mod tests {
         );
     }
 
-    // ponytail: magic bytes only — a payload with a valid signature but
-    // garbage after it still passes detect_ext. Full decode arrives with the
-    // image-moderation decision; this test pins the current ceiling.
     #[test]
-    fn magic_bytes_only_garbage_after_signature_passes() {
-        assert_eq!(
-            detect_ext(&[0xFF, 0xD8, 0xFF, b'!', b'!', b'!']),
-            Some("jpg")
-        );
+    fn signature_garbage_is_not_a_decoded_image() {
+        assert!(matches!(
+            decode_image(&[0xFF, 0xD8, 0xFF, b'!', b'!', b'!']),
+            Err(ImageRejection::InvalidImage)
+        ));
+    }
+
+    #[test]
+    fn real_static_fixtures_decode_their_dimensions() {
+        for (bytes, extension, dimensions) in [
+            (&include_bytes!("../tests/fixtures/tiny.png")[..], "png", (3, 2)),
+            (&include_bytes!("../tests/fixtures/tiny.jpg")[..], "jpg", (4, 3)),
+            (&include_bytes!("../tests/fixtures/tiny.webp")[..], "webp", (5, 4)),
+        ] {
+            let image = decode_image(bytes).expect("valid checked-in fixture");
+            assert_eq!(image.extension, extension);
+            assert_eq!((image.width, image.height), dimensions);
+        }
+    }
+
+    #[test]
+    fn animation_and_decoded_pixel_ceiling_are_explicit() {
+        assert!(matches!(
+            decode_image(include_bytes!("../tests/fixtures/animated.png")),
+            Err(ImageRejection::Animated)
+        ));
+        assert!(matches!(
+            decode_image(include_bytes!("../tests/fixtures/animated.webp")),
+            Err(ImageRejection::Animated)
+        ));
+        assert_eq!(check_dimensions(4001, 4000), Err(ImageRejection::TooLarge));
+        assert_eq!(check_dimensions(4000, 4000), Ok(()));
     }
 }
