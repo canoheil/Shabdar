@@ -153,7 +153,11 @@ async fn mark_current_images_reviewed(pool: &sqlx::MySqlPool, public_id: &str) {
 async fn review_state(
     pool: &sqlx::MySqlPool,
     public_id: &str,
-) -> (Option<u64>, Option<chrono::DateTime<chrono::Utc>>, Option<String>) {
+) -> (
+    Option<u64>,
+    Option<chrono::DateTime<chrono::Utc>>,
+    Option<String>,
+) {
     let row = sqlx::query(
         "SELECT image_reviewed_by, image_reviewed_at, CAST(image_reviewed_ids AS CHAR) AS ids \
          FROM listings WHERE public_id = ?",

@@ -217,12 +217,7 @@ async fn submit_listing_with_images(
     (public_id, image_ids)
 }
 
-async fn submit_listing(
-    app: &axum::Router,
-    cookie: &str,
-    csrf: &str,
-    title: &str,
-) -> String {
+async fn submit_listing(app: &axum::Router, cookie: &str, csrf: &str, title: &str) -> String {
     submit_listing_with_images(app, cookie, csrf, title, 1)
         .await
         .0
@@ -303,8 +298,7 @@ async fn non_admin_approve_is_forbidden_and_changes_nothing() {
     let app = common::spawn_app(cfg.clone()).await;
     let (seller, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
     let (other, other_csrf) = register_user(&app, &pool, &cfg, "+989009876543").await;
-    let (public_id, image_ids) =
-        submit_listing_with_images(&app, &seller, &csrf, "فرش", 1).await;
+    let (public_id, image_ids) = submit_listing_with_images(&app, &seller, &csrf, "فرش", 1).await;
 
     let (status, body) = send_authed(
         app,
@@ -339,8 +333,7 @@ async fn approve_publishes_exact_reviewed_images_with_detail_and_audit() {
     let app = common::spawn_app(cfg.clone()).await;
     let (seller, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
     let (admin_cookie, admin_csrf) = register_admin(&app, &pool, &cfg, "+989000000000").await;
-    let (public_id, image_ids) =
-        submit_listing_with_images(&app, &seller, &csrf, "فرش", 2).await;
+    let (public_id, image_ids) = submit_listing_with_images(&app, &seller, &csrf, "فرش", 2).await;
 
     let (detail_status, detail) = send_authed(
         app.clone(),
@@ -360,7 +353,9 @@ async fn approve_publishes_exact_reviewed_images_with_detail_and_audit() {
         .collect();
     assert_eq!(detail_ids, image_ids);
     assert!(detail["images"].as_array().unwrap().iter().all(|image| {
-        image["width"] == 3 && image["height"] == 2 && image["url"].as_str().unwrap().starts_with("/media/")
+        image["width"] == 3
+            && image["height"] == 2
+            && image["url"].as_str().unwrap().starts_with("/media/")
     }));
     assert!(detail["image_review"].is_null());
     let (_, queue) = send_authed(
@@ -399,19 +394,23 @@ async fn approve_publishes_exact_reviewed_images_with_detail_and_audit() {
         None,
     )
     .await;
-    assert_eq!(reviewed["image_review"]["image_ids"], serde_json::json!(&image_ids));
+    assert_eq!(
+        reviewed["image_review"]["image_ids"],
+        serde_json::json!(&image_ids)
+    );
     assert!(reviewed["image_review"]["reviewed_at"].is_string());
-    let admin_public_id: String = sqlx::query_scalar(
-        "SELECT public_id FROM users WHERE phone_e164 = '+989000000000'",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let admin_public_id: String =
+        sqlx::query_scalar("SELECT public_id FROM users WHERE phone_e164 = '+989000000000'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(
         reviewed["image_review"]["reviewer"]["public_id"],
         serde_json::json!(admin_public_id)
     );
-    assert!(reviewed["image_review"]["reviewer"].get("phone_e164").is_none());
+    assert!(reviewed["image_review"]["reviewer"]
+        .get("phone_e164")
+        .is_none());
 
     // Published and reviewed: the public feed shows it now.
     let req = Request::builder()
@@ -501,13 +500,11 @@ async fn approve_rejects_missing_empty_duplicate_and_foreign_image_sets_atomical
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
-    let row = sqlx::query(
-        "SELECT status, image_reviewed_at FROM listings WHERE public_id = ?",
-    )
-    .bind(&public_id)
-    .fetch_one(&pool)
-    .await
-    .expect("pending listing");
+    let row = sqlx::query("SELECT status, image_reviewed_at FROM listings WHERE public_id = ?")
+        .bind(&public_id)
+        .fetch_one(&pool)
+        .await
+        .expect("pending listing");
     let status: String = row.try_get("status").unwrap();
     let reviewed_at: Option<chrono::DateTime<chrono::Utc>> =
         row.try_get("image_reviewed_at").unwrap();
@@ -529,15 +526,15 @@ async fn approve_revalidates_real_storage_and_backfills_dimensions_atomically() 
     let (admin_cookie, admin_csrf) = register_admin(&app, &pool, &cfg, "+989000000000").await;
     let (public_id, image_ids) =
         submit_listing_with_images(&app, &seller, &csrf, "بازبینی فایل", 1).await;
-    let key: String = sqlx::query_scalar(
-        "SELECT storage_key FROM listing_images WHERE id = ?",
-    )
-    .bind(image_ids[0])
-    .fetch_one(&pool)
-    .await
-    .expect("stored key");
+    let key: String = sqlx::query_scalar("SELECT storage_key FROM listing_images WHERE id = ?")
+        .bind(image_ids[0])
+        .fetch_one(&pool)
+        .await
+        .expect("stored key");
     let path = std::path::Path::new(&cfg.media_dir).join(key);
-    tokio::fs::remove_file(&path).await.expect("remove stored fixture");
+    tokio::fs::remove_file(&path)
+        .await
+        .expect("remove stored fixture");
     let (missing_status, missing_body) = send_authed(
         app.clone(),
         Method::POST,
@@ -558,7 +555,9 @@ async fn approve_revalidates_real_storage_and_backfills_dimensions_atomically() 
     ];
     let mut failures = Vec::new();
     for (bytes, expected) in cases {
-        tokio::fs::write(&path, bytes).await.expect("corrupt stored fixture");
+        tokio::fs::write(&path, bytes)
+            .await
+            .expect("corrupt stored fixture");
         let (status, body) = send_authed(
             app.clone(),
             Method::POST,
@@ -586,7 +585,9 @@ async fn approve_revalidates_real_storage_and_backfills_dimensions_atomically() 
 
     // Legacy rows may have NULL dimensions. Valid stored bytes are decoded
     // again and the measured values are persisted by the same approval.
-    tokio::fs::write(&path, valid).await.expect("restore valid fixture");
+    tokio::fs::write(&path, valid)
+        .await
+        .expect("restore valid fixture");
     sqlx::query("UPDATE listing_images SET width = NULL, height = NULL WHERE id = ?")
         .bind(image_ids[0])
         .execute(&pool)
@@ -646,7 +647,10 @@ async fn legacy_queue_pages_and_exact_review_restores_without_rewriting_publicat
     )
     .await;
     assert_eq!(first_page["data"].as_array().unwrap().len(), 1);
-    assert_eq!(first_page["data"][0]["public_id"], serde_json::json!(&first));
+    assert_eq!(
+        first_page["data"][0]["public_id"],
+        serde_json::json!(&first)
+    );
     assert_eq!(first_page["data"][0]["image_count"], 1);
     assert!(first_page["data"][0]["cover_image"].is_string());
     assert_eq!(first_page["page"]["has_more"], true);
@@ -661,7 +665,10 @@ async fn legacy_queue_pages_and_exact_review_restores_without_rewriting_publicat
     )
     .await;
     assert_eq!(second_page["data"].as_array().unwrap().len(), 1);
-    assert_eq!(second_page["data"][0]["public_id"], serde_json::json!(&second));
+    assert_eq!(
+        second_page["data"][0]["public_id"],
+        serde_json::json!(&second)
+    );
     assert_eq!(second_page["page"]["has_more"], false);
 
     let (queue_forbidden, _) = send_authed(
@@ -714,7 +721,10 @@ async fn legacy_queue_pages_and_exact_review_restores_without_rewriting_publicat
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(reviewed["status"], "active");
-    assert_eq!(reviewed["image_review"]["image_ids"], serde_json::json!(&first_images));
+    assert_eq!(
+        reviewed["image_review"]["image_ids"],
+        serde_json::json!(&first_images)
+    );
     let after = sqlx::query(
         "SELECT status, reviewed_by, published_at, reviewed_at, updated_at FROM listings WHERE public_id = ?",
     )
@@ -731,20 +741,20 @@ async fn legacy_queue_pages_and_exact_review_restores_without_rewriting_publicat
         before.try_get::<Option<u64>, _>("reviewed_by").unwrap()
     );
     for column in ["published_at", "reviewed_at", "updated_at"] {
-        let before_value: Option<chrono::DateTime<chrono::Utc>> =
-            before.try_get(column).unwrap();
-        let after_value: Option<chrono::DateTime<chrono::Utc>> =
-            after.try_get(column).unwrap();
+        let before_value: Option<chrono::DateTime<chrono::Utc>> = before.try_get(column).unwrap();
+        let after_value: Option<chrono::DateTime<chrono::Utc>> = after.try_get(column).unwrap();
         assert_eq!(after_value, before_value, "{column} must not change");
     }
 
-    let row = sqlx::query(
-        "SELECT action, CAST(metadata AS CHAR) AS metadata FROM admin_audit_logs",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("legacy review audit");
-    assert_eq!(row.try_get::<String, _>("action").unwrap(), "listing.images.approve");
+    let row =
+        sqlx::query("SELECT action, CAST(metadata AS CHAR) AS metadata FROM admin_audit_logs")
+            .fetch_one(&pool)
+            .await
+            .expect("legacy review audit");
+    assert_eq!(
+        row.try_get::<String, _>("action").unwrap(),
+        "listing.images.approve"
+    );
     let metadata: serde_json::Value =
         serde_json::from_str(row.try_get::<String, _>("metadata").unwrap().as_str()).unwrap();
     assert_eq!(metadata["image_ids"], serde_json::json!(&first_images));
@@ -759,7 +769,10 @@ async fn legacy_queue_pages_and_exact_review_restores_without_rewriting_publicat
     )
     .await;
     assert_eq!(remaining["data"].as_array().unwrap().len(), 1);
-    assert_eq!(remaining["data"][0]["public_id"], serde_json::json!(&second));
+    assert_eq!(
+        remaining["data"][0]["public_id"],
+        serde_json::json!(&second)
+    );
     let (_, feed) = send_authed(
         app.clone(),
         Method::GET,
