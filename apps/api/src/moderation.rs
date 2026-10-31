@@ -47,10 +47,7 @@ pub struct RuleClearance {
     pub revision: u64,
 }
 
-pub fn normalize_rule(
-    phrase: &str,
-    match_mode: MatchMode,
-) -> Result<NormalizedRule, &'static str> {
+pub fn normalize_rule(phrase: &str, match_mode: MatchMode) -> Result<NormalizedRule, &'static str> {
     let phrase = phrase.trim();
     if phrase.is_empty() {
         return Err("required");
