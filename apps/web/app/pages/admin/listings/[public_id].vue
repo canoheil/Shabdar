@@ -483,8 +483,8 @@ async function removeListing(): Promise<void> {
 
 .review-image__confirm input {
   flex: 0 0 auto;
-  inline-size: 24px;
-  block-size: 24px;
+  inline-size: 44px;
+  block-size: 44px;
   margin: 0;
 }
 
