@@ -113,6 +113,7 @@ test('@post invalid real images receive Persian feedback without clearing form o
   await page.getByLabel('شهر', { exact: true }).selectOption({ index: 1 })
   await page.getByLabel('عنوان', { exact: true }).fill('عنوان پس از خطای تصویر حفظ می‌شود')
   await page.getByLabel('توضیحات', { exact: true }).fill('توضیحات و هر دو پیش‌نمایش پس از رد فایل خراب باقی می‌مانند.')
+  await page.getByLabel('قیمت (تومان)', { exact: true }).fill('12500000')
   const corrupt = Buffer.concat([cover.subarray(0, 8), Buffer.from('truncated-after-png-signature')])
   await page.getByLabel('تصاویر آگهی', { exact: true }).setInputFiles([
     { name: 'broken.png', mimeType: 'image/png', buffer: corrupt },

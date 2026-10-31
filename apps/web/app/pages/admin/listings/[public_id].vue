@@ -1,5 +1,5 @@
 <template>
-  <section class="review">
+  <section ref="reviewRoot" class="review">
     <NuxtLink class="review__back" to="/admin/queue">بازگشت به صف بررسی</NuxtLink>
     <AppSkeleton v-if="pending" variant="text" :count="4" label="در حال بارگذاری جزئیات آگهی…" />
     <template v-else-if="loadError">
@@ -46,6 +46,7 @@
           <li v-for="(image, index) in listing.images" :key="image.id" class="review-image">
             <img
               :src="image.url"
+              :data-image-id="image.id"
               :alt="`تصویر ${index + 1} آگهی ${listing.title}`"
               :width="image.width ?? 1200"
               :height="image.height ?? 900"
@@ -54,7 +55,7 @@
             >
             <p class="meta">
               تصویر {{ formatNumber(index + 1) }} ·
-              <span v-if="image.width && image.height">{{ formatNumber(image.width) }} × {{ formatNumber(image.height) }}</span>
+              <span v-if="image.width && image.height">{{ formatDimension(image.width) }} × {{ formatDimension(image.height) }}</span>
               <span v-else>ابعاد پس از بررسی فایل ثبت می‌شود</span>
             </p>
             <p v-if="brokenIds.includes(image.id)" class="review-image__error">
@@ -152,6 +153,7 @@ import type { ApiAdminListingDetail, ApiErrorBody } from '~/types'
 
 const route = useRoute()
 const publicId = String(route.params.public_id)
+const reviewRoot = ref<HTMLElement | null>(null)
 const reason = ref('')
 const checkedIds = ref<number[]>([])
 const loadedIds = ref<number[]>([])
@@ -214,6 +216,22 @@ function markBroken(id: number): void {
   checkedIds.value = checkedIds.value.filter((imageId) => imageId !== id)
   if (!brokenIds.value.includes(id)) brokenIds.value.push(id)
 }
+
+function formatDimension(value: number): string {
+  return value.toLocaleString('fa-IR', { useGrouping: false })
+}
+
+onMounted(() => {
+  // SSR images can finish before hydration; their load event is not replayed.
+  const elements = reviewRoot.value?.querySelectorAll<HTMLImageElement>('.review-image img') ?? []
+  for (const image of elements) {
+    if (!image.complete) continue
+    const id = Number(image.dataset.imageId)
+    if (!Number.isSafeInteger(id)) continue
+    if (image.naturalWidth > 0) markLoaded(id)
+    else markBroken(id)
+  }
+})
 
 function showError(err: unknown): void {
   const failure = err as {
