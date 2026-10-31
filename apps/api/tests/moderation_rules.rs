@@ -583,7 +583,14 @@ async fn list_filters_limits_and_cursor_survive_anchor_activation_change() {
     let admin = create_admin(&t.pool, &t.cfg).await;
     let created_at = chrono::Utc::now();
     for index in 0..55 {
-        insert_rule_fixture(&t.pool, &format!("rule{index}"), true, created_at).await;
+        // Separate adjacent digits so repeat collapsing cannot alias 1 and 11.
+        let digits = index
+            .to_string()
+            .chars()
+            .map(|ch| ch.to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
+        insert_rule_fixture(&t.pool, &format!("rule {digits}"), true, created_at).await;
     }
 
     let (status, _, default) = list_rules(t.app.clone(), &admin, "").await;
