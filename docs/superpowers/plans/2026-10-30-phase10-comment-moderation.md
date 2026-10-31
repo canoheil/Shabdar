@@ -57,11 +57,11 @@ Push the focused test/workflow changes. Expected: fmt/Clippy succeed, then real 
 
 Create exactly the spec schema without editing older migrations. Fetch the two pinned JSON arrays with `gh api`, use a one-off standard-library generator for the spec normalizers/mode policy, and commit the resulting static SQL plus complete MIT notice—not the downloaded JSON or generator. Use deterministic, unique 26-character Crockford-base32 public IDs in the migration. Web reset deletes cases before comments and only test-created rules whose raw phrase starts with `e2e`; preserve the seed.
 
-- [ ] **Step 4: Run GREEN and every older reset suite**
+- [x] **Step 4: Run GREEN and every older reset suite**
 
 Required: empty-schema migrations plus comments, reports, blocks, ratings, favorites, listings, images, sessions, OTP, and admin suites against MariaDB; then web fixture initialization. Confirm no helper drops a parent before a new child.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 `feat(api): add comment moderation schema`
 
