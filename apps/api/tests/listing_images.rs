@@ -359,7 +359,10 @@ async fn media_is_owner_or_admin_only_until_image_review_and_publication() {
             .expect("non-public or legacy-active fixture");
         let anonymous = get_media(app.clone(), &url, None).await;
         let other_user = get_media(app.clone(), &url, Some(&other)).await;
-        assert_eq!((anonymous.0, other_user.0), (StatusCode::NOT_FOUND, StatusCode::NOT_FOUND));
+        assert_eq!(
+            (anonymous.0, other_user.0),
+            (StatusCode::NOT_FOUND, StatusCode::NOT_FOUND)
+        );
     }
 
     sqlx::query(

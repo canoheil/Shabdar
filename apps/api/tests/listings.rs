@@ -820,13 +820,7 @@ async fn unreviewed_images_close_public_reads_and_zero_image_active_stays_public
         None,
     )
     .await;
-    let (_, sitemap) = send(
-        app.clone(),
-        Method::GET,
-        "/api/v1/sitemap/listings",
-        None,
-    )
-    .await;
+    let (_, sitemap) = send(app.clone(), Method::GET, "/api/v1/sitemap/listings", None).await;
     assert_eq!(feed["data"], serde_json::json!([]));
     assert_eq!(detail_status, StatusCode::NOT_FOUND);
     assert_eq!(sitemap["data"], serde_json::json!([]));
@@ -996,12 +990,11 @@ async fn unreviewed_images_close_every_public_interaction_without_side_effects()
         .fetch_one(&pool)
         .await
         .unwrap();
-    let comments: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM listing_comments WHERE body = 'دیدگاه سالم'",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let comments: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM listing_comments WHERE body = 'دیدگاه سالم'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     let reports: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM reports")
         .fetch_one(&pool)
         .await
