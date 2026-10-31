@@ -99,11 +99,11 @@ Expected: the new normalization/matcher tests fail on `todo!()` or incorrect see
 
 Use explicit character mapping/removal from spec §3, standard-library alphanumeric checks, boundary-aware phrase matching, compact substring matching, and one normalization pass per comment form. Keep rule matching ordered and deterministic; no regex, cache, transliteration, or dependency.
 
-- [ ] **Step 4: Run matcher GREEN and migration/full API regression**
+- [x] **Step 4: Run matcher GREEN and migration/full API regression**
 
 Verify all seed rows and older API tests. Include a benign text corpus and evasive variants so high recall never substitutes for the phrase false-positive checks.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 `feat(api): add Persian comment moderation matcher`
 
