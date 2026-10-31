@@ -287,8 +287,18 @@ async fn approve_publishes_and_audits() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["status"], "active");
+    // This pre-exact-set approval fixture represents an already reviewed
+    // active image listing. The new admin contract replaces this setup in Task 3.
+    sqlx::query(
+        "UPDATE listings SET image_reviewed_by = seller_id, image_reviewed_at = NOW(3), \
+         image_reviewed_ids = JSON_ARRAY() WHERE public_id = ?",
+    )
+    .bind(&public_id)
+    .execute(&pool)
+    .await
+    .expect("reviewed active fixture");
 
-    // Published: the public feed shows it now.
+    // Published and reviewed: the public feed shows it now.
     let req = Request::builder()
         .method(Method::GET)
         .uri("/api/v1/listings")

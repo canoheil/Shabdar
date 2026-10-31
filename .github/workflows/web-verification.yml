@@ -148,7 +148,7 @@ jobs:
           import base64
           from pathlib import Path
 
-          payload = Path('/tmp/shabdar-api-tests.log').read_bytes()[-16000:]
+          payload = Path('/tmp/shabdar-api-tests.log').read_bytes()[-64000:]
           encoded = base64.b64encode(payload).decode()
           for offset in range(0, len(encoded), 3500):
               print(f'::error::API_TEST_LOG_BASE64={encoded[offset:offset + 3500]}')
