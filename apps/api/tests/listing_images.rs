@@ -85,6 +85,21 @@ async fn register_user(
     (format!("{session}; shabdar_csrf={csrf}"), csrf)
 }
 
+async fn register_admin(
+    app: &axum::Router,
+    pool: &sqlx::MySqlPool,
+    cfg: &shabdar_api::config::Config,
+    phone: &str,
+) -> (String, String) {
+    let pair = register_user(app, pool, cfg, phone).await;
+    sqlx::query("UPDATE users SET is_admin = TRUE WHERE phone_e164 = ?")
+        .bind(phone)
+        .execute(pool)
+        .await
+        .expect("promote media admin");
+    pair
+}
+
 /// A draft listing owned by the cookie holder; returns its public_id.
 async fn create_draft(app: &axum::Router, cookie: &str, csrf: &str) -> String {
     let req = Request::builder()
@@ -174,25 +189,36 @@ fn media_cfg(dir: &std::path::Path) -> shabdar_api::config::Config {
     cfg
 }
 
-/// GET a path; return status + raw bytes + content-type.
-async fn get_raw(app: axum::Router, path: &str) -> (StatusCode, Vec<u8>, Option<String>) {
-    let req = Request::builder()
-        .method(Method::GET)
-        .uri(path)
-        .body(Body::empty())
+async fn get_media(
+    app: axum::Router,
+    path: &str,
+    cookie: Option<&str>,
+) -> (StatusCode, Vec<u8>, axum::http::HeaderMap) {
+    let mut builder = Request::builder().method(Method::GET).uri(path);
+    if let Some(cookie) = cookie {
+        builder = builder.header("cookie", cookie);
+    }
+    let resp = app
+        .oneshot(builder.body(Body::empty()).unwrap())
+        .await
         .unwrap();
-    let resp = app.oneshot(req).await.unwrap();
     let status = resp.status();
-    let content_type = resp
-        .headers()
-        .get("content-type")
-        .and_then(|v| v.to_str().ok())
-        .map(str::to_string);
+    let headers = resp.headers().clone();
     let bytes = BodyExt::collect(resp.into_body())
         .await
         .unwrap()
         .to_bytes()
         .to_vec();
+    (status, bytes, headers)
+}
+
+/// GET a path anonymously; return status + raw bytes + content-type.
+async fn get_raw(app: axum::Router, path: &str) -> (StatusCode, Vec<u8>, Option<String>) {
+    let (status, bytes, headers) = get_media(app, path, None).await;
+    let content_type = headers
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
     (status, bytes, content_type)
 }
 
@@ -255,13 +281,12 @@ async fn uploaded_file_is_served_back_with_bytes() {
         (Some(5), Some(4))
     );
 
-    // The minted URL serves the exact bytes back (no auth needed — reading a
-    // listing's photo is public, like the listing itself).
+    // A draft image is served to its owner through the same minted URL.
     let url = body["url"].as_str().unwrap().to_string();
-    let (status, bytes, content_type) = get_raw(app.clone(), &url).await;
+    let (status, bytes, headers) = get_media(app.clone(), &url, Some(&cookie)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(bytes, webp_bytes());
-    assert_eq!(content_type.as_deref(), Some("image/webp"));
+    assert_eq!(headers["content-type"], "image/webp");
 
     // Unknown keys, wrong extensions, and traversal shapes are all 404 —
     // never a file outside MEDIA_DIR, never a 500.
@@ -273,6 +298,96 @@ async fn uploaded_file_is_served_back_with_bytes() {
     ] {
         let (status, _, _) = get_raw(app.clone(), &path).await;
         assert_eq!(status, StatusCode::NOT_FOUND, "{path}");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn media_is_owner_or_admin_only_until_image_review_and_publication() {
+    let _lock = UPLOAD_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let dir = scratch_media_dir("media-authorization");
+    let cfg = media_cfg(&dir);
+    let app = common::spawn_app(cfg.clone()).await;
+    let (seller, seller_csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (other, _) = register_user(&app, &pool, &cfg, "+989009876543").await;
+    let (admin, _) = register_admin(&app, &pool, &cfg, "+989000000000").await;
+    let public_id = create_draft(&app, &seller, &seller_csrf).await;
+    let (status, body) = upload(
+        app.clone(),
+        &public_id,
+        &seller,
+        Some(&seller_csrf),
+        "private.png",
+        "image/png",
+        &png_bytes(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let url = body["url"].as_str().expect("media URL").to_string();
+
+    let anonymous = get_media(app.clone(), &url, None).await;
+    let other_user = get_media(app.clone(), &url, Some(&other)).await;
+    let owner = get_media(app.clone(), &url, Some(&seller)).await;
+    let administrator = get_media(app.clone(), &url, Some(&admin)).await;
+    assert_eq!(
+        [anonymous.0, other_user.0, owner.0, administrator.0],
+        [
+            StatusCode::NOT_FOUND,
+            StatusCode::NOT_FOUND,
+            StatusCode::OK,
+            StatusCode::OK,
+        ]
+    );
+    assert_eq!(owner.1, png_bytes());
+    for headers in [&owner.2, &administrator.2] {
+        assert_eq!(headers["cache-control"], "private, no-store");
+        assert_eq!(headers["vary"], "Cookie");
+        assert_eq!(headers["x-content-type-options"], "nosniff");
+        assert_eq!(headers["content-type"], "image/png");
+    }
+
+    for status in ["pending", "active"] {
+        sqlx::query("UPDATE listings SET status = ?, published_at = NOW(3) WHERE public_id = ?")
+            .bind(status)
+            .bind(&public_id)
+            .execute(&pool)
+            .await
+            .expect("non-public or legacy-active fixture");
+        let anonymous = get_media(app.clone(), &url, None).await;
+        let other_user = get_media(app.clone(), &url, Some(&other)).await;
+        assert_eq!((anonymous.0, other_user.0), (StatusCode::NOT_FOUND, StatusCode::NOT_FOUND));
+    }
+
+    sqlx::query(
+        "UPDATE listings SET image_reviewed_by = seller_id, image_reviewed_at = NOW(3), \
+         image_reviewed_ids = JSON_ARRAY() WHERE public_id = ?",
+    )
+    .bind(&public_id)
+    .execute(&pool)
+    .await
+    .expect("direct reviewed fixture");
+    let public = get_media(app.clone(), &url, None).await;
+    assert_eq!(public.0, StatusCode::OK);
+    assert_eq!(public.1, png_bytes());
+    assert_eq!(public.2["cache-control"], "public, no-cache");
+    assert_eq!(public.2["vary"], "Cookie");
+    assert_eq!(public.2["x-content-type-options"], "nosniff");
+
+    for status in ["rejected", "removed"] {
+        sqlx::query("UPDATE listings SET status = ? WHERE public_id = ?")
+            .bind(status)
+            .bind(&public_id)
+            .execute(&pool)
+            .await
+            .expect("non-public reviewed fixture");
+        let anonymous = get_media(app.clone(), &url, None).await;
+        let owner = get_media(app.clone(), &url, Some(&seller)).await;
+        assert_eq!(anonymous.0, StatusCode::NOT_FOUND, "{status}");
+        assert_eq!(owner.0, StatusCode::OK, "owner can still inspect {status}");
     }
     let _ = std::fs::remove_dir_all(dir);
 }

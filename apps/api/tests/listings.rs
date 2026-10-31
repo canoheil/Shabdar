@@ -737,6 +737,28 @@ async fn create_active_with(
     (public_id, slug)
 }
 
+async fn set_image_review(pool: &sqlx::MySqlPool, public_id: &str, reviewed: bool) {
+    if reviewed {
+        sqlx::query(
+            "UPDATE listings SET image_reviewed_by = seller_id, image_reviewed_at = NOW(3), \
+             image_reviewed_ids = JSON_ARRAY() WHERE public_id = ?",
+        )
+        .bind(public_id)
+        .execute(pool)
+        .await
+        .expect("reviewed image fixture");
+    } else {
+        sqlx::query(
+            "UPDATE listings SET image_reviewed_by = NULL, image_reviewed_at = NULL, \
+             image_reviewed_ids = NULL WHERE public_id = ?",
+        )
+        .bind(public_id)
+        .execute(pool)
+        .await
+        .expect("legacy unreviewed image fixture");
+    }
+}
+
 #[tokio::test]
 async fn feed_shows_only_active_listings() {
     let _lock = WRITE_LOCK.lock().await;
@@ -774,6 +796,221 @@ async fn feed_shows_only_active_listings() {
     assert_eq!(data[0]["title"], "فرش دستباف");
     assert_eq!(data[0]["rating_average"], 0);
     assert_eq!(data[0]["rating_count"], 0);
+}
+
+#[tokio::test]
+async fn unreviewed_images_close_public_reads_and_zero_image_active_stays_public() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (seller, seller_csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (legacy_id, legacy_slug) =
+        create_active(&app, &pool, &seller, &seller_csrf, "تصویر بازبینی‌نشده").await;
+    set_image_review(&pool, &legacy_id, false).await;
+
+    let (_, feed) = send(app.clone(), Method::GET, "/api/v1/listings", None).await;
+    let (detail_status, _) = send(
+        app.clone(),
+        Method::GET,
+        &format!("/api/v1/listings/{legacy_slug}"),
+        None,
+    )
+    .await;
+    let (_, sitemap) = send(
+        app.clone(),
+        Method::GET,
+        "/api/v1/sitemap/listings",
+        None,
+    )
+    .await;
+    assert_eq!(feed["data"], serde_json::json!([]));
+    assert_eq!(detail_status, StatusCode::NOT_FOUND);
+    assert_eq!(sitemap["data"], serde_json::json!([]));
+
+    let mut zero_draft = valid_draft();
+    zero_draft["title"] = serde_json::json!("آگهی بدون تصویر");
+    let (status, zero) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/listings",
+        Some(&seller),
+        Some(&seller_csrf),
+        Some(zero_draft),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let zero_id = zero["public_id"].as_str().unwrap();
+    let zero_slug = zero["slug"].as_str().unwrap().to_string();
+    sqlx::query("UPDATE listings SET status = 'active', published_at = NOW(3) WHERE public_id = ?")
+        .bind(zero_id)
+        .execute(&pool)
+        .await
+        .expect("zero-image active fixture");
+    let (_, feed) = send(app.clone(), Method::GET, "/api/v1/listings", None).await;
+    assert_eq!(feed["data"].as_array().unwrap().len(), 1);
+    assert_eq!(feed["data"][0]["title"], "آگهی بدون تصویر");
+    let (zero_detail, _) = send(
+        app.clone(),
+        Method::GET,
+        &format!("/api/v1/listings/{zero_slug}"),
+        None,
+    )
+    .await;
+    assert_eq!(zero_detail, StatusCode::OK);
+
+    set_image_review(&pool, &legacy_id, true).await;
+    let (reviewed_detail, _) = send(
+        app,
+        Method::GET,
+        &format!("/api/v1/listings/{legacy_slug}"),
+        None,
+    )
+    .await;
+    assert_eq!(reviewed_detail, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn unreviewed_images_close_every_public_interaction_without_side_effects() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (seller, seller_csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (other, other_csrf) = register_user(&app, &pool, &cfg, "+989009876543").await;
+    let (public_id, slug) =
+        create_active(&app, &pool, &seller, &seller_csrf, "تعامل بازبینی‌نشده").await;
+    set_image_review(&pool, &public_id, true).await;
+
+    let (favorite_status, _) = send_authed(
+        app.clone(),
+        Method::PUT,
+        &format!("/api/v1/me/favorites/{public_id}"),
+        Some(&other),
+        Some(&other_csrf),
+        None,
+    )
+    .await;
+    assert_eq!(favorite_status, StatusCode::OK);
+    let (comment_status, comment) = send_authed(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/listings/{slug}/comments"),
+        Some(&seller),
+        Some(&seller_csrf),
+        Some(serde_json::json!({"body":"دیدگاه موجود پیش از بازبینی"})),
+    )
+    .await;
+    assert_eq!(comment_status, StatusCode::OK);
+    let comment_id = comment["public_id"].as_str().unwrap().to_string();
+    set_image_review(&pool, &public_id, false).await;
+
+    let (comments_read, _) = send_authed(
+        app.clone(),
+        Method::GET,
+        &format!("/api/v1/listings/{slug}/comments"),
+        None,
+        None,
+        None,
+    )
+    .await;
+    let (comment_write, _) = send_authed(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/listings/{slug}/comments"),
+        Some(&other),
+        Some(&other_csrf),
+        Some(serde_json::json!({"body":"دیدگاه سالم"})),
+    )
+    .await;
+    let (rating_write, _) = send_authed(
+        app.clone(),
+        Method::PUT,
+        &format!("/api/v1/listings/{slug}/rating"),
+        Some(&other),
+        Some(&other_csrf),
+        Some(serde_json::json!({"stars":4})),
+    )
+    .await;
+    let (favorite_write, _) = send_authed(
+        app.clone(),
+        Method::PUT,
+        &format!("/api/v1/me/favorites/{public_id}"),
+        Some(&other),
+        Some(&other_csrf),
+        None,
+    )
+    .await;
+    let (listing_report, _) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/reports",
+        Some(&other),
+        Some(&other_csrf),
+        Some(serde_json::json!({
+            "target_type":"listing", "target_id":slug, "reason":"spam"
+        })),
+    )
+    .await;
+    let (comment_report, _) = send_authed(
+        app.clone(),
+        Method::POST,
+        "/api/v1/reports",
+        Some(&other),
+        Some(&other_csrf),
+        Some(serde_json::json!({
+            "target_type":"comment", "target_id":comment_id, "reason":"spam"
+        })),
+    )
+    .await;
+    let (favorites_read, favorites) = send_authed(
+        app,
+        Method::GET,
+        "/api/v1/me/favorites",
+        Some(&other),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(favorites_read, StatusCode::OK);
+    assert_eq!(
+        [
+            comments_read,
+            comment_write,
+            rating_write,
+            favorite_write,
+            listing_report,
+            comment_report,
+        ],
+        [StatusCode::NOT_FOUND; 6]
+    );
+    assert_eq!(favorites["data"], serde_json::json!([]));
+
+    let ratings: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM listing_ratings")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let comments: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM listing_comments WHERE body = 'دیدگاه سالم'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let reports: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM reports")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let favorites: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM favorites")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!((ratings, comments, reports, favorites), (0, 0, 0, 1));
 }
 
 #[tokio::test]
