@@ -60,6 +60,16 @@ export async function resetDynamicRows(): Promise<void> {
   `)
 }
 
+export async function cleanupE2eModeration(): Promise<void> {
+  await runSql(`
+    DELETE mc FROM comment_moderation_cases mc
+    JOIN listing_comments c ON c.id = mc.comment_id
+    WHERE c.body LIKE 'e2e%';
+    DELETE FROM moderation_rules WHERE phrase LIKE 'e2e%';
+    UPDATE moderation_settings SET revision = revision + 1 WHERE id = 1;
+  `)
+}
+
 export async function promoteAdmin(phoneE164: string): Promise<void> {
   if (!/^\+989\d{9}$/.test(phoneE164)) {
     throw new Error('Admin fixture phone must be a dedicated Iranian test number')
