@@ -369,12 +369,7 @@ async fn delete_comment(app: Router, user: &TestUser, public_id: &str) -> Status
     .0
 }
 
-async fn report_action(
-    app: Router,
-    admin: &TestUser,
-    public_id: &str,
-    action: &str,
-) -> StatusCode {
+async fn report_action(app: Router, admin: &TestUser, public_id: &str, action: &str) -> StatusCode {
     send(
         app,
         Method::POST,
@@ -410,7 +405,13 @@ fn assert_response_shape(body: &serde_json::Value) {
     keys.sort_unstable();
     assert_eq!(
         keys,
-        ["flagged_count", "has_more", "next_cursor", "rules_revision", "scanned_count"]
+        [
+            "flagged_count",
+            "has_more",
+            "next_cursor",
+            "rules_revision",
+            "scanned_count"
+        ]
     );
 }
 
@@ -450,7 +451,12 @@ async fn audit_count(pool: &MySqlPool, action: &str) -> i64 {
 async fn case_row(
     pool: &MySqlPool,
     comment_id: u64,
-) -> (String, serde_json::Value, Option<serde_json::Value>, Option<u64>) {
+) -> (
+    String,
+    serde_json::Value,
+    Option<serde_json::Value>,
+    Option<u64>,
+) {
     let row = sqlx::query(
         "SELECT status, matched_rules, cleared_rules, handled_by \
          FROM comment_moderation_cases WHERE comment_id = ?",
@@ -482,16 +488,30 @@ async fn rescan_requires_admin_csrf_pairing_cursor_and_integer_limit() {
     let admin = create_admin(&t.pool, &t.cfg).await;
     let non_admin = create_user(&t.pool, &t.cfg, "+989100000002").await;
     let listing = create_listing(&t.pool, non_admin.id).await;
-    let comment = insert_comment(&t.pool, listing.id, non_admin.id, 1, "clean", "visible", false).await;
+    let comment = insert_comment(
+        &t.pool,
+        listing.id,
+        non_admin.id,
+        1,
+        "clean",
+        "visible",
+        false,
+    )
+    .await;
     let body = serde_json::json!({"cursor": null, "rules_revision": null, "limit": 50});
     assert_eq!(
         rescan(t.app.clone(), None, None, body.clone()).await.0,
         StatusCode::UNAUTHORIZED
     );
     assert_eq!(
-        rescan(t.app.clone(), Some(&non_admin), Some(&non_admin.csrf), body.clone())
-            .await
-            .0,
+        rescan(
+            t.app.clone(),
+            Some(&non_admin),
+            Some(&non_admin.csrf),
+            body.clone()
+        )
+        .await
+        .0,
         StatusCode::FORBIDDEN
     );
     assert_eq!(
@@ -500,9 +520,21 @@ async fn rescan_requires_admin_csrf_pairing_cursor_and_integer_limit() {
     );
 
     for (body, field, expected) in [
-        (serde_json::json!({"cursor": comment.public_id}), "rules_revision", "required"),
-        (serde_json::json!({"rules_revision": 1}), "cursor", "required"),
-        (serde_json::json!({"cursor": "bad", "rules_revision": 1}), "cursor", "invalid_cursor"),
+        (
+            serde_json::json!({"cursor": comment.public_id}),
+            "rules_revision",
+            "required",
+        ),
+        (
+            serde_json::json!({"rules_revision": 1}),
+            "cursor",
+            "required",
+        ),
+        (
+            serde_json::json!({"cursor": "bad", "rules_revision": 1}),
+            "cursor",
+            "invalid_cursor",
+        ),
         (serde_json::json!({"limit": 0}), "limit", "out_of_range"),
         (serde_json::json!({"limit": 51}), "limit", "out_of_range"),
         (serde_json::json!({"limit": -1}), "limit", "out_of_range"),
@@ -510,13 +542,8 @@ async fn rescan_requires_admin_csrf_pairing_cursor_and_integer_limit() {
         (serde_json::json!({"limit": "50"}), "limit", "invalid"),
         (serde_json::json!({"limit": true}), "limit", "invalid"),
     ] {
-        let (status, _, response) = rescan(
-            t.app.clone(),
-            Some(&admin),
-            Some(&admin.csrf),
-            body,
-        )
-        .await;
+        let (status, _, response) =
+            rescan(t.app.clone(), Some(&admin), Some(&admin.csrf), body).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
         assert_eq!(response["error"]["fields"][field], expected);
     }
@@ -535,8 +562,16 @@ async fn fifty_one_rows_retry_and_deleted_anchor_keep_counts_cursors_and_audits_
     let mut comments = Vec::new();
     for number in 1..=51 {
         comments.push(
-            insert_comment(&t.pool, listing.id, author.id, number, "rescanbad", "visible", false)
-                .await,
+            insert_comment(
+                &t.pool,
+                listing.id,
+                author.id,
+                number,
+                "rescanbad",
+                "visible",
+                false,
+            )
+            .await,
         );
     }
     sqlx::query("UPDATE listings SET status = 'removed' WHERE id = ?")
@@ -571,20 +606,17 @@ async fn fifty_one_rows_retry_and_deleted_anchor_keep_counts_cursors_and_audits_
     assert_eq!(assert_counter(&t.pool, listing.id).await, 0);
     assert_eq!(case_count(&t.pool).await, 51);
 
-    let after_anchor = continuation(
-        t.app.clone(),
-        &admin,
-        &comments[49].public_id,
-        revision,
-        50,
-    )
-    .await;
+    let after_anchor =
+        continuation(t.app.clone(), &admin, &comments[49].public_id, revision, 50).await;
     assert_eq!(after_anchor.0, StatusCode::OK, "{:?}", after_anchor.2);
     assert_eq!(after_anchor.2["scanned_count"], 0);
     assert_eq!(after_anchor.2["flagged_count"], 0);
     assert_eq!(assert_counter(&t.pool, listing.id).await, 0);
     assert_eq!(audit_count(&t.pool, "moderation.rescan").await, 3);
-    assert_eq!(audit_count(&t.pool, "comment.filter_confirm_hidden").await, 0);
+    assert_eq!(
+        audit_count(&t.pool, "comment.filter_confirm_hidden").await,
+        0
+    );
     assert_eq!(audit_count(&t.pool, "comment.filter_restore").await, 0);
 
     let audits = sqlx::query(
@@ -598,9 +630,15 @@ async fn fifty_one_rows_retry_and_deleted_anchor_keep_counts_cursors_and_audits_
     let expected = [(50, 50, true), (1, 1, false), (0, 0, false)];
     for (row, (scanned, flagged, has_more)) in audits.iter().zip(expected) {
         assert_eq!(row.try_get::<u64, _>("admin_id").expect("admin"), admin.id);
-        assert_eq!(row.try_get::<String, _>("target_type").expect("target"), "moderation_settings");
+        assert_eq!(
+            row.try_get::<String, _>("target_type").expect("target"),
+            "moderation_settings"
+        );
         assert_eq!(row.try_get::<u64, _>("target_id").expect("target id"), 1);
-        assert_eq!(row.try_get::<Option<String>, _>("reason").expect("reason"), None);
+        assert_eq!(
+            row.try_get::<Option<String>, _>("reason").expect("reason"),
+            None
+        );
         let metadata: Vec<u8> = row.try_get("metadata").expect("metadata bytes");
         let metadata: serde_json::Value = serde_json::from_slice(&metadata).expect("metadata JSON");
         assert_eq!(metadata.as_object().map(serde_json::Map::len), Some(4));
@@ -619,8 +657,26 @@ async fn changed_rules_reject_continuation_without_writes_and_fresh_run_preserve
     let author = create_user(&t.pool, &t.cfg, "+989100000002").await;
     let listing = create_listing(&t.pool, author.id).await;
     create_rule(t.app.clone(), &admin, "revisionbad", "compact").await;
-    let first_comment = insert_comment(&t.pool, listing.id, author.id, 1, "revisionbad", "visible", false).await;
-    let second_comment = insert_comment(&t.pool, listing.id, author.id, 2, "revisionbad", "visible", false).await;
+    let first_comment = insert_comment(
+        &t.pool,
+        listing.id,
+        author.id,
+        1,
+        "revisionbad",
+        "visible",
+        false,
+    )
+    .await;
+    let second_comment = insert_comment(
+        &t.pool,
+        listing.id,
+        author.id,
+        2,
+        "revisionbad",
+        "visible",
+        false,
+    )
+    .await;
     let first = new_rescan(t.app.clone(), &admin, serde_json::json!(1)).await;
     assert_eq!(first.0, StatusCode::OK, "{:?}", first.2);
     let old_revision = first.2["rules_revision"].as_u64().expect("old revision");
@@ -661,7 +717,10 @@ async fn zero_active_rules_scan_without_hiding_or_restoring() {
     let admin = create_admin(&t.pool, &t.cfg).await;
     let author = create_user(&t.pool, &t.cfg, "+989100000002").await;
     let listing = create_listing(&t.pool, author.id).await;
-    insert_comment(&t.pool, listing.id, author.id, 1, "anything", "visible", false).await;
+    insert_comment(
+        &t.pool, listing.id, author.id, 1, "anything", "visible", false,
+    )
+    .await;
     let response = rescan(
         t.app.clone(),
         Some(&admin),
@@ -686,13 +745,39 @@ async fn clearances_are_revision_safe_and_deactivation_never_restores() {
     let author = create_user(&t.pool, &t.cfg, "+989100000002").await;
     let listing = create_listing(&t.pool, author.id).await;
     let rule = create_rule(t.app.clone(), &admin, "durablybad", "compact").await;
-    let restored = insert_comment(&t.pool, listing.id, author.id, 1, "durablybad", "visible", false).await;
-    let pending = insert_comment(&t.pool, listing.id, author.id, 2, "durablybad", "hidden", false).await;
+    let restored = insert_comment(
+        &t.pool,
+        listing.id,
+        author.id,
+        1,
+        "durablybad",
+        "visible",
+        false,
+    )
+    .await;
+    let pending = insert_comment(
+        &t.pool,
+        listing.id,
+        author.id,
+        2,
+        "durablybad",
+        "hidden",
+        false,
+    )
+    .await;
     let clearance = serde_json::json!([{
         "public_id": rule["public_id"],
         "revision": rule["revision"],
     }]);
-    insert_case(&t.pool, restored.id, "restored", &snapshot(&rule), Some(&clearance), Some(admin.id)).await;
+    insert_case(
+        &t.pool,
+        restored.id,
+        "restored",
+        &snapshot(&rule),
+        Some(&clearance),
+        Some(admin.id),
+    )
+    .await;
     insert_case(&t.pool, pending.id, "pending", &snapshot(&rule), None, None).await;
 
     let skipped = new_rescan(t.app.clone(), &admin, serde_json::json!(50)).await;
@@ -725,7 +810,10 @@ async fn clearances_are_revision_safe_and_deactivation_never_restores() {
     let (status, _, restored_response) = send(
         t.app.clone(),
         Method::POST,
-        &format!("/api/v1/admin/moderation/comments/{}/actions", restored.public_id),
+        &format!(
+            "/api/v1/admin/moderation/comments/{}/actions",
+            restored.public_id
+        ),
         Some(&admin),
         Some(&admin.csrf),
         Some(serde_json::json!({"action": "restore", "reason": "false positive"})),
@@ -737,7 +825,10 @@ async fn clearances_are_revision_safe_and_deactivation_never_restores() {
         {"public_id": rule["public_id"], "revision": 1},
         {"public_id": rule["public_id"], "revision": 2},
     ]);
-    assert_eq!(case_row(&t.pool, restored.id).await.2, Some(expected_clearances));
+    assert_eq!(
+        case_row(&t.pool, restored.id).await.2,
+        Some(expected_clearances)
+    );
     let unchanged = new_rescan(t.app.clone(), &admin, serde_json::json!(50)).await;
     assert_eq!(unchanged.0, StatusCode::OK);
     assert_eq!(unchanged.2["flagged_count"], 0);
@@ -757,11 +848,12 @@ async fn clearances_are_revision_safe_and_deactivation_never_restores() {
         assert_eq!(assert_counter(&t.pool, listing.id).await, 1);
         assert_eq!(case_row(&t.pool, restored.id).await.0, "restored");
         assert_eq!(case_row(&t.pool, pending.id).await.0, "pending");
-        let pending_status: String = sqlx::query_scalar("SELECT status FROM listing_comments WHERE id = ?")
-            .bind(pending.id)
-            .fetch_one(&t.pool)
-            .await
-            .expect("pending comment");
+        let pending_status: String =
+            sqlx::query_scalar("SELECT status FROM listing_comments WHERE id = ?")
+                .bind(pending.id)
+                .fetch_one(&t.pool)
+                .await
+                .expect("pending comment");
         assert_eq!(pending_status, "hidden");
     }
     assert_eq!(audit_count(&t.pool, "moderation.rescan").await, 5);
@@ -776,8 +868,19 @@ async fn concurrent_rescan_delete_report_and_restore_preserve_counters() {
     let reporter = create_user(&t.pool, &t.cfg, "+989100000003").await;
     let listing = create_listing(&t.pool, author.id).await;
     let rule = create_rule(t.app.clone(), &admin, "racebad", "compact").await;
-    let comment = insert_comment(&t.pool, listing.id, author.id, 1, "racebad", "visible", false).await;
-    insert_case(&t.pool, comment.id, "restored", &snapshot(&rule), Some(&serde_json::json!([])), Some(admin.id)).await;
+    let comment = insert_comment(
+        &t.pool, listing.id, author.id, 1, "racebad", "visible", false,
+    )
+    .await;
+    insert_case(
+        &t.pool,
+        comment.id,
+        "restored",
+        &snapshot(&rule),
+        Some(&serde_json::json!([])),
+        Some(admin.id),
+    )
+    .await;
     let report = insert_report(&t.pool, reporter.id, comment.id).await;
 
     let (scanned, deleted, report_hidden, report_restored, filter_restored) = tokio::join!(
@@ -792,20 +895,29 @@ async fn concurrent_rescan_delete_report_and_restore_preserve_counters() {
     assert!(scanned.2["flagged_count"].as_u64().expect("flagged") <= 1);
     assert_eq!(deleted, StatusCode::OK);
     for status in [report_hidden, report_restored, filter_restored] {
-        assert!(status == StatusCode::OK || status == StatusCode::BAD_REQUEST, "unexpected {status}");
+        assert!(
+            status == StatusCode::OK || status == StatusCode::BAD_REQUEST,
+            "unexpected {status}"
+        );
     }
     assert_eq!(assert_counter(&t.pool, listing.id).await, 0);
     assert_eq!(audit_count(&t.pool, "moderation.rescan").await, 1);
-    for action in ["report.hide_comment", "report.restore_comment", "comment.filter_restore"] {
-        assert!(audit_count(&t.pool, action).await <= 1, "duplicate {action}");
+    for action in [
+        "report.hide_comment",
+        "report.restore_comment",
+        "comment.filter_restore",
+    ] {
+        assert!(
+            audit_count(&t.pool, action).await <= 1,
+            "duplicate {action}"
+        );
     }
-    let deleted_at: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
-        "SELECT deleted_at FROM listing_comments WHERE id = ?",
-    )
-    .bind(comment.id)
-    .fetch_one(&t.pool)
-    .await
-    .expect("deleted target");
+    let deleted_at: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT deleted_at FROM listing_comments WHERE id = ?")
+            .bind(comment.id)
+            .fetch_one(&t.pool)
+            .await
+            .expect("deleted target");
     assert!(deleted_at.is_some());
     let (_, _, page) = send(
         t.app.clone(),
