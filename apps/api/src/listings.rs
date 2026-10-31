@@ -98,9 +98,7 @@ pub fn listing_out(row: &sqlx::mysql::MySqlRow) -> Result<ListingOut, ApiError> 
 /// Public callers must not learn that a legacy or newly edited image set is
 /// still waiting for human review. Callers select these two SQL booleans on
 /// their listing row; zero-image active listings intentionally remain public.
-pub(crate) fn check_public_image_review(
-    row: &sqlx::mysql::MySqlRow,
-) -> Result<(), ApiError> {
+pub(crate) fn check_public_image_review(row: &sqlx::mysql::MySqlRow) -> Result<(), ApiError> {
     let has_images: bool = row.try_get("has_images").map_err(|_| ApiError::Internal)?;
     let image_reviewed: bool = row
         .try_get("image_reviewed")
