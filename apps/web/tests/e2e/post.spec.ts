@@ -106,6 +106,30 @@ test('@post server validation and failure preserve fields and previews without f
   await expect(page.getByText('پیش‌نویس ساخته شد؛ برای انتشار، ارسال برای بررسی را بزنید.', { exact: true })).toHaveCount(0)
 })
 
+test('@post invalid real images receive Persian feedback without clearing form or previews', async ({ page }) => {
+  await applyStorage(page, readFixtures().sellerStorage)
+  await page.goto('/post')
+  await page.getByLabel('دسته', { exact: true }).selectOption({ index: 1 })
+  await page.getByLabel('شهر', { exact: true }).selectOption({ index: 1 })
+  await page.getByLabel('عنوان', { exact: true }).fill('عنوان پس از خطای تصویر حفظ می‌شود')
+  await page.getByLabel('توضیحات', { exact: true }).fill('توضیحات و هر دو پیش‌نمایش پس از رد فایل خراب باقی می‌مانند.')
+  const corrupt = Buffer.concat([cover.subarray(0, 8), Buffer.from('truncated-after-png-signature')])
+  await page.getByLabel('تصاویر آگهی', { exact: true }).setInputFiles([
+    { name: 'broken.png', mimeType: 'image/png', buffer: corrupt },
+    file('still-previewed.png'),
+  ])
+  await expect(page.locator('.post__preview')).toHaveCount(2)
+  await page.getByRole('button', { name: 'ایجاد پیش‌نویس', exact: true }).click()
+  const message = 'فایل تصویر معتبر نیست؛ فقط JPEG، PNG یا WebP ثابت و سالم انتخاب کنید.'
+  await expect(page.getByRole('alert').filter({ hasText: `خطا در تصاویر: ${message}` })).toBeFocused()
+  await expect(page.locator('#post-images-error')).toHaveText(message)
+  await expect(page.getByLabel('عنوان', { exact: true })).toHaveValue('عنوان پس از خطای تصویر حفظ می‌شود')
+  await expect(page.getByLabel('توضیحات', { exact: true })).toHaveValue('توضیحات و هر دو پیش‌نمایش پس از رد فایل خراب باقی می‌مانند.')
+  await expect(page.locator('.post__preview')).toHaveCount(2)
+  await expect(page.getByText('پیش‌نویس ساخته شد؛ برای انتشار، ارسال برای بررسی را بزنید.', { exact: true })).toHaveCount(0)
+  await expect(page.getByText(/JPEG، PNG یا WebP ثابت/).first()).toBeVisible()
+})
+
 test('@post real create upload submit exposes distinct draft and review states', async ({ page }) => {
   await applyStorage(page, readFixtures().sellerStorage)
   await page.goto('/post')
