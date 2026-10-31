@@ -94,7 +94,22 @@ jobs:
 
       - name: Build Axum debug binary
         working-directory: apps/api
-        run: cargo build
+        run: |
+          set +e
+          cargo build > /tmp/shabdar-api-build.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            python - <<'PY'
+          import base64
+          from pathlib import Path
+
+          payload = Path('/tmp/shabdar-api-build.log').read_bytes()[-16000:]
+          encoded = base64.b64encode(payload).decode()
+          for offset in range(0, len(encoded), 3500):
+              print(f'::error::API_BUILD_LOG_BASE64={encoded[offset:offset + 3500]}')
+          PY
+          fi
+          exit "$status"
 
       - name: Check Rust formatting
         working-directory: apps/api

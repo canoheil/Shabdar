@@ -1128,7 +1128,10 @@ async fn serve_media(
             (axum::http::header::CONTENT_TYPE, content_type),
             (axum::http::header::CACHE_CONTROL, cache_control),
             (axum::http::header::VARY, "Cookie"),
-            (axum::http::header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            (
+                axum::http::header::HeaderName::from_static("x-content-type-options"),
+                "nosniff",
+            ),
         ],
         bytes,
     ))
