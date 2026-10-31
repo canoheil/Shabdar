@@ -83,8 +83,7 @@ async fn lock_comment(
     .await
     .map_err(trace_internal)?
     .ok_or_else(invalid_transition)?;
-    let deleted_at: Option<DateTime<Utc>> =
-        row.try_get("deleted_at").map_err(trace_internal)?;
+    let deleted_at: Option<DateTime<Utc>> = row.try_get("deleted_at").map_err(trace_internal)?;
     Ok(CommentLock {
         status: row.try_get("status").map_err(trace_internal)?,
         deleted: deleted_at.is_some(),
@@ -136,9 +135,7 @@ async fn lock_case_for_restore(
         if !matches!(status.as_str(), "pending" | "confirmed_hidden") {
             return Err(invalid_transition());
         }
-        let matched_rules: Vec<u8> = row
-            .try_get("matched_rules")
-            .map_err(trace_internal)?;
+        let matched_rules: Vec<u8> = row.try_get("matched_rules").map_err(trace_internal)?;
         clearances_from_json(&matched_rules)
     } else {
         if matches!(status.as_str(), "pending" | "confirmed_hidden") {
@@ -577,10 +574,7 @@ async fn load_batch_cases(
     for id in comment_ids {
         query = query.bind(id);
     }
-    let rows = query
-        .fetch_all(&mut **tx)
-        .await
-        .map_err(trace_internal)?;
+    let rows = query.fetch_all(&mut **tx).await.map_err(trace_internal)?;
     let mut cases = HashMap::with_capacity(rows.len());
     for row in &rows {
         let comment_id = row.try_get("comment_id").map_err(trace_internal)?;
@@ -675,7 +669,10 @@ async fn hide_and_reopen_in_tx(
         .map_err(trace_internal)?
     };
     if changed.rows_affected() != 1 {
-        eprintln!("rescan case write affected {} rows", changed.rows_affected());
+        eprintln!(
+            "rescan case write affected {} rows",
+            changed.rows_affected()
+        );
         return Err(ApiError::Internal);
     }
     Ok(true)
@@ -737,10 +734,7 @@ pub async fn rescan(
         query = query.bind(cursor);
     }
     query = query.bind((limit + 1) as i64);
-    let mut rows = query
-        .fetch_all(&mut *tx)
-        .await
-        .map_err(trace_internal)?;
+    let mut rows = query.fetch_all(&mut *tx).await.map_err(trace_internal)?;
     let has_more = rows.len() > limit;
     rows.truncate(limit);
     let scanned = rows
