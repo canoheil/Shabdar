@@ -94,6 +94,14 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/admin/moderation/rules/{public_id}",
             patch(admin_update_moderation_rule),
         )
+        .route(
+            "/api/v1/admin/moderation/comments",
+            get(admin_moderation_comments),
+        )
+        .route(
+            "/api/v1/admin/moderation/comments/{public_id}/actions",
+            post(admin_moderation_comment_action),
+        )
         .route("/api/v1/admin/reports", get(admin_reports_queue))
         .route(
             "/api/v1/admin/reports/{public_id}/actions",
@@ -648,7 +656,7 @@ struct AdminReasonBody {
 }
 
 #[derive(Deserialize)]
-struct AdminReportActionBody {
+struct AdminModerationActionBody {
     action: Option<String>,
     reason: Option<String>,
 }
@@ -734,6 +742,47 @@ async fn admin_update_moderation_rule(
     ))
 }
 
+/// GET /api/v1/admin/moderation/comments — private automatic-review queue.
+async fn admin_moderation_comments(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<axum::response::Response, ApiError> {
+    crate::admin::require_admin(&user)?;
+    let body = crate::comment_moderation::queue(
+        &state.pool,
+        params.get("status").map(String::as_str),
+        params.get("cursor").map(String::as_str),
+        params.get("limit").map(String::as_str),
+    )
+    .await?;
+    let mut response = Json(body).into_response();
+    mark_private_viewer(&mut response);
+    Ok(response)
+}
+
+/// POST /api/v1/admin/moderation/comments/{public_id}/actions — one atomic decision.
+async fn admin_moderation_comment_action(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    ApiJson(body): ApiJson<AdminModerationActionBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::comment_moderation::act(
+            &state.pool,
+            user.user_id,
+            &public_id,
+            body.action.as_deref(),
+            body.reason.as_deref(),
+        )
+        .await?,
+    ))
+}
+
 /// GET /api/v1/admin/reports — oldest-first filtered report queue.
 async fn admin_reports_queue(
     State(state): State<AppState>,
@@ -758,7 +807,7 @@ async fn admin_report_action(
     user: CurrentUser,
     headers: HeaderMap,
     Path(public_id): Path<String>,
-    ApiJson(body): ApiJson<AdminReportActionBody>,
+    ApiJson(body): ApiJson<AdminModerationActionBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     crate::csrf::check_csrf(&headers)?;
     crate::admin::require_admin(&user)?;

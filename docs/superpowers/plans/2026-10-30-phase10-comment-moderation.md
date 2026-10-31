@@ -192,7 +192,7 @@ Cover admin/CSRF/no-store, status filters, oldest-first default/cap/cursor/ancho
 
 Assert comment report targets expose admin-only `moderation_status`; report restore is rejected for pending/confirmed cases but works after an independent report hide on a restored case. Race create/delete/report-hide/report-restore/filter-confirm/filter-restore and assert exact counters, one audit per actual decision, and no deadlocks under the listing → comment → case order.
 
-- [ ] **Step 3: Run canonical RED**
+- [x] **Step 3: Run canonical RED**
 
 Expected: new moderation routes are 404, `moderation_status` is absent, and the new report-guard assertions fail; older suites execute. Record evidence.
 

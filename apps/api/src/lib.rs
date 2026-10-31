@@ -8,6 +8,7 @@ pub mod api_json;
 pub mod blocks;
 pub mod client_ip;
 pub mod comments;
+pub mod comment_moderation;
 pub mod config;
 pub mod csrf;
 pub mod db;
