@@ -195,7 +195,8 @@ function availableActions(item: ApiAdminReport): ReportAction[] {
     return actions
   }
   if (item.status === 'actioned' && item.resolution_action === 'hide_comment'
-    && item.target_type === 'comment' && item.target?.status === 'hidden' && !item.target.deleted) {
+    && item.target_type === 'comment' && item.target?.status === 'hidden' && !item.target.deleted
+    && !['pending', 'confirmed_hidden'].includes(item.target.moderation_status ?? '')) {
     return ['restore_comment']
   }
   return []

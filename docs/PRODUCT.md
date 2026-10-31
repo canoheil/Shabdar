@@ -1,6 +1,6 @@
 # Shabdar Product Brief
 
-> **خلاصه فارسی:** شبدر یک بازارچه آگهی ایرانی با رابط فارسی و راست‌به‌چپ است. تمرکز اولیه روی شهر رشت است و بعداً به سراسر ایران گسترش می‌یابد. هر آگهی قبل از نمایش عمومی باید توسط ادمین تأیید شود. کاربران می‌توانند آگهی‌ها را امتیاز بدهند، کامنت بگذارند و موارد نامناسب را گزارش کنند. فیلتر پیشرفته کلمات رکیک فارسی پیش از انتشار عمومی الزامی است.
+> **خلاصه فارسی:** شبدر یک بازارچه آگهی ایرانی با رابط فارسی و راست‌به‌چپ است. تمرکز اولیه روی شهر رشت است و بعداً به سراسر ایران گسترش می‌یابد. هر آگهی قبل از نمایش عمومی باید توسط ادمین تأیید شود. کاربران می‌توانند آگهی‌ها را امتیاز بدهند، کامنت بگذارند و موارد نامناسب را گزارش کنند. فیلتر قطعی دیدگاه فارسی با قوانین مدیریت‌شده و صف بازبینی پیاده‌سازی شده است؛ پیش از ادعای عبور corpus فعلی از این مانع انتشار، بررسی کامل و رسیدگی به backlog لازم است.
 
 ## 1. Product intent
 
@@ -16,9 +16,9 @@ The previous version is not available. The feature list from the user's screensh
 
 - **Buyer:** finds an item or service by keyword, category, city, or price; reads details, ratings, and comments; saves it; contacts the seller.
 - **Seller:** verifies a mobile number, creates a listing with photos and location, waits for approval, responds to messages, and manages listings from the dashboard.
-- **Commenter/rater:** logged-in user who comments on or rates a listing (not their own).
+- **Commenter/rater:** logged-in user who comments on a listing or rates somebody else’s listing.
 - **Reporter:** any logged-in user who reports a listing, comment, or user that breaks the rules.
-- **Admin:** reviews listings in a queue, approves or rejects them with a reason, handles reports, and can hide or remove content and suspend accounts.
+- **Admin:** reviews listings and reports, manages literal comment rules, resolves automatic comment-review cases, runs existing-comment rescans, and can hide/remove content or suspend accounts.
 
 ## 3. MVP scope (v1)
 
@@ -46,7 +46,7 @@ The previous version is not available. The feature list from the user's screensh
 ### Engagement
 - **Favorites:** save and unsave listings; favorites page for the logged-in user.
 - **Ratings:** logged-in users rate a listing from 1 to 5 stars. One rating per user per listing; cannot rate own listing; can change their rating.
-- **Comments:** logged-in users comment on a listing. Comments are published immediately in v1 (see section 6).
+- **Comments:** logged-in users comment on a listing. Clean comments publish immediately; a deterministic rule match makes the comment non-public pending admin review (see section 6).
 - **Reports:** any logged-in user can report a listing, a comment, or a user. Reported content is reviewed by an admin.
 - **Chat:** one conversation per listing between one buyer and one seller. Text messages only, unread marker.
 
@@ -60,6 +60,7 @@ The previous version is not available. The feature list from the user's screensh
 - Separate admin area with its own layout and API namespace.
 - Listing moderation queue (pending listings with flags, if any).
 - Report queue: open reports with target, reason, and details; actions: hide comment, remove listing, suspend user, or dismiss report.
+- Comment-rule administration and a separate automatic-review queue with confirm-hidden/restore, safe matched-rule snapshots, and revision-checked rescan batches. Report restore cannot bypass an active automatic case.
 - Every admin action is written to the audit log.
 
 ### Global
@@ -70,7 +71,7 @@ The previous version is not available. The feature list from the user's screensh
 
 ## 4. Deferred (not in v1)
 
-- **Advanced Persian profanity filter for comments.** Required before public launch. Until then, comments publish without automated filtering and rely on user reports. This is recorded in STATUS.md as a launch blocker.
+- **Semantic, fuzzy, phonetic, transliteration, and external moderation services.** Phase 10 ships deterministic literal comment rules instead; any broader detection upgrade needs separate scope and evidence.
 - Automated image moderation (AI or external service).
 - Nearby sellers map and radius search (the feature exists in the old version and returns in a later phase, with privacy rules).
 - Paid ad reservations, billing, and ad inventory. The feed slot can be shown as a disabled placeholder until then.
@@ -93,7 +94,7 @@ The previous version is not available. The feature list from the user's screensh
 ### B. Rate and comment
 1. Logged-in user opens an active listing.
 2. Selects 1 to 5 stars. The average rating updates. Users cannot rate their own listing.
-3. Writes a comment. The comment is published immediately.
+3. Writes a comment. A clean comment is published immediately; a matched comment returns pending-review feedback and is not publicly listed.
 4. Other users can report the comment.
 
 ### C. Report content
@@ -117,15 +118,16 @@ The previous version is not available. The feature list from the user's screensh
 
 - **Listing states:** `draft` → `pending` → `active` or `rejected`. From `active`: `sold`, `archived`, or `removed` (admin). Only `active` listings are public.
 - **Admin approval:** only admins can set `active`. Automated checks never approve or reject.
-- **Comments:** published immediately in v1. A comment reported by a user is hidden right away and waits for admin review. Admins can restore or delete it. Comments longer than 1000 characters are rejected.
+- **Comments:** clean comments publish immediately. Deterministic Persian/Finglish literal rules normalize Arabic/Persian variants, listed controls/diacritics, repeated characters, and separator evasions; matched new or rescanned comments become hidden pending review, never automatically deleted or suspended. Authors receive pending feedback without matched-rule details. A user report alone never hides a comment. Admins resolve automatic cases or independent reports with audited transitions and exact counters. Comments longer than 1000 characters are rejected.
 - **Ratings:** integers 1 to 5. One rating per user per listing. Cannot rate own listing. Changing a rating updates the averages.
 - **Popular sort:** weighted average (Bayesian) so that a listing with one 5-star rating does not beat a listing with many 4.8-star ratings.
   - Formula: `score = (C × m + rating_sum) / (C + rating_count)`
   - `m` = average rating across all listings (updated periodically)
   - `C` = minimum ratings before a listing is treated as reliable (start with 5)
   - Listings with no ratings use `m` as their score.
-- **Blocks:** a blocked user cannot start a conversation with the blocker, and the blocker's comments are hidden from the blocked user's view.
+- **Blocks:** the blocker’s authenticated comment view excludes the blocked author’s comments. Blocking does not change anonymous SSR, global counters, or another viewer’s page; chat enforcement remains with the separately scoped chat domain.
 - **Location:** city is required for every listing. Exact coordinates are not collected in v1.
+- **Moderation rollout:** migration does not claim that old comments were reviewed. Before using this filter to clear the launch blocker for the existing corpus, an admin must complete one full rescan and review the initial pending backlog. Later rule changes need another full rescan to affect existing visible comments; deactivation never auto-restores.
 
 ## 7. UX and design direction
 

@@ -16,6 +16,9 @@ static ADMIN_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// Same child-first reset as the other suites (see tests/db_migrations.rs).
 async fn reset_db(pool: &sqlx::MySqlPool) {
     for table in [
+        "comment_moderation_cases",
+        "moderation_rules",
+        "moderation_settings",
         "reports",
         "blocks",
         "listing_comments",

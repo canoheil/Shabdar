@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use chrono::{DateTime, Utc};
-use sqlx::{MySqlPool, Row, Transaction};
+use sqlx::{MySqlPool, Row};
 
 use crate::error::ApiError;
 
@@ -183,9 +183,11 @@ async fn load_targets(pool: &MySqlPool, refs: &[(String, u64)]) -> Result<Target
     if !comment_ids.is_empty() {
         let sql = in_sql(
             "SELECT c.id, c.public_id, c.body, c.status, c.deleted_at, \
-             l.slug AS listing_slug, u.public_id AS author_public_id, \
-             u.display_name AS author_name FROM listing_comments c \
+             mc.status AS moderation_status, l.slug AS listing_slug, \
+             u.public_id AS author_public_id, u.display_name AS author_name \
+             FROM listing_comments c \
              JOIN listings l ON l.id = c.listing_id JOIN users u ON u.id = c.author_id \
+             LEFT JOIN comment_moderation_cases mc ON mc.comment_id = c.id \
              WHERE c.id",
             &comment_ids,
         );
@@ -213,6 +215,7 @@ async fn load_targets(pool: &MySqlPool, refs: &[(String, u64)]) -> Result<Target
                         "display_name": row.try_get::<Option<String>, _>("author_name").map_err(|_| ApiError::Internal)?,
                     },
                     "listing_slug": row.try_get::<String, _>("listing_slug").map_err(|_| ApiError::Internal)?,
+                    "moderation_status": row.try_get::<Option<String>, _>("moderation_status").map_err(|_| ApiError::Internal)?,
                 }),
             );
         }
@@ -362,7 +365,7 @@ fn validation(field: &str, reason: &str) -> ApiError {
 }
 
 fn invalid_transition() -> ApiError {
-    validation("status", "invalid_transition")
+    crate::comment_moderation::invalid_transition()
 }
 
 fn optional_reason(raw: Option<&str>) -> Result<Option<String>, ApiError> {
@@ -375,67 +378,6 @@ fn optional_reason(raw: Option<&str>) -> Result<Option<String>, ApiError> {
     } else {
         Ok(Some(trimmed.to_string()))
     }
-}
-
-async fn moderate_comment_in_tx(
-    tx: &mut Transaction<'_, sqlx::MySql>,
-    listing_id: u64,
-    comment_id: u64,
-    restore: bool,
-) -> Result<(), ApiError> {
-    // The listing ID is immutable and was obtained before this transaction;
-    // this is the first comment/listing lock and preserves listing → comment.
-    let count: u32 =
-        sqlx::query_scalar("SELECT comment_count FROM listings WHERE id = ? FOR UPDATE")
-            .bind(listing_id)
-            .fetch_optional(&mut **tx)
-            .await
-            .map_err(|_| ApiError::Internal)?
-            .ok_or_else(invalid_transition)?;
-    let row = sqlx::query(
-        "SELECT status, deleted_at FROM listing_comments \
-         WHERE id = ? AND listing_id = ? FOR UPDATE",
-    )
-    .bind(comment_id)
-    .bind(listing_id)
-    .fetch_optional(&mut **tx)
-    .await
-    .map_err(|_| ApiError::Internal)?
-    .ok_or_else(invalid_transition)?;
-    let deleted_at: Option<DateTime<Utc>> =
-        row.try_get("deleted_at").map_err(|_| ApiError::Internal)?;
-    let status: String = row.try_get("status").map_err(|_| ApiError::Internal)?;
-    let expected = if restore { "hidden" } else { "visible" };
-    if deleted_at.is_some() || status != expected {
-        return Err(invalid_transition());
-    }
-    let desired = if restore { "visible" } else { "hidden" };
-    let updated =
-        sqlx::query("UPDATE listing_comments SET status = ?, updated_at = ? WHERE id = ?")
-            .bind(desired)
-            .bind(Utc::now())
-            .bind(comment_id)
-            .execute(&mut **tx)
-            .await
-            .map_err(|_| ApiError::Internal)?;
-    if updated.rows_affected() != 1 {
-        return Err(ApiError::Internal);
-    }
-    let count = if restore {
-        count.checked_add(1).ok_or(ApiError::Internal)?
-    } else {
-        count.checked_sub(1).ok_or(ApiError::Internal)?
-    };
-    let updated = sqlx::query("UPDATE listings SET comment_count = ? WHERE id = ?")
-        .bind(count)
-        .bind(listing_id)
-        .execute(&mut **tx)
-        .await
-        .map_err(|_| ApiError::Internal)?;
-    if updated.rows_affected() != 1 {
-        return Err(ApiError::Internal);
-    }
-    Ok(())
 }
 
 fn target_error(error: ApiError) -> ApiError {
@@ -532,11 +474,15 @@ pub async fn act(
     match action {
         "hide_comment" | "restore_comment" => {
             let listing_id = comment_listing_id.ok_or_else(invalid_transition)?;
-            moderate_comment_in_tx(
+            crate::comment_moderation::transition_comment_in_tx(
                 &mut tx,
                 listing_id,
                 report.target_id,
-                action == "restore_comment",
+                if action == "restore_comment" {
+                    crate::comment_moderation::CommentTransition::RestoreReport
+                } else {
+                    crate::comment_moderation::CommentTransition::Hide
+                },
             )
             .await
             .map_err(target_error)?;

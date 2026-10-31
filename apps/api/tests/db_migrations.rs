@@ -7,6 +7,7 @@ mod common;
 use sqlx::Row;
 
 use shabdar_api::db::run_migrations;
+use shabdar_api::moderation::{normalize_rule, MatchMode};
 
 /// Both DB tests share one database; run them one at a time.
 static DB_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -21,6 +22,9 @@ static DB_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// named *_test.
 async fn drop_owned_tables(pool: &sqlx::MySqlPool) {
     for table in [
+        "comment_moderation_cases",
+        "moderation_rules",
+        "moderation_settings",
         "reports",
         "blocks",
         "listing_comments",
@@ -67,6 +71,9 @@ async fn migrations_apply_on_empty_database() {
         "favorites",
         "listing_ratings",
         "listing_comments",
+        "comment_moderation_cases",
+        "moderation_rules",
+        "moderation_settings",
         "reports",
         "blocks",
         "admin_audit_logs",
@@ -560,6 +567,267 @@ async fn reports_and_blocks_schema_enforces_invariants() {
         .await
         .expect("report count");
     assert_eq!(reports, 0, "reports cascade with their reporter");
+}
+
+#[tokio::test]
+async fn comment_moderation_schema_seed_and_foreign_keys_enforce_invariants() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+
+    drop_owned_tables(&pool).await;
+    run_migrations(&pool).await.expect("migrations apply");
+
+    // Direct reads intentionally fail with 1146 before migration 0010 exists.
+    let seeded_rules: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM moderation_rules")
+        .fetch_one(&pool)
+        .await
+        .expect("moderation rules table and deterministic seed");
+    assert_eq!(seeded_rules, 143, "one row per distinct dedupe key");
+    let phrase_rules: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM moderation_rules WHERE match_mode = 'phrase'")
+            .fetch_one(&pool)
+            .await
+            .expect("phrase seed count");
+    let compact_rules: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM moderation_rules WHERE match_mode = 'compact'")
+            .fetch_one(&pool)
+            .await
+            .expect("compact seed count");
+    assert_eq!((phrase_rules, compact_rules), (28, 115));
+    let settings_revision: u64 =
+        sqlx::query_scalar("SELECT revision FROM moderation_settings WHERE id = 1")
+            .fetch_one(&pool)
+            .await
+            .expect("singleton settings seed");
+    assert_eq!(settings_revision, 1);
+
+    let required_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM information_schema.COLUMNS \
+         WHERE TABLE_SCHEMA = DATABASE() AND (\
+           (TABLE_NAME = 'moderation_rules' AND COLUMN_NAME IN \
+             ('public_id', 'phrase', 'normalized_phrase', 'dedupe_key', 'match_mode', 'is_active', 'revision')) OR \
+           (TABLE_NAME = 'comment_moderation_cases' AND COLUMN_NAME IN \
+             ('status', 'matched_rules', 'cleared_rules')) OR \
+           (TABLE_NAME = 'moderation_settings' AND COLUMN_NAME = 'revision'))",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("moderation column metadata");
+    assert_eq!(required_columns, 11, "complete moderation column contract");
+
+    for (table, column, expected) in [
+        ("moderation_rules", "public_id", "char(26)"),
+        ("moderation_rules", "match_mode", "enum('phrase','compact')"),
+        (
+            "comment_moderation_cases",
+            "status",
+            "enum('pending','confirmed_hidden','restored')",
+        ),
+    ] {
+        let actual: String = sqlx::query_scalar(
+            "SELECT COLUMN_TYPE FROM information_schema.COLUMNS \
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?",
+        )
+        .bind(table)
+        .bind(column)
+        .fetch_one(&pool)
+        .await
+        .expect("moderation column type");
+        assert_eq!(actual, expected, "{table}.{column}");
+    }
+
+    for (table, index) in [
+        ("moderation_rules", "uq_moderation_rules_dedupe"),
+        ("moderation_rules", "idx_moderation_rules_active_created"),
+        ("comment_moderation_cases", "uq_moderation_cases_comment"),
+        (
+            "comment_moderation_cases",
+            "idx_moderation_cases_status_flagged",
+        ),
+    ] {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(DISTINCT INDEX_NAME) FROM information_schema.STATISTICS \
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?",
+        )
+        .bind(table)
+        .bind(index)
+        .fetch_one(&pool)
+        .await
+        .expect("moderation index metadata");
+        assert_eq!(count, 1, "{table} must have {index}");
+    }
+
+    let duplicate_dedupe = sqlx::query(
+        "INSERT INTO moderation_rules \
+         (public_id, phrase, normalized_phrase, dedupe_key, match_mode, created_at, updated_at) \
+         SELECT 'ZZZZZZZZZZZZZZZZZZZZZZZZZZ', phrase, normalized_phrase, dedupe_key, match_mode, \
+                NOW(3), NOW(3) FROM moderation_rules ORDER BY id LIMIT 1",
+    )
+    .execute(&pool)
+    .await;
+    assert!(duplicate_dedupe
+        .expect_err("dedupe key is unique across modes")
+        .to_string()
+        .contains("uq_moderation_rules_dedupe"));
+    let second_settings =
+        sqlx::query("INSERT INTO moderation_settings (id, revision) VALUES (2, 1)")
+            .execute(&pool)
+            .await;
+    assert!(second_settings
+        .expect_err("settings must remain a singleton")
+        .to_string()
+        .contains("chk_moderation_settings_singleton"));
+
+    sqlx::query(
+        "INSERT INTO users (public_id, phone_e164, created_at, updated_at) VALUES \
+         ('MMMMMMMMMMMMMMMMMMMMMMMMMM', '+989111111201', NOW(3), NOW(3)), \
+         ('NNNNNNNNNNNNNNNNNNNNNNNNNN', '+989111111202', NOW(3), NOW(3))",
+    )
+    .execute(&pool)
+    .await
+    .expect("moderation author and handler");
+    let author: u64 =
+        sqlx::query_scalar("SELECT id FROM users WHERE public_id = 'MMMMMMMMMMMMMMMMMMMMMMMMMM'")
+            .fetch_one(&pool)
+            .await
+            .expect("moderation author ID");
+    let handler: u64 =
+        sqlx::query_scalar("SELECT id FROM users WHERE public_id = 'NNNNNNNNNNNNNNNNNNNNNNNNNN'")
+            .fetch_one(&pool)
+            .await
+            .expect("moderation handler ID");
+    sqlx::query(
+        "INSERT INTO listings (public_id, seller_id, category_id, city_id, title, slug, \
+         description, price_toman, price_type, status, created_at, updated_at) VALUES \
+         ('JJJJJJJJJJJJJJJJJJJJJJJJJJ', ?, 1, 1, 'Moderation fixture', \
+          'moderation-schema-fixture', 'Description', 1000, 'fixed', 'active', NOW(3), NOW(3))",
+    )
+    .bind(author)
+    .execute(&pool)
+    .await
+    .expect("moderation listing");
+    let listing: u64 = sqlx::query_scalar(
+        "SELECT id FROM listings WHERE public_id = 'JJJJJJJJJJJJJJJJJJJJJJJJJJ'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("moderation listing ID");
+    sqlx::query(
+        "INSERT INTO listing_comments \
+         (public_id, listing_id, author_id, body, created_at, updated_at) \
+         VALUES ('PPPPPPPPPPPPPPPPPPPPPPPPPP', ?, ?, 'Pending fixture', NOW(3), NOW(3))",
+    )
+    .bind(listing)
+    .bind(author)
+    .execute(&pool)
+    .await
+    .expect("moderation comment");
+    let comment: u64 = sqlx::query_scalar(
+        "SELECT id FROM listing_comments WHERE public_id = 'PPPPPPPPPPPPPPPPPPPPPPPPPP'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("moderation comment ID");
+    sqlx::query(
+        "INSERT INTO comment_moderation_cases \
+         (comment_id, status, matched_rules, handled_by, flagged_at, updated_at) \
+         VALUES (?, 'pending', '[]', ?, NOW(3), NOW(3))",
+    )
+    .bind(comment)
+    .bind(handler)
+    .execute(&pool)
+    .await
+    .expect("one moderation case");
+
+    sqlx::query("DELETE FROM users WHERE id = ?")
+        .bind(handler)
+        .execute(&pool)
+        .await
+        .expect("handler deletion uses SET NULL");
+    let handled_by: Option<u64> =
+        sqlx::query_scalar("SELECT handled_by FROM comment_moderation_cases WHERE comment_id = ?")
+            .bind(comment)
+            .fetch_one(&pool)
+            .await
+            .expect("nullable moderation handler");
+    assert_eq!(handled_by, None);
+
+    sqlx::query("DELETE FROM listings WHERE id = ?")
+        .bind(listing)
+        .execute(&pool)
+        .await
+        .expect("listing deletion cascades through comments to cases");
+    let remaining_comments: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM listing_comments WHERE public_id = 'PPPPPPPPPPPPPPPPPPPPPPPPPP'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("cascaded comment count");
+    let remaining_cases: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM comment_moderation_cases WHERE comment_id = ?")
+            .bind(comment)
+            .fetch_one(&pool)
+            .await
+            .expect("cascaded case count");
+    assert_eq!((remaining_comments, remaining_cases), (0, 0));
+}
+
+#[tokio::test]
+async fn every_seed_key_recomputes_with_the_rust_normalizers() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+
+    drop_owned_tables(&pool).await;
+    run_migrations(&pool).await.expect("migrations apply");
+    let rows = sqlx::query(
+        "SELECT phrase, normalized_phrase, dedupe_key, match_mode \
+         FROM moderation_rules ORDER BY id",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("all seeded rules");
+    assert_eq!(rows.len(), 143);
+
+    let mut phrase_count = 0;
+    let mut compact_count = 0;
+    for row in rows {
+        let phrase: String = row.try_get("phrase").expect("seed phrase");
+        let stored_matcher: String = row.try_get("normalized_phrase").expect("matcher key");
+        let stored_dedupe: String = row.try_get("dedupe_key").expect("dedupe key");
+        let stored_mode: String = row.try_get("match_mode").expect("match mode");
+        let mode = MatchMode::parse(&stored_mode).expect("valid seeded match mode");
+        let normalized = normalize_rule(&phrase, mode).expect("valid seeded rule");
+        assert_eq!(&normalized.phrase, &phrase);
+        assert_eq!(&normalized.normalized_phrase, &stored_matcher, "{phrase}");
+        assert_eq!(&normalized.dedupe_key, &stored_dedupe, "{phrase}");
+        match mode {
+            MatchMode::Phrase => phrase_count += 1,
+            MatchMode::Compact => compact_count += 1,
+        }
+    }
+    assert_eq!((phrase_count, compact_count), (28, 115));
+}
+
+#[test]
+fn moderation_seed_has_complete_upstream_notice() {
+    let notice = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../THIRD_PARTY_NOTICES.md"
+    ))
+    .expect("root third-party notice must exist");
+    for required in [
+        "https://github.com/kaveh-dev/persian-bad-words",
+        "4172f148dd9de014494b12693382cdad2ba1f2f5",
+        "Copyright (c) 2022 Thekawasaki",
+        "Permission is hereby granted, free of charge",
+        "THE SOFTWARE IS PROVIDED \"AS IS\"",
+    ] {
+        assert!(notice.contains(required), "notice is missing: {required}");
+    }
 }
 
 // --- Environment-free guard tests: these must pass with no database at all.

@@ -53,6 +53,18 @@
             </NuxtLink>
           </li>
           <li v-if="user?.is_admin" class="shell__nav-item shell__nav-item--admin">
+            <NuxtLink to="/admin/moderation" class="shell__nav-action">
+              <PhShieldCheck :size="22" aria-hidden="true" />
+              <span>دیدگاه‌ها</span>
+            </NuxtLink>
+          </li>
+          <li v-if="user?.is_admin" class="shell__nav-item shell__nav-item--admin">
+            <NuxtLink to="/admin/moderation/rules" class="shell__nav-action">
+              <PhShieldCheck :size="22" aria-hidden="true" />
+              <span>قوانین</span>
+            </NuxtLink>
+          </li>
+          <li v-if="user?.is_admin" class="shell__nav-item shell__nav-item--admin">
             <NuxtLink to="/admin/users" class="shell__nav-action">
               <PhShieldCheck :size="22" aria-hidden="true" />
               <span>کاربران</span>

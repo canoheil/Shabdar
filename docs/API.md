@@ -1,6 +1,6 @@
 # REST API Proposal
 
-> **خلاصه فارسی:** API به‌صورت REST زیر `/api/v1` است. مسیرهای عمومی بدون ورود قابل استفاده‌اند و کارهای شخصی یا مدیریتی نشست معتبر می‌خواهند. ورود با کد پیامکی یک‌بار مصرف انجام می‌شود. آگهی‌ها قبل از تأیید ادمین عمومی نمی‌شوند. امتیاز، دیدگاه، گزارش، بلاک و صف مدیریت Trust & Safety در فازهای ۸ و ۹ پیاده‌سازی شده‌اند. گزارش به‌تنهایی هیچ محتوایی را پنهان نمی‌کند؛ تصمیم نهایی فقط با مدیر است.
+> **خلاصه فارسی:** API به‌صورت REST زیر `/api/v1` است. مسیرهای عمومی بدون ورود قابل استفاده‌اند و کارهای شخصی یا مدیریتی نشست معتبر می‌خواهند. ورود با کد پیامکی یک‌بار مصرف انجام می‌شود. آگهی‌ها قبل از تأیید ادمین عمومی نمی‌شوند. امتیاز، دیدگاه، گزارش، بلاک و صف مدیریت Trust & Safety در فازهای ۸ و ۹ پیاده‌سازی شده‌اند. فیلتر قطعی دیدگاه فارسی، قوانین مدیریت‌شده و بررسی مجدد دیدگاه‌های موجود نیز در فاز ۱۰ اضافه شده است. گزارش به‌تنهایی هیچ محتوایی را پنهان نمی‌کند؛ تطبیق خودکار و تصمیم مدیر دو مسیر مستقل‌اند.
 
 ## 1. Conventions
 
@@ -182,21 +182,29 @@ Every mutation locks the listing row and applies the old-row delta to `rating_su
 
 The per-user allowance is 60 PUT/DELETE mutations per 600 seconds by default, shared across listings. `RATING_USER_LIMIT` and `RATING_USER_WINDOW_SECS` override it. A valid mutation attempt that passes body validation consumes one hit even if the target is later rejected. The limiter returns `429 rate_limited` with `Retry-After`; counters are process-local and reset on restart, so a multi-replica deployment needs a shared store.
 
-## 8. Comments (Phase 8 — built)
+## 8. Comments (Phases 8 and 10 — built)
 
 | Method | Path | Auth | Summary |
 |---|---|---|---|
 | GET | `/listings/{slug}/comments?cursor=…&limit=…` | Public | Visible, non-deleted comments on a publicly active listing, newest first. Returns `{ data, page: { next_cursor, has_more } }`. |
-| POST | `/listings/{slug}/comments` | User + CSRF | JSON body `{ "body": "…" }`. Publishes immediately and returns the confirmed comment object. |
+| POST | `/listings/{slug}/comments` | User + CSRF | JSON body `{ "body": "…" }`. Clean comments return 200 and publish; matched comments return 202 `pending_review` and remain non-public. |
 | DELETE | `/comments/{public_id}` | Author + CSRF | Idempotently soft-deletes the caller's comment. Returns exactly `{ "ok": true }`. |
 
-A comment object is `{ public_id, body, author: { public_id, display_name }, created_at }`. `display_name` is nullable. Text is trimmed; after trimming it must contain 1–1000 Unicode scalar values. Missing/blank input is `400 validation_error` with `fields.body = "required"`; over 1000 characters is `fields.body = "too_long"`. Self-comments are allowed. Clients must render the body as text, never HTML. Comment profanity filtering remains a public-launch blocker and is not implemented in Phase 8.
+A comment object is `{ public_id, body, author: { public_id, display_name }, created_at }`. `display_name` is nullable. Text is trimmed; after trimming it must contain 1–1000 Unicode scalar values. Missing/blank input is `400 validation_error` with `fields.body = "required"`; over 1000 characters is `fields.body = "too_long"`. Self-comments are allowed. Clients must render the body as text, never HTML. Phase 10 deterministic filtering is described below; public responses never expose rules, matched words, clearance data, or internal IDs.
 
 The comment list defaults to 20 and clamps `limit` to 1–50. Order is `created_at DESC, id DESC`; the opaque cursor is `<created-at-micros>:<id>`. Send `page.next_cursor` unchanged until `has_more` is false. Equal timestamps are disambiguated by ID, and deleting the anchor between pages does not invalidate the cursor. A malformed cursor is `400 validation_error` with `fields.cursor = "invalid_cursor"`. Only `status = 'visible' AND deleted_at IS NULL` rows appear. For an anonymous caller this is the complete public page; for a valid authenticated caller it additionally excludes authors in that caller's blocks and is private `no-store`.
 
-Creating a comment locks the listing and increments `listings.comment_count` in the same transaction. Deletion sets only `deleted_at` and decrements the visible counter on the first delete; repeated deletes return `{ "ok": true }` without another decrement. Another author's comment returns `403 forbidden`; an unknown comment ID returns `404 not_found`. Comment targets use the same listing 404/410 visibility rules as ratings. Admin-only report decisions can set `hidden` or restore `visible`; each transition holds the listing → comment lock order and changes the exact visible counter once. Blocking never changes this global counter or another viewer's page. Editing, replies, and reactions remain outside these routes.
+A clean creation locks the listing and increments `listings.comment_count` in the same transaction. A matched creation instead inserts a hidden comment and one pending moderation case without incrementing the counter. Deletion sets only `deleted_at` and decrements the visible counter only when the deleted comment had been visible; repeated deletes and deletion of a never-public pending comment return `{ "ok": true }` without a counter delta. Another author's comment returns `403 forbidden`; an unknown comment ID returns `404 not_found`. Comment targets use the same listing 404/410 visibility rules as ratings. Admin-only report decisions can set `hidden` or restore `visible`; each transition holds the listing → comment lock order and changes the exact visible counter once. Blocking never changes this global counter or another viewer's page. Editing, replies, and reactions remain outside these routes.
 
 The creation allowance is 20 comments per user per 600 seconds by default, shared across listings. `COMMENT_USER_LIMIT` and `COMMENT_USER_WINDOW_SECS` override it. Validated creation attempts consume the allowance; deletion never does. Limit failures are `429 rate_limited` with `Retry-After`. These counters are process-local and require a shared store before running multiple API replicas.
+
+### Deterministic automatic review (Phase 10)
+
+Active database rules are read once per validated submission. Normalization maps Arabic `ي`/`ى` to `ی` and `ك` to `ک`, lowercases ASCII, removes the specified Persian/Arabic diacritics and zero-width/bidi/BOM controls, and collapses repeated alphanumerics. A **phrase** rule normalizes non-alphanumeric runs to spaces and matches only at phrase boundaries. A **compact** rule removes separators and matches as a substring, catching inserted spaces/punctuation. Rules and comments use the same normalizers. There is no arbitrary regex, fuzzy/phonetic matching, transliteration, external service, or new dependency.
+
+A clean result remains HTTP 200 with exactly `{public_id,body,author,created_at}`. A match is HTTP 202 with exactly `{public_id,status:"pending_review",created_at}`; it has no body echo or rule detail and never enters public/viewer comment pages. It creates no user report and no admin audit, and never deletes the comment or suspends its author. The author receives the same pending feedback without learning the matched rule. Automatic hiding and report handling are independent: **a user report alone still never hides content**.
+
+Existing visible comments are not backfilled by migration and are not affected by new rule writes until an admin completes the rescan in §12. Hidden/deleted comments are never automatically restored. Deactivating a rule affects later matching only; it does not restore an already-hidden comment.
 
 ```sh
 API='http://127.0.0.1:8080/api/v1'
@@ -214,7 +222,7 @@ curl -s "$API/listings/$SLUG/comments?limit=20"
 curl -s --get "$API/listings/$SLUG/comments" \
   --data-urlencode "cursor=$CURSOR" --data-urlencode 'limit=20'
 
-# Publish and then softly delete a comment. COMMENT_ID is the returned public_id.
+# Create (200 clean or 202 pending_review), then softly delete. COMMENT_ID is the returned public_id.
 curl -s -X POST "$API/listings/$SLUG/comments" \
   -H "$AUTH" -H 'content-type: application/json' \
   -H "x-csrf-token: $CSRF" -d '{"body":"دیدگاه من"}'
@@ -294,10 +302,34 @@ All endpoints are under `/api/v1/admin`. Each requires `is_admin = true` and mut
 | GET | `/admin/users?query=…&cursor=…` | Search users by phone or display name. Phone is shown only in the admin view. |
 | POST | `/admin/users/{public_id}/suspend` | Body: `{ reason }`. Ends the user's sessions. |
 | POST | `/admin/users/{public_id}/unsuspend` | `suspended` → `active`; old sessions stay revoked and a fresh login is required. |
+| GET | `/admin/moderation/rules?active=all&cursor=…` | Newest-first literal-rule administration. |
+| POST | `/admin/moderation/rules` | Create an active literal rule with an audit reason. |
+| PATCH | `/admin/moderation/rules/{public_id}` | Edit phrase/mode or activate/deactivate with an audit reason. |
+| GET | `/admin/moderation/comments?status=pending&cursor=…` | Oldest-first automatic-review cases. |
+| POST | `/admin/moderation/comments/{public_id}/actions` | Confirm hidden or restore a filtered comment. |
+| POST | `/admin/moderation/rescan` | Run one revision-checked batch over existing visible comments. |
 
 Report queue filters are `status=open|actioned|dismissed|all` (default `open`), oldest first on `(created_at, id)` with forward opaque cursors. Each item contains the report, public reporter/handler summaries, and a **current** target summary or `target:null` when the target no longer exists; it is not a historical target snapshot. Open reports accept only compatible actions. `hide_comment`, `remove_listing`, and `suspend_user` require a trimmed 1–500-character reason; `restore_comment` and `dismiss` accept an optional reason with the same bound. Decisions lock and recheck report/target state, write the target transition and audit atomically, and return the confirmed admin report object. Repeating the same decided action is idempotent; an incompatible second action is `400 fields.status = "invalid_transition"`. Only `actioned + hide_comment` can subsequently accept `restore_comment`.
 
 Comment hide/restore preserves exact global `listings.comment_count`; listing removal and user suspension reuse the same locked transition helpers as direct admin commands. Suspension deletes every target session in that transaction and cannot target the acting admin. Unsuspension never resurrects those sessions. Admin user search accepts at most 100 characters, escapes LIKE wildcards literally, returns newest-first `(created_at, id)` pages, and includes `phone_e164` only in this admin response. Direct suspend requires a reason; direct unsuspend has no JSON body. Internal database IDs never appear in these responses.
+
+### Comment moderation rules, cases, and rescan (Phase 10)
+
+All moderation GET responses are `Cache-Control: private, no-store`; mutations require admin + CSRF. Rule create/update requires a trimmed 1–500-character `reason`. Rule text is trimmed to 1–120 Unicode scalar values and its selected normalized form must retain at least two alphanumerics. `match_mode` is `phrase|compact`; punctuation, `*`, and `%` are literal.
+
+`GET /admin/moderation/rules` defaults to `active=all`, 20 items, maximum 50, ordered `(created_at,id) DESC`. Its opaque cursor remains valid when an anchor is edited or changes filter membership. Each rule has exactly `public_id,phrase,match_mode,is_active,revision,created_at,updated_at`. Create with the same canonical dedupe key and mode returns the existing rule without reactivation, revision change, or another audit; the same key with another mode is `fields.phrase="duplicate"`. PATCH requires at least one of `phrase`, `match_mode`, or `is_active`, plus `reason`. A no-op returns current state without writes. Actual create/update writes one audit and increments the global rule-set revision; phrase/mode edits also increment that rule's revision, while activation changes do not.
+
+`GET /admin/moderation/comments` accepts `status=pending|confirmed_hidden|restored|all` (default `pending`), default 20 / maximum 50, oldest `(flagged_at,id)` first. Items contain the current safe comment/author/listing summary, case status/timestamps, matched-rule snapshots, and nullable public handler summary—never internal IDs, phone numbers, reporter data, or clearance internals. Cursor pagination remains usable if the anchor leaves the selected filter.
+
+`POST /admin/moderation/comments/{public_id}/actions` accepts:
+- `confirm_hidden` on a pending hidden case, including an author-deleted comment; a 1–500-character reason is required and the case becomes `confirmed_hidden`.
+- `restore` on a pending/confirmed hidden, non-deleted comment; reason is optional with the same bound. The comment becomes visible, the exact counter increments once, and the case becomes `restored` with durable `{public_id,revision}` clearances.
+
+An unchanged repeat is idempotent and adds no counter delta or audit. Deleted comments cannot be restored, and `restored → confirm_hidden` is invalid until a changed rule legitimately reopens the case. Actual decisions write one `comment.filter_confirm_hidden` or `comment.filter_restore` audit in the same transaction. Restore clearances survive deactivation/reactivation of an unchanged rule; editing phrase/mode creates a new revision that may match again. Report responses for comment targets include admin-only `moderation_status`; report restore is rejected while that case is `pending` or `confirmed_hidden`, so reports cannot bypass automatic review. A `restored` case does not block a later independent report hide/restore cycle.
+
+`POST /admin/moderation/rescan` starts with `{"cursor":null,"rules_revision":null,"limit":50}`; continuation sends both the last confirmed `next_cursor` and `rules_revision`. Supplying only one of cursor/revision is `400 validation_error`. Limit is an integer 1–50. The exact response keys are `rules_revision,next_cursor,has_more,scanned_count,flagged_count`. Each committed batch locks the settings row, checks the expected revision before any write, reads active rules once, examines visible/non-deleted comments by `public_id ASC` regardless of listing status, hides only new unignored matches, and writes one `moderation.rescan` audit. `scanned_count` is rows examined; `flagged_count` is actual visible→hidden transitions in that request.
+
+A rule change returns `fields.rules_revision="changed"` with no batch write/audit and requires an explicit fresh run. Retrying the same cursor cannot decrement twice; browser totals are informational, while database state and audits are authoritative. Zero active rules hide and restore nothing. Rescan is admin-driven, not a durable worker: stop after the current confirmed batch, and start a new run after leaving the page. Every automatic/admin comment mutation preserves the **listing → comment → moderation case** lock order and the invariant `comment_count = COUNT(visible AND deleted_at IS NULL)`.
 
 ## 13. Sitemap and SEO endpoints
 

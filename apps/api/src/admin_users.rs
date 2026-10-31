@@ -90,7 +90,7 @@ pub async fn audit_in_tx(
     .bind(Utc::now())
     .execute(&mut **tx)
     .await
-    .map_err(|_| ApiError::Internal)?;
+    .map_err(crate::error::database_error)?;
     Ok(())
 }
 

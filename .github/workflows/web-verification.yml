@@ -3,7 +3,7 @@ name: Web verification
 on:
   push:
     branches:
-      - arena/d645adc0-shabdar
+      - arena/4b608814-shabdar
     paths:
       - apps/api/**
       - apps/web/**
@@ -126,7 +126,7 @@ jobs:
         working-directory: apps/api
         run: |
           set +e
-          cargo test > /tmp/shabdar-api-tests.log 2>&1
+          cargo test --no-fail-fast > /tmp/shabdar-api-tests.log 2>&1
           status=$?
           if [ "$status" -ne 0 ]; then
             python - <<'PY'

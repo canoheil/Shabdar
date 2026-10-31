@@ -86,6 +86,26 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/listings/{public_id}/images/order",
             patch(images_order),
         )
+        .route(
+            "/api/v1/admin/moderation/rules",
+            get(admin_moderation_rules).post(admin_create_moderation_rule),
+        )
+        .route(
+            "/api/v1/admin/moderation/rules/{public_id}",
+            patch(admin_update_moderation_rule),
+        )
+        .route(
+            "/api/v1/admin/moderation/comments",
+            get(admin_moderation_comments),
+        )
+        .route(
+            "/api/v1/admin/moderation/rescan",
+            post(admin_moderation_rescan),
+        )
+        .route(
+            "/api/v1/admin/moderation/comments/{public_id}/actions",
+            post(admin_moderation_comment_action),
+        )
         .route("/api/v1/admin/reports", get(admin_reports_queue))
         .route(
             "/api/v1/admin/reports/{public_id}/actions",
@@ -434,14 +454,14 @@ async fn listing_comments(
     Ok(response)
 }
 
-/// POST /api/v1/listings/{slug}/comments — publish one visible comment.
+/// POST /api/v1/listings/{slug}/comments — clean 200 or pending-review 202.
 async fn create_comment(
     State(state): State<AppState>,
     user: CurrentUser,
     headers: HeaderMap,
     Path(slug): Path<String>,
     ApiJson(body): ApiJson<CommentBody>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
     crate::csrf::check_csrf(&headers)?;
     let body = crate::comments::validate_body(body.body.as_deref())?;
     state
@@ -452,9 +472,12 @@ async fn create_comment(
             Duration::from_secs(u64::from(state.config.comment_user_window_secs)),
         )
         .into_result()?;
-    Ok(Json(
-        crate::comments::create(&state.pool, user.user_id, &slug, &body).await?,
-    ))
+    match crate::comments::create(&state.pool, user.user_id, &slug, &body).await? {
+        crate::comments::CreateResult::Visible(comment) => Ok((StatusCode::OK, Json(comment))),
+        crate::comments::CreateResult::Pending(comment) => {
+            Ok((StatusCode::ACCEPTED, Json(comment)))
+        }
+    }
 }
 
 /// DELETE /api/v1/comments/{public_id} — author-only idempotent soft delete.
@@ -637,9 +660,180 @@ struct AdminReasonBody {
 }
 
 #[derive(Deserialize)]
-struct AdminReportActionBody {
+struct AdminModerationActionBody {
     action: Option<String>,
     reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct AdminModerationRuleCreateBody {
+    phrase: Option<String>,
+    match_mode: Option<String>,
+    reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct AdminModerationRulePatchBody {
+    phrase: Option<String>,
+    match_mode: Option<String>,
+    is_active: Option<bool>,
+    reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct AdminModerationRescanBody {
+    cursor: Option<String>,
+    rules_revision: Option<u64>,
+    limit: Option<serde_json::Value>,
+}
+
+fn admin_rescan_limit(raw: Option<serde_json::Value>) -> Result<Option<u64>, ApiError> {
+    let reason = match raw {
+        None | Some(serde_json::Value::Null) => return Ok(None),
+        Some(serde_json::Value::Number(number)) => {
+            if let Some(value) = number.as_u64() {
+                return Ok(Some(value));
+            }
+            if number.as_i64().is_some() {
+                "out_of_range"
+            } else {
+                "invalid"
+            }
+        }
+        Some(_) => "invalid",
+    };
+    let mut fields = BTreeMap::new();
+    fields.insert("limit".to_string(), reason.to_string());
+    Err(ApiError::Validation { fields })
+}
+
+/// GET /api/v1/admin/moderation/rules — private newest-first rule pages.
+async fn admin_moderation_rules(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<axum::response::Response, ApiError> {
+    crate::admin::require_admin(&user)?;
+    let body = crate::moderation_rules::list(
+        &state.pool,
+        params.get("active").map(String::as_str),
+        params.get("cursor").map(String::as_str),
+        params.get("limit").map(String::as_str),
+    )
+    .await?;
+    let mut response = Json(body).into_response();
+    mark_private_viewer(&mut response);
+    Ok(response)
+}
+
+/// POST /api/v1/admin/moderation/rules — create or return an exact duplicate.
+async fn admin_create_moderation_rule(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    ApiJson(body): ApiJson<AdminModerationRuleCreateBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::moderation_rules::create(
+            &state.pool,
+            user.user_id,
+            body.phrase.as_deref(),
+            body.match_mode.as_deref(),
+            body.reason.as_deref(),
+        )
+        .await?,
+    ))
+}
+
+/// PATCH /api/v1/admin/moderation/rules/{public_id} — one audited actual edit.
+async fn admin_update_moderation_rule(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    ApiJson(body): ApiJson<AdminModerationRulePatchBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::moderation_rules::update(
+            &state.pool,
+            user.user_id,
+            &public_id,
+            crate::moderation_rules::RulePatch {
+                phrase: body.phrase,
+                match_mode: body.match_mode,
+                is_active: body.is_active,
+                reason: body.reason.unwrap_or_default(),
+            },
+        )
+        .await?,
+    ))
+}
+
+/// GET /api/v1/admin/moderation/comments — private automatic-review queue.
+async fn admin_moderation_comments(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<axum::response::Response, ApiError> {
+    crate::admin::require_admin(&user)?;
+    let body = crate::comment_moderation::queue(
+        &state.pool,
+        params.get("status").map(String::as_str),
+        params.get("cursor").map(String::as_str),
+        params.get("limit").map(String::as_str),
+    )
+    .await?;
+    let mut response = Json(body).into_response();
+    mark_private_viewer(&mut response);
+    Ok(response)
+}
+
+/// POST /api/v1/admin/moderation/comments/{public_id}/actions — one atomic decision.
+async fn admin_moderation_comment_action(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    ApiJson(body): ApiJson<AdminModerationActionBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::comment_moderation::act(
+            &state.pool,
+            user.user_id,
+            &public_id,
+            body.action.as_deref(),
+            body.reason.as_deref(),
+        )
+        .await?,
+    ))
+}
+
+/// POST /api/v1/admin/moderation/rescan — one revision-checked bounded batch.
+async fn admin_moderation_rescan(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    ApiJson(body): ApiJson<AdminModerationRescanBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    let limit = admin_rescan_limit(body.limit)?;
+    Ok(Json(
+        crate::comment_moderation::rescan(
+            &state.pool,
+            user.user_id,
+            body.cursor.as_deref(),
+            body.rules_revision,
+            limit,
+        )
+        .await?,
+    ))
 }
 
 /// GET /api/v1/admin/reports — oldest-first filtered report queue.
@@ -666,7 +860,7 @@ async fn admin_report_action(
     user: CurrentUser,
     headers: HeaderMap,
     Path(public_id): Path<String>,
-    ApiJson(body): ApiJson<AdminReportActionBody>,
+    ApiJson(body): ApiJson<AdminModerationActionBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     crate::csrf::check_csrf(&headers)?;
     crate::admin::require_admin(&user)?;

@@ -1,6 +1,6 @@
 # Proposed MariaDB Schema
 
-> **خلاصه فارسی:** پایگاه داده MariaDB با موتور InnoDB و `utf8mb4` است. آگهی‌ها دارای وضعیت تأیید ادمین هستند و فقط آگهی‌های تأییدشده عمومی می‌شوند. امتیاز ۱ تا ۵ ستاره، کامنت، ریپورت و بلاک جدا نگه داشته شده‌اند. تعداد امتیازها و میانگین‌ها روی جدول آگهی نگه داشته می‌شود تا لیست‌ها سریع بمانند. ستون مکانی برای جستجوی نزدیک در مرحله بعد به جدول جدا منتقل شده است، چون SPATIAL INDEX نیاز به NOT NULL دارد.
+> **خلاصه فارسی:** پایگاه داده MariaDB با موتور InnoDB و `utf8mb4` است. آگهی‌ها دارای وضعیت تأیید ادمین هستند و فقط آگهی‌های تأییدشده عمومی می‌شوند. امتیاز ۱ تا ۵ ستاره، کامنت، ریپورت، بلاک و پرونده‌های بررسی خودکار دیدگاه جدا نگه داشته شده‌اند. تعداد امتیازها و میانگین‌ها روی جدول آگهی نگه داشته می‌شود تا لیست‌ها سریع بمانند. ستون مکانی برای جستجوی نزدیک در مرحله بعد به جدول جدا منتقل شده است، چون SPATIAL INDEX نیاز به NOT NULL دارد.
 
 ## 1. Conventions
 
@@ -12,7 +12,7 @@
 - Soft delete (`deleted_at`) for users and listings. Hard delete only for personal data on request, after a retention review.
 - Uniqueness and check constraints are enforced in the database.
 - This is a logical design, not executable migration SQL. Migrations are written after approval. Each migration is tested on an empty database.
-- Phase 9 status (2026-10-28): `provinces`, `cities` (+ Gilan/Rasht seed, Rasht = launch city), `categories` (+ the 7 launch seeds), `listings` (price CHECK: fixed requires a price, negotiable optional, free must be NULL), `listing_images`, `admin_audit_logs`, `favorites`, `listing_ratings`, `listing_comments`, `reports`, and `blocks` are built (migrations 0003–0009) with seeds applied. Reset/drop helpers delete reports and blocks before their referenced rows. Still deferred: `listing_locations`, `support_tickets`, profanity keyword table, conversations, messages, and notifications.
+- Phase 10 status (2026-10-31): migrations 0003–0010 build the launch reference/listing/media/audit tables plus favorites, ratings, comments, reports, blocks, literal moderation rules, comment moderation cases, and singleton moderation settings. Migration `0010_comment_moderation.sql` seeds 143 attributed/deduplicated rules and settings revision 1 without backfilling existing comments. Reset/drop helpers delete cases before comments/users and rules/settings in FK-safe order. Still deferred: `listing_locations`, `support_tickets`, conversations, messages, and notifications.
 
 ## 2. Tables
 
@@ -152,7 +152,41 @@ Rules enforced in the service layer and tested: the rater is not the seller, sta
 - Index: `(listing_id, status, created_at, id)` for the newest-first visible keyset feed
 - Index: `(author_id, created_at, id)`
 
-Reasoning: trimmed 1–1000-character comments publish immediately as `visible`. Only `status='visible' AND deleted_at IS NULL` rows appear and count toward `listings.comment_count`; an authenticated viewer's own blocks additionally filter authors only for that viewer. Creation, author-only deletion, and Phase 9 admin hide/restore hold the listing → comment lock order and update the exact visible counter once. Reports alone never set `hidden`; only an admin report action can hide or restore. `removed` remains reserved for a future workflow. Profanity filtering remains required before public launch. Listing deletion cascades comments; author hard-delete is restricted pending a reviewed retention flow.
+Reasoning: a clean trimmed 1–1000-character comment publishes as `visible`; a Phase 10 rule match is inserted as `hidden` with a pending case and returns 202 instead. Only `status='visible' AND deleted_at IS NULL` rows appear and count toward `listings.comment_count`; an authenticated viewer's own blocks additionally filter authors only for that viewer. Creation, author-only deletion, automatic hide, rescan, and admin hide/restore preserve the listing → comment → moderation case lock order and update the exact visible counter at most once per actual transition. Reports alone never set `hidden`; automatic review is independent and a report restore cannot bypass a pending/confirmed case. `removed` remains reserved for a future workflow. Listing deletion cascades comments and their cases; author hard-delete is restricted pending a reviewed retention flow.
+
+### `moderation_rules`
+
+**Built in migration `0010_comment_moderation.sql` (Phase 10).**
+
+- `id BIGINT UNSIGNED PK`, `public_id CHAR(26) UNIQUE NOT NULL`
+- `phrase VARCHAR(120) NOT NULL` — admin-facing literal source text
+- `normalized_phrase VARCHAR(240) NOT NULL` — selected phrase/compact matcher key
+- `dedupe_key VARCHAR(240) UNIQUE NOT NULL` — phrase-form canonical key regardless of mode
+- `match_mode ENUM('phrase','compact') NOT NULL`
+- `is_active BOOLEAN NOT NULL DEFAULT TRUE`, `revision BIGINT UNSIGNED NOT NULL DEFAULT 1`
+- `created_at` / `updated_at DATETIME(3) NOT NULL`
+- Index `(is_active,created_at,id)` for filtered newest-first administration
+
+The seed contains 143 distinct keys (28 phrase + 115 compact), normalized from 146 upstream entries. `THIRD_PARTY_NOTICES.md` records the pinned MIT source; no upstream code or downloaded artifact is committed. Phrase/mode edits recompute keys and increment the rule revision. Every actual mutation increments the singleton global revision; exact duplicate creates and no-op patches do not. Rules are literal, never arbitrary regex.
+
+### `comment_moderation_cases`
+
+**Built in migration `0010_comment_moderation.sql` (Phase 10).**
+
+- `id BIGINT UNSIGNED PK`
+- `comment_id BIGINT UNSIGNED UNIQUE NOT NULL` FK → `listing_comments.id` (`ON DELETE CASCADE`)
+- `status ENUM('pending','confirmed_hidden','restored') NOT NULL`
+- `matched_rules JSON NOT NULL` — snapshots of `{public_id,revision,phrase,match_mode}`
+- `cleared_rules JSON NULL` — restored `{public_id,revision}` pairs; NULL means no clearances
+- `flagged_at` / `updated_at DATETIME(3) NOT NULL`
+- `handled_by BIGINT UNSIGNED NULL` FK → `users.id` (`ON DELETE SET NULL`), `handled_at DATETIME(3) NULL`
+- Index `(status,flagged_at,id)` for oldest-first queue pages
+
+There is one current case per comment; audit rows hold decision history. Restoring clears only the exact matched rule/revision pairs. Unchanged deactivation/reactivation cannot defeat that clearance, while a phrase/mode edit has a new revision and may reopen the case. Snapshots and clearances are internal JSON, never raw API payloads.
+
+### `moderation_settings`
+
+**Built in migration `0010_comment_moderation.sql` (Phase 10).** Singleton `{id TINYINT PK, revision BIGINT UNSIGNED NOT NULL}` with `CHECK(id=1)` and initial revision 1. Its row lock serializes rule mutations and rescan batches. A continuation with an old revision writes nothing and must restart explicitly. Existing visible comments receive no fabricated case during migration; the rollout rescan evaluates them.
 
 ### `favorites`
 
@@ -230,7 +264,7 @@ The integration reset/drop helpers include `favorites`, so a fresh test schema a
 ### `admin_audit_logs`
 - `id BIGINT UNSIGNED PK`
 - `admin_id BIGINT UNSIGNED NOT NULL` FK → `users.id`
-- `action VARCHAR(60) NOT NULL` (for example `listing.approve`, `listing.reject`, `comment.hide`, `report.dismiss`, `user.suspend`)
+- `action VARCHAR(60) NOT NULL` (for example `listing.approve`, `comment.filter_restore`, `moderation_rule.update`, `moderation.rescan`, `report.dismiss`)
 - `target_type VARCHAR(40) NOT NULL`
 - `target_id BIGINT UNSIGNED NOT NULL`
 - `reason VARCHAR(500) NULL`
@@ -238,12 +272,12 @@ The integration reset/drop helpers include `favorites`, so a fresh test schema a
 - `created_at DATETIME(3) NOT NULL`
 - Indexes: `(target_type, target_id, created_at)`, `(admin_id, created_at)`
 
-Every admin mutation writes one row in the same transaction.
+Every actual admin decision/rule mutation and each committed rescan batch writes exactly one row in the same transaction. Idempotent no-ops add none. Automatic comment matching has no admin actor and writes no decision audit; the committed rescan batch itself is audited.
 
 ### Deferred tables
 - `listing_locations` (added with the nearby-sellers feature, see section 4).
 - `support_tickets` (added when support is scoped).
-- Keyword list table for the profanity filter (added before public launch).
+- Semantic/fuzzy moderation services (the literal rule tables are built in migration 0010; upgrades need separate scope).
 
 ## 3. Nearby search (deferred, design notes only)
 
@@ -268,7 +302,7 @@ When the nearby feature returns:
 
 ## 6. Relations overview
 
-- A user has many listings, favorites, ratings, comments, reports, and blocks.
+- A user has many listings, favorites, ratings, comments, reports, and blocks; a moderation case optionally references its handling admin.
 - A listing belongs to one seller, one category, one city, and has many images, favorites, ratings, comments, and conversations.
 - A conversation links one listing, one buyer, and one seller, and has many messages.
-- Reports point to a listing, comment, or user through `target_type` and `target_id`.
+- Reports point to a listing, comment, or user through `target_type` and `target_id`. A comment has at most one current moderation case; rules and the singleton settings revision govern automatic matching and rescans.
