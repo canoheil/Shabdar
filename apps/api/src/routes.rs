@@ -1111,7 +1111,7 @@ async fn serve_media(
     ApiError,
 > {
     let viewer = match current_user {
-        Ok(user) => Some((user.id, user.is_admin)),
+        Ok(user) => Some((user.user_id, user.is_admin)),
         Err(ApiError::Unauthorized) => None,
         Err(error) => return Err(error),
     };
