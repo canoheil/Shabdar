@@ -443,7 +443,12 @@ async fn admin_report_queue_filters_keysets_and_shapes_current_targets() {
             "deleted",
             "author",
             "listing_slug",
+            "moderation_status",
         ],
+    );
+    assert_eq!(
+        comment_item["target"]["moderation_status"],
+        serde_json::Value::Null
     );
     assert_eq!(comment_item["target"]["body"], "متن <b>کامنت</b>");
     assert_eq!(comment_item["target"]["listing_slug"], listing.slug);

@@ -184,11 +184,11 @@ Prove healthy behavior and viewer privacy are unchanged, including concurrent cl
 - Produces: `CommentTransition::{Hide,RestoreReport,RestoreFilter}` and `transition_comment_in_tx(tx,listing_id,comment_id,transition) -> Result<Vec<RuleClearance>,ApiError>`.
 - Produces: `queue(pool,status,cursor,limit)` and `act(pool,admin_id,comment_public_id,action,reason)` for spec §8; report decisions consume the same transition helper.
 
-- [ ] **Step 1: Write failing queue/action tests**
+- [x] **Step 1: Write failing queue/action tests**
 
 Cover admin/CSRF/no-store, status filters, oldest-first default/cap/cursor/anchor-filter changes, safe comment/author/listing snapshots, no internal/clearance/phone data, reason bounds, deleted pending comments, confirm/restore/reversal/invalid transitions, and exact updated items. Assert repeated decisions add no audit/count change and restored clearances contain exactly the matched public-ID/revision pairs.
 
-- [ ] **Step 2: Add report and concurrency RED cases**
+- [x] **Step 2: Add report and concurrency RED cases**
 
 Assert comment report targets expose admin-only `moderation_status`; report restore is rejected for pending/confirmed cases but works after an independent report hide on a restored case. Race create/delete/report-hide/report-restore/filter-confirm/filter-restore and assert exact counters, one audit per actual decision, and no deadlocks under the listing → comment → case order.
 
