@@ -43,27 +43,17 @@ impl RuleRecord {
         let match_mode: String = row.try_get("match_mode").map_err(|_| ApiError::Internal)?;
         Ok(Self {
             id: row.try_get("id").map_err(|_| ApiError::Internal)?,
-            public_id: row
-                .try_get("public_id")
-                .map_err(|_| ApiError::Internal)?,
+            public_id: row.try_get("public_id").map_err(|_| ApiError::Internal)?,
             phrase: row.try_get("phrase").map_err(|_| ApiError::Internal)?,
             normalized_phrase: row
                 .try_get("normalized_phrase")
                 .map_err(|_| ApiError::Internal)?,
-            dedupe_key: row
-                .try_get("dedupe_key")
-                .map_err(|_| ApiError::Internal)?,
+            dedupe_key: row.try_get("dedupe_key").map_err(|_| ApiError::Internal)?,
             match_mode: MatchMode::parse(&match_mode).ok_or(ApiError::Internal)?,
-            is_active: row
-                .try_get("is_active")
-                .map_err(|_| ApiError::Internal)?,
+            is_active: row.try_get("is_active").map_err(|_| ApiError::Internal)?,
             revision: row.try_get("revision").map_err(|_| ApiError::Internal)?,
-            created_at: row
-                .try_get("created_at")
-                .map_err(|_| ApiError::Internal)?,
-            updated_at: row
-                .try_get("updated_at")
-                .map_err(|_| ApiError::Internal)?,
+            created_at: row.try_get("created_at").map_err(|_| ApiError::Internal)?,
+            updated_at: row.try_get("updated_at").map_err(|_| ApiError::Internal)?,
         })
     }
 
@@ -164,9 +154,8 @@ pub async fn list(
     let next_cursor = if has_more {
         rows.last()
             .map(|row| {
-                let created_at: DateTime<Utc> = row
-                    .try_get("created_at")
-                    .map_err(|_| ApiError::Internal)?;
+                let created_at: DateTime<Utc> =
+                    row.try_get("created_at").map_err(|_| ApiError::Internal)?;
                 let id: u64 = row.try_get("id").map_err(|_| ApiError::Internal)?;
                 Ok(crate::listings::encode_cursor(&created_at, id))
             })
@@ -273,9 +262,7 @@ pub async fn update(
     let requested_mode = patch
         .match_mode
         .as_deref()
-        .map(|raw| {
-            MatchMode::parse(raw).ok_or_else(|| validation("match_mode", "invalid"))
-        })
+        .map(|raw| MatchMode::parse(raw).ok_or_else(|| validation("match_mode", "invalid")))
         .transpose()?;
 
     let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
