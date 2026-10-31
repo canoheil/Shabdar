@@ -97,49 +97,106 @@ fn comment_from_row(row: &sqlx::mysql::MySqlRow) -> Result<serde_json::Value, Ap
     }))
 }
 
-/// Publish one visible comment and return its exact public JSON shape.
+#[derive(Debug)]
+pub enum CreateResult {
+    Visible(serde_json::Value),
+    Pending(serde_json::Value),
+}
+
+/// Create one clean public comment or one hidden pending-review case. Active
+/// rules are read once for this attempt; the listing lock still serializes
+/// every counter mutation, and automatic filtering writes no audit or report.
 pub async fn create(
     pool: &MySqlPool,
     user_id: u64,
     slug: &str,
     body: &str,
-) -> Result<serde_json::Value, ApiError> {
+) -> Result<CreateResult, ApiError> {
+    let rules = crate::moderation_rules::active_rules(pool).await?;
+    let matches = crate::moderation::matching_rules(body, &rules);
+    let pending = !matches.is_empty();
+    let matched_rules = if pending {
+        let snapshots = matches
+            .iter()
+            .map(|rule| {
+                serde_json::json!({
+                    "public_id": &rule.public_id,
+                    "revision": rule.revision,
+                    "phrase": &rule.phrase,
+                    "match_mode": rule.match_mode.as_str(),
+                })
+            })
+            .collect::<Vec<_>>();
+        Some(serde_json::to_string(&snapshots).map_err(|_| ApiError::Internal)?)
+    } else {
+        None
+    };
+
     let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
     let listing = lock_listing_for_create(&mut tx, slug).await?;
     let public_id = ulid::Ulid::new().to_string();
     let inserted = sqlx::query(
         "INSERT INTO listing_comments \
-         (public_id, listing_id, author_id, body, created_at, updated_at) \
-         VALUES (?, ?, ?, ?, NOW(3), NOW(3))",
+         (public_id, listing_id, author_id, body, status, created_at, updated_at) \
+         VALUES (?, ?, ?, ?, ?, NOW(3), NOW(3))",
     )
     .bind(&public_id)
     .bind(listing.id)
     .bind(user_id)
     .bind(body)
+    .bind(if pending { "hidden" } else { "visible" })
     .execute(&mut *tx)
     .await
     .map_err(|_| ApiError::Internal)?;
     if inserted.rows_affected() != 1 {
         return Err(ApiError::Internal);
     }
-    let count = listing
-        .comment_count
-        .checked_add(1)
-        .ok_or(ApiError::Internal)?;
-    write_visible_count(&mut tx, listing.id, count).await?;
+    let comment_id = inserted.last_insert_id();
+    if let Some(matched_rules) = matched_rules {
+        let case = sqlx::query(
+            "INSERT INTO comment_moderation_cases \
+             (comment_id, status, matched_rules, flagged_at, updated_at) \
+             VALUES (?, 'pending', ?, NOW(3), NOW(3))",
+        )
+        .bind(comment_id)
+        .bind(matched_rules)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| ApiError::Internal)?;
+        if case.rows_affected() != 1 {
+            return Err(ApiError::Internal);
+        }
+    } else {
+        let count = listing
+            .comment_count
+            .checked_add(1)
+            .ok_or(ApiError::Internal)?;
+        write_visible_count(&mut tx, listing.id, count).await?;
+    }
 
     let row = sqlx::query(
         "SELECT c.public_id, c.body, c.created_at, \
          u.public_id AS author_public_id, u.display_name AS author_name \
          FROM listing_comments c JOIN users u ON u.id = c.author_id WHERE c.id = ?",
     )
-    .bind(inserted.last_insert_id())
+    .bind(comment_id)
     .fetch_one(&mut *tx)
     .await
     .map_err(|_| ApiError::Internal)?;
-    let comment = comment_from_row(&row)?;
+    let result = if pending {
+        let created_at: chrono::DateTime<chrono::Utc> = row
+            .try_get("created_at")
+            .map_err(|_| ApiError::Internal)?;
+        CreateResult::Pending(serde_json::json!({
+            "public_id": public_id,
+            "status": "pending_review",
+            "created_at": created_at.to_rfc3339(),
+        }))
+    } else {
+        CreateResult::Visible(comment_from_row(&row)?)
+    };
     tx.commit().await.map_err(|_| ApiError::Internal)?;
-    Ok(comment)
+    Ok(result)
 }
 
 /// Newest-first keyset page. Only visible, non-deleted rows appear. For a

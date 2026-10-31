@@ -158,11 +158,11 @@ match: status 202, object.keys == [public_id,status,created_at], status == pendi
 invariant: comment_count == COUNT(visible AND deleted_at IS NULL)
 ```
 
-- [ ] **Step 2: Run canonical RED**
+- [x] **Step 2: Run canonical RED**
 
 Expected: matched submissions incorrectly return the old public 200 object and have no case; clean older contracts remain green. Record evidence.
 
-- [ ] **Step 3: Implement conditional creation**
+- [x] **Step 3: Implement conditional creation**
 
 Read active rules once, match before insertion, then keep the existing listing → comment transaction. Insert visible/count +1 for clean results; insert hidden + pending case and no counter write for matches. Return the enum and set 202 only in the route. Do not add moderation fields to list/Detail responses or write an admin audit.
 

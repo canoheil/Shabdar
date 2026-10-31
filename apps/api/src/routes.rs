@@ -442,14 +442,14 @@ async fn listing_comments(
     Ok(response)
 }
 
-/// POST /api/v1/listings/{slug}/comments — publish one visible comment.
+/// POST /api/v1/listings/{slug}/comments — clean 200 or pending-review 202.
 async fn create_comment(
     State(state): State<AppState>,
     user: CurrentUser,
     headers: HeaderMap,
     Path(slug): Path<String>,
     ApiJson(body): ApiJson<CommentBody>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
     crate::csrf::check_csrf(&headers)?;
     let body = crate::comments::validate_body(body.body.as_deref())?;
     state
@@ -460,9 +460,12 @@ async fn create_comment(
             Duration::from_secs(u64::from(state.config.comment_user_window_secs)),
         )
         .into_result()?;
-    Ok(Json(
-        crate::comments::create(&state.pool, user.user_id, &slug, &body).await?,
-    ))
+    match crate::comments::create(&state.pool, user.user_id, &slug, &body).await? {
+        crate::comments::CreateResult::Visible(comment) => Ok((StatusCode::OK, Json(comment))),
+        crate::comments::CreateResult::Pending(comment) => {
+            Ok((StatusCode::ACCEPTED, Json(comment)))
+        }
+    }
 }
 
 /// DELETE /api/v1/comments/{public_id} — author-only idempotent soft delete.
