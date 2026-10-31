@@ -129,10 +129,18 @@ pub fn router(state: AppState) -> Router {
             post(admin_unsuspend_user),
         )
         .route("/api/v1/admin/listings/queue", get(admin_queue))
+        .route(
+            "/api/v1/admin/listings/image-review-queue",
+            get(admin_image_review_queue),
+        )
         .route("/api/v1/admin/listings/{public_id}", get(admin_detail))
         .route(
             "/api/v1/admin/listings/{public_id}/approve",
             post(admin_approve),
+        )
+        .route(
+            "/api/v1/admin/listings/{public_id}/images/review",
+            post(admin_review_legacy_images),
         )
         .route(
             "/api/v1/admin/listings/{public_id}/reject",
@@ -668,6 +676,11 @@ struct AdminReasonBody {
 }
 
 #[derive(Deserialize)]
+struct AdminImagesBody {
+    image_ids: Option<Vec<u64>>,
+}
+
+#[derive(Deserialize)]
 struct AdminModerationActionBody {
     action: Option<String>,
     reason: Option<String>,
@@ -962,6 +975,23 @@ async fn admin_queue(
     ))
 }
 
+/// GET /api/v1/admin/listings/image-review-queue — active legacy image sets.
+async fn admin_image_review_queue(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::admin::image_review_queue(
+            &state.pool,
+            params.get("cursor").map(String::as_str),
+            params.get("limit").map(String::as_str),
+        )
+        .await?,
+    ))
+}
+
 /// GET /api/v1/admin/listings/{public_id} — full view with seller info.
 async fn admin_detail(
     State(state): State<AppState>,
@@ -980,11 +1010,41 @@ async fn admin_approve(
     user: CurrentUser,
     headers: HeaderMap,
     Path(public_id): Path<String>,
+    ApiJson(body): ApiJson<AdminImagesBody>,
 ) -> Result<Json<crate::listings::ListingOut>, ApiError> {
     crate::csrf::check_csrf(&headers)?;
     crate::admin::require_admin(&user)?;
     Ok(Json(
-        crate::admin::approve(&state.pool, &user, &public_id).await?,
+        crate::admin::approve(
+            &state.pool,
+            &state.config,
+            &user,
+            &public_id,
+            body.image_ids.as_deref(),
+        )
+        .await?,
+    ))
+}
+
+/// POST /api/v1/admin/listings/{public_id}/images/review — legacy re-review.
+async fn admin_review_legacy_images(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    ApiJson(body): ApiJson<AdminImagesBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::admin::review_legacy_images(
+            &state.pool,
+            &state.config,
+            &user,
+            &public_id,
+            body.image_ids.as_deref(),
+        )
+        .await?,
     ))
 }
 

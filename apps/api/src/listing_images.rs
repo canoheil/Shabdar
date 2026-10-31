@@ -10,6 +10,7 @@ use std::io::Cursor;
 use image::{GenericImageView, ImageReader};
 use serde::Serialize;
 use sqlx::{MySqlPool, Row};
+use tokio::io::AsyncReadExt;
 
 use crate::error::ApiError;
 
@@ -185,6 +186,39 @@ fn decode_image(bytes: &[u8]) -> Result<ValidatedImage, ImageRejection> {
     })
 }
 
+/// Revalidate stored files at a human review boundary. Reads are capped even
+/// for legacy/corrupted rows, keys are validated before joining the media
+/// path, and each image is decoded sequentially to bound total memory.
+pub async fn validate_stored_images(
+    cfg: &crate::config::Config,
+    images: &[(u64, String)],
+) -> Result<Vec<(u64, u16, u16)>, ApiError> {
+    let mut validated = Vec::with_capacity(images.len());
+    for (id, key) in images {
+        let expected_extension = valid_media_key(key).ok_or_else(|| image_validation("invalid_image"))?;
+        let file = tokio::fs::File::open(std::path::Path::new(&cfg.media_dir).join(key))
+            .await
+            .map_err(|_| image_validation("unreadable"))?;
+        let mut bytes = Vec::new();
+        file.take(cfg.max_image_bytes.saturating_add(1))
+            .read_to_end(&mut bytes)
+            .await
+            .map_err(|_| image_validation("unreadable"))?;
+        if bytes.len() as u64 > cfg.max_image_bytes {
+            return Err(image_validation("too_large"));
+        }
+        let decoded = tokio::task::spawn_blocking(move || decode_image(&bytes))
+            .await
+            .map_err(|_| ApiError::Internal)?
+            .map_err(|error| image_validation(error.reason()))?;
+        if decoded.extension != expected_extension {
+            return Err(image_validation("invalid_image"));
+        }
+        validated.push((*id, decoded.width, decoded.height));
+    }
+    Ok(validated)
+}
+
 /// Server-generated key: `<ulid>/<ulid>.<ext>`. No client path segment can
 /// ever reach the filesystem (traversal impossible by construction).
 fn storage_key(ext: &str) -> String {
@@ -208,8 +242,23 @@ async fn draft_listing_id(
     row.try_get("id").map_err(|_| ApiError::Internal)
 }
 
+async fn clear_review_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
+    listing_id: u64,
+) -> Result<(), ApiError> {
+    sqlx::query(
+        "UPDATE listings SET image_reviewed_by = NULL, image_reviewed_at = NULL, \
+         image_reviewed_ids = NULL WHERE id = ?",
+    )
+    .bind(listing_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|_| ApiError::Internal)?;
+    Ok(())
+}
+
 /// Stores one upload: owner/status/count/size/signature checks, file write,
-/// then the row in the same logical unit (a DB failure removes the file).
+/// then the row and review reset in one DB transaction (failure removes file).
 pub async fn add_image(
     pool: &MySqlPool,
     cfg: &crate::config::Config,
@@ -264,6 +313,13 @@ pub async fn add_image(
     // The insert id comes from the statement result itself: LAST_INSERT_ID()
     // is connection-scoped, and a separate SELECT may land on another pool
     // connection (regression: every upload after the first returned id 1).
+    let mut tx = match pool.begin().await {
+        Ok(tx) => tx,
+        Err(_) => {
+            let _ = tokio::fs::remove_file(&path).await;
+            return Err(ApiError::Internal);
+        }
+    };
     let outcome = sqlx::query(
         "INSERT INTO listing_images \
          (listing_id, storage_key, sort_order, width, height, created_at) \
@@ -275,7 +331,7 @@ pub async fn add_image(
     .bind(validated.width)
     .bind(validated.height)
     .bind(now)
-    .execute(pool)
+    .execute(&mut *tx)
     .await;
     let result = match outcome {
         Ok(result) => result,
@@ -284,6 +340,14 @@ pub async fn add_image(
             return Err(ApiError::Internal);
         }
     };
+    if clear_review_in_tx(&mut tx, listing_id).await.is_err() {
+        let _ = tokio::fs::remove_file(&path).await;
+        return Err(ApiError::Internal);
+    }
+    if tx.commit().await.is_err() {
+        let _ = tokio::fs::remove_file(&path).await;
+        return Err(ApiError::Internal);
+    }
     Ok(ImageOut {
         id: result.last_insert_id(),
         url: format!("/media/{key}"),
@@ -315,11 +379,18 @@ pub async fn remove_image(
     let Some(key) = key else {
         return Err(ApiError::NotFound);
     };
-    sqlx::query("DELETE FROM listing_images WHERE id = ?")
+    let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
+    let deleted = sqlx::query("DELETE FROM listing_images WHERE id = ? AND listing_id = ?")
         .bind(image_id)
-        .execute(pool)
+        .bind(listing_id)
+        .execute(&mut *tx)
         .await
         .map_err(|_| ApiError::Internal)?;
+    if deleted.rows_affected() != 1 {
+        return Err(ApiError::NotFound);
+    }
+    clear_review_in_tx(&mut tx, listing_id).await?;
+    tx.commit().await.map_err(|_| ApiError::Internal)?;
     let _ = tokio::fs::remove_file(std::path::Path::new(&cfg.media_dir).join(&key)).await;
     Ok(())
 }

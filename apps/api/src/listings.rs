@@ -485,7 +485,9 @@ pub async fn transition(
             // A resubmit starts a fresh review: the old reason is cleared.
             sqlx::query(
                 "UPDATE listings SET status = 'pending', submitted_at = ?, \
-                 rejection_reason = NULL, updated_at = ? WHERE id = ?",
+                 rejection_reason = NULL, image_reviewed_by = NULL, \
+                 image_reviewed_at = NULL, image_reviewed_ids = NULL, \
+                 updated_at = ? WHERE id = ?",
             )
             .bind(now)
             .bind(now)
