@@ -81,9 +81,9 @@ Required: empty-schema migrations plus comments, reports, blocks, ratings, favor
 Add the interface declarations with `todo!()` bodies only so behavioral tests compile. Define a test-only `matches(rule,body,mode)` helper that constructs one `ModerationRule` and delegates to `matching_rules`. Test empty/121-character/one-alphanumeric rules, Arabic `ي/ى/ك`, diacritics, every listed control range, ASCII case, repeated characters, phrase versus compact dedupe keys, and both match modes. Key assertions include:
 
 ```rust
-assert_eq!(normalize_rule("Foo, BAR", MatchMode::Phrase)?.normalized_phrase, "foo bar");
-assert_eq!(normalize_rule("Foo, BAR", MatchMode::Compact)?.normalized_phrase, "foobar");
-assert_eq!(normalize_rule("Foo, BAR", MatchMode::Compact)?.dedupe_key, "foo bar");
+assert_eq!(normalize_rule("Foo, BAR", MatchMode::Phrase)?.normalized_phrase, "fo bar");
+assert_eq!(normalize_rule("Foo, BAR", MatchMode::Compact)?.normalized_phrase, "fobar");
+assert_eq!(normalize_rule("Foo, BAR", MatchMode::Compact)?.dedupe_key, "fo bar");
 assert!(matches("bad", "bad," , MatchMode::Phrase));
 assert!(!matches("bad", "badly", MatchMode::Phrase));
 assert!(matches("bad", "b a d", MatchMode::Compact));

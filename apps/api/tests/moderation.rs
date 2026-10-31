@@ -50,12 +50,12 @@ fn rule_validation_uses_unicode_scalar_limits_and_normalized_alphanumerics() {
 fn normalization_maps_persian_arabic_letters_ascii_case_and_repetition() {
     let phrase = normalize_rule("  Foo, BAR  ", MatchMode::Phrase).unwrap();
     assert_eq!(phrase.phrase, "Foo, BAR");
-    assert_eq!(phrase.normalized_phrase, "foo bar");
-    assert_eq!(phrase.dedupe_key, "foo bar");
+    assert_eq!(phrase.normalized_phrase, "fo bar");
+    assert_eq!(phrase.dedupe_key, "fo bar");
 
     let compact = normalize_rule("Foo, BAR", MatchMode::Compact).unwrap();
-    assert_eq!(compact.normalized_phrase, "foobar");
-    assert_eq!(compact.dedupe_key, "foo bar");
+    assert_eq!(compact.normalized_phrase, "fobar");
+    assert_eq!(compact.dedupe_key, "fo bar");
 
     let mapped = normalize_rule("كك يي ىى", MatchMode::Phrase).unwrap();
     assert_eq!(mapped.normalized_phrase, "ک ی ی");
