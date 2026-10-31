@@ -188,6 +188,7 @@ export async function createListing(input: CreateListingInput): Promise<{ public
     if (admin) {
       const approved = await admin.post(`/api/v1/admin/listings/${listing.public_id}/approve`)
       if (!approved.ok()) throw await responseError(approved, 'Approve listing fixture')
+      await markImagesReviewedForFixture(listing.public_id)
     }
     if (imageCount === 0) await removeImagesForFixture(listing.public_id)
     return { publicId: listing.public_id, slug: listing.slug }
@@ -234,6 +235,15 @@ export async function initializeStack(): Promise<void> {
     buyerTwoStorage: BUYER_TWO_STORAGE,
   }
   writeFileSync(FIXTURES_FILE, `${JSON.stringify(fixtures, null, 2)}\n`)
+}
+
+// Active browser fixtures represent an already reviewed image set. Pending
+// review interaction is covered separately by the admin workflow tests.
+async function markImagesReviewedForFixture(publicId: string): Promise<void> {
+  const escaped = publicId.replaceAll("'", "''")
+  await runSql(
+    `UPDATE listings SET image_reviewed_by = seller_id, image_reviewed_at = NOW(3), image_reviewed_ids = JSON_ARRAY() WHERE public_id = '${escaped}'`,
+  )
 }
 
 // Used by later empty-media fixtures without changing any application contract.

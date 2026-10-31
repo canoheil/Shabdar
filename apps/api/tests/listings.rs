@@ -720,11 +720,15 @@ async fn create_active_with(
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    sqlx::query("UPDATE listings SET status = 'active', published_at = NOW(3) WHERE public_id = ?")
-        .bind(&public_id)
-        .execute(pool)
-        .await
-        .expect("activate");
+    sqlx::query(
+        "UPDATE listings SET status = 'active', published_at = NOW(3), \
+         image_reviewed_by = seller_id, image_reviewed_at = NOW(3), \
+         image_reviewed_ids = JSON_ARRAY() WHERE public_id = ?",
+    )
+    .bind(&public_id)
+    .execute(pool)
+    .await
+    .expect("activate with reviewed fixture images");
     if let Some((sum, count)) = rating {
         sqlx::query("UPDATE listings SET rating_sum = ?, rating_count = ? WHERE public_id = ?")
             .bind(sum)

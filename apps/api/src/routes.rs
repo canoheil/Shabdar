@@ -1096,23 +1096,40 @@ async fn sitemap_listings(
     Ok(Json(page))
 }
 
-/// GET /media/{*key} — serves one stored listing photo (public, like the
-/// listing itself). Strict key shape; traversal and unknown keys → 404.
+/// GET /media/{*key} — reviewed active photos are public; all other photos
+/// require their owner or an admin. Unknown and unauthorized keys are 404.
 async fn serve_media(
     State(state): State<AppState>,
     Path(key): Path<String>,
+    current_user: Result<CurrentUser, ApiError>,
 ) -> Result<
     (
         StatusCode,
-        [(axum::http::header::HeaderName, &'static str); 1],
+        [(axum::http::header::HeaderName, &'static str); 4],
         Vec<u8>,
     ),
     ApiError,
 > {
-    let (bytes, content_type) = crate::listing_images::read_media(&state.config, &key).await?;
+    let viewer = match current_user {
+        Ok(user) => Some((user.id, user.is_admin)),
+        Err(ApiError::Unauthorized) => None,
+        Err(error) => return Err(error),
+    };
+    let (bytes, content_type, public) =
+        crate::listing_images::read_media(&state.pool, &state.config, &key, viewer).await?;
+    let cache_control = if public {
+        "public, no-cache"
+    } else {
+        "private, no-store"
+    };
     Ok((
         StatusCode::OK,
-        [(axum::http::header::CONTENT_TYPE, content_type)],
+        [
+            (axum::http::header::CONTENT_TYPE, content_type),
+            (axum::http::header::CACHE_CONTROL, cache_control),
+            (axum::http::header::VARY, "Cookie"),
+            (axum::http::header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+        ],
         bytes,
     ))
 }

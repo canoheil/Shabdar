@@ -400,18 +400,45 @@ fn is_crockford(s: &str) -> bool {
     })
 }
 
-/// Reads one stored file for `GET /media/…`. No auth: a listing's photos are
-/// public exactly like the listing, and the ULID keys are unguessable.
-/// Missing files and malformed keys are both 404 (no existence signal).
+/// Reads one stored file for `GET /media/…`. The parent listing is resolved
+/// before disk access: reviewed active images are public; every other image
+/// is owner/admin only. Missing, unknown, and unauthorized keys are all 404.
 pub async fn read_media(
+    pool: &MySqlPool,
     cfg: &crate::config::Config,
     key: &str,
-) -> Result<(Vec<u8>, &'static str), ApiError> {
+    viewer: Option<(u64, bool)>,
+) -> Result<(Vec<u8>, &'static str, bool), ApiError> {
     let content_type = valid_media_key(key).ok_or(ApiError::NotFound)?;
+    let row = sqlx::query(
+        "SELECT l.seller_id, l.status, l.deleted_at, \
+         l.image_reviewed_at IS NOT NULL AS image_reviewed \
+         FROM listing_images i JOIN listings l ON l.id = i.listing_id \
+         WHERE i.storage_key = ?",
+    )
+    .bind(key)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::Internal)?
+    .ok_or(ApiError::NotFound)?;
+    let status: String = row.try_get("status").map_err(|_| ApiError::Internal)?;
+    let deleted_at: Option<chrono::DateTime<chrono::Utc>> =
+        row.try_get("deleted_at").map_err(|_| ApiError::Internal)?;
+    let image_reviewed: bool = row
+        .try_get("image_reviewed")
+        .map_err(|_| ApiError::Internal)?;
+    let public = status == "active" && deleted_at.is_none() && image_reviewed;
+    if !public {
+        let seller_id: u64 = row.try_get("seller_id").map_err(|_| ApiError::Internal)?;
+        let allowed = viewer.is_some_and(|(user_id, is_admin)| is_admin || user_id == seller_id);
+        if !allowed {
+            return Err(ApiError::NotFound);
+        }
+    }
     let bytes = tokio::fs::read(std::path::Path::new(&cfg.media_dir).join(key))
         .await
         .map_err(|_| ApiError::NotFound)?;
-    Ok((bytes, content_type))
+    Ok((bytes, content_type, public))
 }
 
 #[cfg(test)]

@@ -95,6 +95,22 @@ pub fn listing_out(row: &sqlx::mysql::MySqlRow) -> Result<ListingOut, ApiError> 
     })
 }
 
+/// Public callers must not learn that a legacy or newly edited image set is
+/// still waiting for human review. Callers select these two SQL booleans on
+/// their listing row; zero-image active listings intentionally remain public.
+pub(crate) fn check_public_image_review(
+    row: &sqlx::mysql::MySqlRow,
+) -> Result<(), ApiError> {
+    let has_images: bool = row.try_get("has_images").map_err(|_| ApiError::Internal)?;
+    let image_reviewed: bool = row
+        .try_get("image_reviewed")
+        .map_err(|_| ApiError::Internal)?;
+    if has_images && !image_reviewed {
+        return Err(ApiError::NotFound);
+    }
+    Ok(())
+}
+
 /// Server-side slug from a Persian title: trim, whitespace runs become one
 /// `-`, keep Unicode alphanumerics and `-` only, cut to 180 chars. Falls back
 /// to `listing` when nothing survives (e.g. a symbols-only title).
@@ -878,7 +894,9 @@ pub async fn feed(
          FROM listings l JOIN cities c ON c.id = l.city_id \
          JOIN provinces p ON p.id = c.province_id \
          JOIN categories cat ON cat.id = l.category_id \
-         WHERE l.status = 'active' AND l.deleted_at IS NULL",
+         WHERE l.status = 'active' AND l.deleted_at IS NULL \
+         AND (l.image_reviewed_at IS NOT NULL OR NOT EXISTS(\
+              SELECT 1 FROM listing_images i WHERE i.listing_id = l.id))",
         keys[0], keys[1], keys[2]
     );
     // Fixed fragments only; every value is bound, never interpolated.
@@ -990,7 +1008,9 @@ pub async fn detail(
     viewer_user_id: Option<u64>,
 ) -> Result<serde_json::Value, ApiError> {
     let row = sqlx::query(
-        "SELECT l.*, c.name_fa AS city, p.name_fa AS province, cat.name_fa AS category, \
+        "SELECT l.*, l.image_reviewed_at IS NOT NULL AS image_reviewed, \
+         EXISTS(SELECT 1 FROM listing_images i WHERE i.listing_id = l.id) AS has_images, \
+         c.name_fa AS city, p.name_fa AS province, cat.name_fa AS category, \
          u.public_id AS seller_public_id, u.display_name AS seller_name \
          FROM listings l JOIN cities c ON c.id = l.city_id \
          JOIN provinces p ON p.id = c.province_id \
@@ -1011,6 +1031,7 @@ pub async fn detail(
     if status != "active" {
         return Err(ApiError::NotFound);
     }
+    check_public_image_review(&row)?;
     let id: u64 = row.try_get("id").map_err(|_| ApiError::Internal)?;
     let viewer_state = match viewer_user_id {
         Some(viewer_user_id) => {
@@ -1089,13 +1110,15 @@ pub async fn sitemap(
 ) -> Result<serde_json::Value, ApiError> {
     let limit = page_limit(limit_raw);
     let anchor: Option<(chrono::DateTime<Utc>, u64)> = cursor.map(decode_cursor).transpose()?;
-    let mut sql = "SELECT id, slug, updated_at FROM listings \
-         WHERE status = 'active' AND deleted_at IS NULL"
+    let mut sql = "SELECT l.id, l.slug, l.updated_at FROM listings l \
+         WHERE l.status = 'active' AND l.deleted_at IS NULL \
+         AND (l.image_reviewed_at IS NOT NULL OR NOT EXISTS(\
+              SELECT 1 FROM listing_images i WHERE i.listing_id = l.id))"
         .to_string();
     if anchor.is_some() {
-        sql.push_str(" AND (updated_at, id) < (?, ?)");
+        sql.push_str(" AND (l.updated_at, l.id) < (?, ?)");
     }
-    sql.push_str(" ORDER BY updated_at DESC, id DESC LIMIT ?");
+    sql.push_str(" ORDER BY l.updated_at DESC, l.id DESC LIMIT ?");
     let mut q = sqlx::query(&sql);
     if let Some((ts, id)) = anchor {
         q = q.bind(ts).bind(id);
