@@ -291,10 +291,7 @@ fn image_ids_validation(reason: &str) -> ApiError {
     ApiError::Validation { fields }
 }
 
-async fn current_images(
-    pool: &MySqlPool,
-    listing_id: u64,
-) -> Result<Vec<(u64, String)>, ApiError> {
+async fn current_images(pool: &MySqlPool, listing_id: u64) -> Result<Vec<(u64, String)>, ApiError> {
     let rows = sqlx::query(
         "SELECT id, storage_key FROM listing_images \
          WHERE listing_id = ? ORDER BY sort_order, id",
@@ -307,8 +304,7 @@ async fn current_images(
         .map(|row| {
             Ok((
                 row.try_get("id").map_err(|_| ApiError::Internal)?,
-                row.try_get("storage_key")
-                    .map_err(|_| ApiError::Internal)?,
+                row.try_get("storage_key").map_err(|_| ApiError::Internal)?,
             ))
         })
         .collect()
@@ -400,8 +396,7 @@ async fn review_exact_images(
         .map(|row| {
             Ok((
                 row.try_get("id").map_err(|_| ApiError::Internal)?,
-                row.try_get("storage_key")
-                    .map_err(|_| ApiError::Internal)?,
+                row.try_get("storage_key").map_err(|_| ApiError::Internal)?,
             ))
         })
         .collect::<Result<Vec<(u64, String)>, ApiError>>()?;
@@ -409,17 +404,18 @@ async fn review_exact_images(
         return Err(image_ids_validation("mismatch"));
     }
     for (image_id, width, height) in dimensions {
-        sqlx::query("UPDATE listing_images SET width = ?, height = ? WHERE id = ? AND listing_id = ?")
-            .bind(width)
-            .bind(height)
-            .bind(image_id)
-            .bind(listing_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|_| ApiError::Internal)?;
+        sqlx::query(
+            "UPDATE listing_images SET width = ?, height = ? WHERE id = ? AND listing_id = ?",
+        )
+        .bind(width)
+        .bind(height)
+        .bind(image_id)
+        .bind(listing_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| ApiError::Internal)?;
     }
-    let reviewed_ids_json =
-        serde_json::to_string(&reviewed_ids).map_err(|_| ApiError::Internal)?;
+    let reviewed_ids_json = serde_json::to_string(&reviewed_ids).map_err(|_| ApiError::Internal)?;
     let now = Utc::now();
     let changed = match mode {
         ImageReviewMode::PublishPending => sqlx::query(
