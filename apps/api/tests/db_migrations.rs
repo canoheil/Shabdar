@@ -698,11 +698,10 @@ async fn comment_moderation_schema_seed_and_foreign_keys_enforce_invariants() {
             .await
             .expect("moderation handler ID");
     sqlx::query(
-        "INSERT INTO listings \
-         (public_id, author_id, title, description, category, location, price_minor, \
-          status, created_at, updated_at) \
-         VALUES ('JJJJJJJJJJJJJJJJJJJJJJJJJJ', ?, 'Moderation fixture', 'Description', \
-                 'other', 'Tehran', 1000, 'active', NOW(3), NOW(3))",
+        "INSERT INTO listings (public_id, seller_id, category_id, city_id, title, slug, \
+         description, price_toman, price_type, status, created_at, updated_at) VALUES \
+         ('JJJJJJJJJJJJJJJJJJJJJJJJJJ', ?, 1, 1, 'Moderation fixture', \
+          'moderation-schema-fixture', 'Description', 1000, 'fixed', 'active', NOW(3), NOW(3))",
     )
     .bind(author)
     .execute(&pool)
@@ -776,8 +775,11 @@ async fn comment_moderation_schema_seed_and_foreign_keys_enforce_invariants() {
 
 #[test]
 fn moderation_seed_has_complete_upstream_notice() {
-    let notice = std::fs::read_to_string("../THIRD_PARTY_NOTICES.md")
-        .expect("root third-party notice must exist");
+    let notice = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../THIRD_PARTY_NOTICES.md"
+    ))
+    .expect("root third-party notice must exist");
     for required in [
         "https://github.com/kaveh-dev/persian-bad-words",
         "4172f148dd9de014494b12693382cdad2ba1f2f5",
