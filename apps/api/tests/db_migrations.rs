@@ -205,12 +205,11 @@ async fn image_review_schema_is_nullable_but_never_partially_attributed() {
     .execute(&pool)
     .await
     .expect("image reviewer fixture");
-    let reviewer: u64 = sqlx::query_scalar(
-        "SELECT id FROM users WHERE public_id = 'IIIIIIIIIIIIIIIIIIIIIIIIII'",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("reviewer ID");
+    let reviewer: u64 =
+        sqlx::query_scalar("SELECT id FROM users WHERE public_id = 'IIIIIIIIIIIIIIIIIIIIIIIIII'")
+            .fetch_one(&pool)
+            .await
+            .expect("reviewer ID");
     sqlx::query(
         "INSERT INTO listings (public_id, seller_id, category_id, city_id, title, slug, \
          description, price_toman, price_type, status, created_at, updated_at) VALUES \
@@ -222,14 +221,17 @@ async fn image_review_schema_is_nullable_but_never_partially_attributed() {
     .await
     .expect("legacy listing starts with NULL image review");
 
-    let initial: (Option<u64>, Option<chrono::DateTime<chrono::Utc>>, Option<Vec<u8>>) =
-        sqlx::query_as(
-            "SELECT image_reviewed_by, image_reviewed_at, image_reviewed_ids \
+    let initial: (
+        Option<u64>,
+        Option<chrono::DateTime<chrono::Utc>>,
+        Option<Vec<u8>>,
+    ) = sqlx::query_as(
+        "SELECT image_reviewed_by, image_reviewed_at, image_reviewed_ids \
              FROM listings WHERE public_id = 'HHHHHHHHHHHHHHHHHHHHHHHHHH'",
-        )
-        .fetch_one(&pool)
-        .await
-        .expect("all legacy review fields exist and are NULL");
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("all legacy review fields exist and are NULL");
     assert!(initial.0.is_none() && initial.1.is_none() && initial.2.is_none());
 
     sqlx::query(

@@ -230,13 +230,12 @@ async fn uploaded_file_is_served_back_with_bytes() {
         (body["width"].as_u64(), body["height"].as_u64()),
         (Some(3), Some(2))
     );
-    let stored: (u16, u16) = sqlx::query_as(
-        "SELECT width, height FROM listing_images WHERE storage_key = ?",
-    )
-    .bind(key)
-    .fetch_one(&pool)
-    .await
-    .expect("decoded dimensions are persisted");
+    let stored: (u16, u16) =
+        sqlx::query_as("SELECT width, height FROM listing_images WHERE storage_key = ?")
+            .bind(key)
+            .fetch_one(&pool)
+            .await
+            .expect("decoded dimensions are persisted");
     assert_eq!(stored, (3, 2));
     // WebP rides the same path (third accepted signature).
     let (status, body) = upload(
@@ -251,7 +250,10 @@ async fn uploaded_file_is_served_back_with_bytes() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert!(body["url"].as_str().unwrap().ends_with(".webp"));
-    assert_eq!((body["width"].as_u64(), body["height"].as_u64()), (Some(5), Some(4)));
+    assert_eq!(
+        (body["width"].as_u64(), body["height"].as_u64()),
+        (Some(5), Some(4))
+    );
 
     // The minted URL serves the exact bytes back (no auth needed — reading a
     // listing's photo is public, like the listing itself).
@@ -435,8 +437,16 @@ async fn upload_rejects_animated_png_and_webp() {
         &cookie,
         &csrf,
         &[
-            ("animated.png", include_bytes!("fixtures/animated.png"), "animated"),
-            ("animated.webp", include_bytes!("fixtures/animated.webp"), "animated"),
+            (
+                "animated.png",
+                include_bytes!("fixtures/animated.png"),
+                "animated",
+            ),
+            (
+                "animated.webp",
+                include_bytes!("fixtures/animated.webp"),
+                "animated",
+            ),
         ],
     )
     .await;
@@ -463,8 +473,16 @@ async fn upload_rejects_excess_dimensions_and_decoded_pixels() {
         &cookie,
         &csrf,
         &[
-            ("dimensions.png", include_bytes!("fixtures/dimensions.png"), "too_large"),
-            ("pixels.png", include_bytes!("fixtures/pixels.png"), "too_large"),
+            (
+                "dimensions.png",
+                include_bytes!("fixtures/dimensions.png"),
+                "too_large",
+            ),
+            (
+                "pixels.png",
+                include_bytes!("fixtures/pixels.png"),
+                "too_large",
+            ),
         ],
     )
     .await;
