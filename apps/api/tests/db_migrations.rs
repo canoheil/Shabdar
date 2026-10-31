@@ -750,8 +750,8 @@ async fn comment_moderation_schema_seed_and_foreign_keys_enforce_invariants() {
         sqlx::query_scalar("SELECT handled_by FROM comment_moderation_cases WHERE comment_id = ?")
             .bind(comment)
             .fetch_one(&pool)
-    .await
-    .expect("nullable moderation handler");
+            .await
+            .expect("nullable moderation handler");
     assert_eq!(handled_by, None);
 
     sqlx::query("DELETE FROM listings WHERE id = ?")
@@ -769,8 +769,8 @@ async fn comment_moderation_schema_seed_and_foreign_keys_enforce_invariants() {
         sqlx::query_scalar("SELECT COUNT(*) FROM comment_moderation_cases WHERE comment_id = ?")
             .bind(comment)
             .fetch_one(&pool)
-    .await
-    .expect("cascaded case count");
+            .await
+            .expect("cascaded case count");
     assert_eq!((remaining_comments, remaining_cases), (0, 0));
 }
 
