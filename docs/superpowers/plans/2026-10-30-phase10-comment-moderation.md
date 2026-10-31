@@ -226,15 +226,17 @@ Cover new/continuation validation, malformed cursors, 0/51/non-integer limits, a
 
 Expected: `/admin/moderation/rescan` returns 404; previous creation/decision suites remain green. Record evidence.
 
-- [ ] **Step 3: Implement transactional batches**
+- [x] **Step 3: Implement transactional batches**
 
 Lock settings and validate expected revision before writes; read active rules once. Page visible/non-deleted rows by public ID ascending with a maximum of 50 and batch-load current cases without taking case locks early. For each unignored match, use the shared listing → comment → case sequence, revalidate visibility, decrement once, and insert/reopen pending with fresh snapshots. Add the single `moderation.rescan` audit before commit.
 
-- [ ] **Step 4: Run GREEN and complete API regression**
+- [x] **Step 4: Run GREEN and complete API regression**
 
 Include a lost-response analogue: repeat the same cursor after a committed batch and assert no double decrement; the second `flagged_count` reflects only new transitions. Verify a complete multi-page run and all older suites.
 
-- [ ] **Step 5: Commit**
+Canonical GREEN: run `41203219015`, job `124543015478`, head `44065099a40b7d0da55b2904471be79b3228e7fd`; all six rescan tests and the complete API suite passed, followed by 81/81 browser tests and all performance gates. A native MariaDB 1020 race was fixed by rebuilding only fully rolled-back batches from a fresh snapshot (bounded 1020/1213 retry); temporary diagnostics were removed.
+
+- [x] **Step 5: Commit**
 
 `feat(api): add safe existing comment rescan`
 
