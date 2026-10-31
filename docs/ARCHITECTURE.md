@@ -1,6 +1,6 @@
 # Architecture and Phase 0 Decisions
 
-> **خلاصه فارسی:** معماری یک API با Rust و Axum، پایگاه داده MariaDB و رابط Nuxt با SSR است. توسعه کاملاً روی ترموکس انجام می‌شود و نسخه لوکال روی همان گوشی از طریق مرورگر دیده می‌شود. فعلاً سرور عمومی وجود ندارد. آگهی‌ها با تأیید ادمین منتشر می‌شوند. فیلتر کلمات رکیک فارسی باید پیش از انتشار عمومی اضافه شود.
+> **خلاصه فارسی:** معماری یک API با Rust و Axum، پایگاه داده MariaDB و رابط Nuxt با SSR است. توسعه کاملاً روی ترموکس انجام می‌شود و نسخه لوکال روی همان گوشی از طریق مرورگر دیده می‌شود. فعلاً سرور عمومی وجود ندارد. آگهی‌ها با تأیید ادمین منتشر می‌شوند. فیلتر قطعی دیدگاه فارسی با MariaDB، قوانین مدیریت‌شده و rescan در فاز ۱۰ پیاده‌سازی شده است؛ تکمیل rollout و سایر بررسی‌های انتشار همچنان لازم‌اند.
 
 ## 1. Goals and constraints
 
@@ -65,7 +65,7 @@ Browser (phone)
 │   │       ├── services/               # business rules and transactions
 │   │       ├── db/                     # sqlx queries and row structs
 │   │       ├── auth/                   # OTP, session, CSRF
-│   │       ├── moderation/             # status rules, report actions, filter hook (empty in v1)
+│   │       ├── moderation*.rs          # literal matching, rules, cases, transitions, rescans
 │   │       └── storage/                # disk adapter behind a small trait
 │   └── web/
 │       ├── package.json
@@ -96,9 +96,10 @@ Dependencies to start with (final list checked on Termux): `axum`, `tokio`, `sql
 ## 6. Moderation and content rules (v1)
 
 - **Listing moderation:** every listing is reviewed by an admin before it becomes public. Automated checks never approve or reject. In v1 there is no automated filter.
-- **Comments:** published immediately. A user report hides the comment at once. Admin can restore or remove it.
+- **Comments:** clean comments publish immediately. A deterministic rule match hides new or rescanned comments pending human review. A user report alone never hides a comment; independent admin report/filter decisions share exact locked visibility transitions.
 - **Reports:** one per user per target. Admin actions: hide comment, restore comment, remove listing, suspend user, or dismiss. Each action is audited.
-- **Profanity filter (required before public launch):** a Persian word list with normalization (Arabic letters to Persian, zero-width characters removed, repeated characters collapsed). Matches set a comment to `hidden` for review. The module (`moderation/`) is created in v1 as an empty hook so the filter can be plugged in without refactoring.
+- **Automatic review privacy and counters:** pending comments never enter public/viewer feeds or increment visible counts. Public 202 responses omit bodies/rules/internal IDs. Restore stores rule/revision clearances; report restore cannot bypass pending/confirmed cases. All comment transitions use listing → comment → case locking; rescan additionally locks the settings revision and audits each committed batch.
+- **Comment moderation (Phase 10):** MariaDB-backed literal phrase/compact rules use deterministic Persian/Arabic mapping, listed diacritic/zero-width/bidi/BOM removal, ASCII lowercasing, repeated-character collapsing, and separator-evasion matching. `moderation.rs` is pure matching; `moderation_rules.rs` and `comment_moderation.rs` own snapshots, revisions, clearances, transactions, and admin/rescan workflows. No arbitrary regex, fuzzy/semantic/transliteration service, or new dependency is used.
 - **Image moderation:** admin review only in v1. Automated image checks are a later decision (they need an external service or heavy local models).
 
 ## 7. Security and privacy
@@ -127,7 +128,7 @@ Dependencies to start with (final list checked on Termux): `axum`, `tokio`, `sql
 
 ### Rust/API
 - Unit tests: OTP expiry and attempts, listing state transitions, rating rules (no self-rating, one per user), popular score formula, report uniqueness, slug generation.
-- Integration tests against a test database in native MariaDB: migrations, auth boundaries, listing lifecycle (draft → pending → active/rejected), admin audit writes, comment hide on report, block effects.
+- Integration tests against MariaDB: migrations, auth boundaries, listing lifecycle, admin audits, report-alone no-hide behavior, blocker-only filtering, deterministic 200/202 comment creation, queue/report interoperability, clearances, rescan revisions/retries, and concurrent exact counters.
 - Storage tests with a temporary directory: traversal rejected, invalid image rejected.
 - Contract tests for the documented error shape and status codes.
 
@@ -153,7 +154,7 @@ Dependencies to start with (final list checked on Termux): `axum`, `tokio`, `sql
 7. **Retention:** OTP records, IP hashes, messages, reports, and deleted listings.
 
 ### Must do before public launch
-- **Persian profanity filter for comments.** Comments are unfiltered in v1. Must be added before the site is public. Also recorded in STATUS.md.
+- **Comment-moderation rollout.** Phase 10 implements deterministic filtering. Before claiming the existing corpus has passed this launch blocker, run one complete production rescan and review its initial pending backlog; later rule changes require another full rescan. Also recorded in STATUS.md.
 - Image moderation decision.
 - Privacy policy and terms of use.
 - Backup and restore test for the database and media files.

@@ -330,17 +330,19 @@ Add final run IDs, browser count, Home/Detail bytes/scripts, and three-run media
 **Files:**
 - Modify: `docs/{API.md,DATABASE.md,PRODUCT.md,ARCHITECTURE.md,STATUS.md}`, `apps/api/README.md`, this plan
 
-- [ ] **Step 1: Update API/database/README contracts**
+- [x] **Step 1: Update API/database/README contracts**
 
 Document normalization/modes, exact 200/202 union, all admin routes/validation/cursors/revisions, queue state machine, report guard, clearances, rescan batches/audits/count semantics, lock/counter invariants, and curl reproduction. Mark migration 0010 built and include the pinned source notice. Remove stale unfiltered-comment and immediate-report-hide claims; keep chat/notifications/distributed limits out.
 
-- [ ] **Step 2: Document rollout and STATUS once**
+- [x] **Step 2: Document rollout and STATUS once**
 
 Require one complete rescan plus initial pending-backlog review before claiming the existing corpus passed the launch blocker. Record every canonical RED/GREEN pair, final gate measurements, and accepted ceilings from spec §12. Name a next domain only after Phase 10 is green; do not claim full public-launch readiness.
 
-- [ ] **Step 3: Final review and push**
+- [x] **Step 3: Final review and push**
 
 Run `git diff --check`; inspect cumulative changes for secrets, downloaded/source artifacts, dependency changes, internal-ID/rule leaks, unscoped files, and unchecked evidence. Commit `docs: record phase 10 verification`, push only `arena/4b608814-shabdar`, and watch the resulting final workflow. Open a PR only when requested; never merge automatically.
+
+Review record: the cumulative branch diff was checked for secrets, generated/downloaded artifacts, dependency changes, unscoped files, public rule/internal-ID leaks, and stale report/filter claims. No dependencies, budgets, or anonymous performance routes changed. Native author self-review and its independence limitation are recorded in STATUS; the canonical implementation/quality evidence is run `41206964350`.
 
 ---
 

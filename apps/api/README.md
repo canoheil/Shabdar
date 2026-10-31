@@ -1,6 +1,6 @@
 # Shabdar API (`apps/api`)
 
-Rust + Axum REST API for the Shabdar marketplace. Phase 1–9 scope: MariaDB
+Rust + Axum REST API for the Shabdar marketplace. Phase 1–10 scope: MariaDB
 via sqlx (runtime queries only — no compile-time macros), `GET /api/v1/health`,
 dev-mode OTP login (`POST /api/v1/auth/otp/request` +
 `POST /api/v1/auth/otp/verify`) issuing a 30-day session cookie + a CSRF
@@ -10,12 +10,14 @@ domain: reference reads (categories, provinces/cities), seller listing
 write (draft → pending → sold/archived/deleted), public feed/detail/sitemap,
 local-disk image uploads, the admin approve/reject/remove queue with
 audit rows, atomic personal favorites, one-rating-per-user listing ratings,
-immediate paginated comments with exact listing counters, idempotent reports
-and directed blocks, blocker-only comment filtering, and the admin report/user
+paginated comments with exact listing counters, deterministic Persian/Finglish
+literal review for new and existing comments, idempotent reports and directed
+blocks, blocker-only comment filtering, and the admin report/user/filter
 moderation surfaces. The Nuxt frontend lives in `apps/web` and talks to this
 API through its same-origin `/api` proxy. Reports never automatically hide
-content; only an admin decision does. Chat, notifications, and profanity
-filtering remain later phases.
+content; automatic comment review is an independent path and never deletes or
+suspends by itself. Chat, notifications, semantic/fuzzy moderation, and other
+launch checks remain later phases.
 
 Development happens on Termux (Android). No Docker; MariaDB runs as a native
 service on the phone.
@@ -75,10 +77,11 @@ FLUSH PRIVILEGES;
 into `DATABASE_URL` / `TEST_DATABASE_URL` — never into any file in the
 repository.
 
-Migrations (`migrations/0001_users_otp_challenges.sql` … `0009_reports_blocks.sql`:
+Migrations (`migrations/0001_users_otp_challenges.sql` … `0010_comment_moderation.sql`:
 users, OTP challenges, sessions, provinces/cities/categories + Rasht and
 7-category seeds, listings, listing_images, admin_audit_logs, favorites,
-listing_ratings, listing_comments, reports, blocks) are applied
+listing_ratings, listing_comments, reports, blocks, moderation_rules,
+comment_moderation_cases, moderation_settings) are applied
 automatically at startup by sqlx's
 runtime `Migrator` (no compile-time `migrate!` macro). The migrator reads the
 `migrations/` directory at runtime, so **start the server from the crate
@@ -108,7 +111,7 @@ Keep the phone awake during long runs: `termux-wake-lock`.
   edit: seconds. Measure and record the first cold `cargo build` / `cargo test`
   on your device when you run them.
 
-## Endpoints (Phase 1–9)
+## Endpoints (Phase 1–10)
 
 | Method | Path | Summary |
 |---|---|---|
@@ -133,7 +136,7 @@ Keep the phone awake during long runs: `termux-wake-lock`.
 | PUT | `/api/v1/listings/{slug}/rating` | Session + CSRF; JSON integer `{stars:1..5}` creates/updates one rating → `{rating_average,rating_count,my_stars}` |
 | DELETE | `/api/v1/listings/{slug}/rating` | Session + CSRF; idempotent delete → the same summary with `my_stars:null` |
 | GET | `/api/v1/listings/{slug}/comments?cursor=…&limit=…` | Public visible comments, newest-first keyset, default 20 / max 50 + page envelope |
-| POST | `/api/v1/listings/{slug}/comments` | Session + CSRF; trimmed Unicode `{body}` of 1–1000 characters publishes immediately → confirmed comment |
+| POST | `/api/v1/listings/{slug}/comments` | Session + CSRF; trimmed Unicode `{body}` of 1–1000 characters → 200 public comment or 202 `{public_id,status:"pending_review",created_at}` |
 | DELETE | `/api/v1/comments/{public_id}` | Author + CSRF; idempotent soft delete → exactly `{ok:true}` |
 | PUT | `/api/v1/me/favorites/{public_id}` | Session + CSRF; save an active listing idempotently → exactly `{favorited:true}` |
 | DELETE | `/api/v1/me/favorites/{public_id}` | Session + CSRF; unsave any known listing idempotently → exactly `{favorited:false}` |
@@ -156,6 +159,12 @@ Keep the phone awake during long runs: `termux-wake-lock`.
 | GET | `/api/v1/admin/users?query=…&cursor=…` | Admin; literal name/phone search, newest-first pages, admin-only phone field |
 | POST | `/api/v1/admin/users/{public_id}/suspend` | Admin + CSRF; required reason, status transition + immediate revocation of all target sessions |
 | POST | `/api/v1/admin/users/{public_id}/unsuspend` | Admin + CSRF; permits a fresh login without restoring revoked sessions |
+| GET | `/api/v1/admin/moderation/rules?active=all&cursor=…` | Admin, private newest-first literal rules, default 20 / max 50 |
+| POST | `/api/v1/admin/moderation/rules` | Admin + CSRF; `{phrase,match_mode,reason}` creates an active literal rule |
+| PATCH | `/api/v1/admin/moderation/rules/{public_id}` | Admin + CSRF; edit phrase/mode/active state with required reason |
+| GET | `/api/v1/admin/moderation/comments?status=pending&cursor=…` | Admin, private oldest-first automatic-review cases |
+| POST | `/api/v1/admin/moderation/comments/{public_id}/actions` | Admin + CSRF; audited `confirm_hidden` or `restore` with exact counters |
+| POST | `/api/v1/admin/moderation/rescan` | Admin + CSRF; one bounded revision-checked existing-comment batch |
 
 Error envelope (all endpoints): `{"error":{"code","message","fields"?},"request_id"}`.
 Auth error codes: `validation_error`, `invalid_phone`, `invalid_purpose`,
@@ -263,7 +272,7 @@ curl -s --get "$API/me/favorites" \
   --data-urlencode "cursor=$CURSOR" --data-urlencode 'limit=20' -H "$AUTH"
 ```
 
-### Ratings and comments (Phase 8)
+### Ratings and comments (Phases 8 and 10)
 
 Ratings use one `(listing_id,user_id)` row and integer stars 1–5. Sellers
 cannot rate their own listing. PUT/DELETE lock the listing and apply exact
@@ -272,8 +281,10 @@ cannot rate their own listing. PUT/DELETE lock the listing and apply exact
 are 410. Valid-viewer Detail includes `my_stars` together with `favorited` and
 uses `private, no-store`; anonymous/stale-session responses omit both keys.
 
-Comments are public immediately after a trimmed 1–1000 Unicode-character body
-is confirmed. Only visible, non-deleted comments on active listings appear.
+Clean comments are public immediately after a trimmed 1–1000 Unicode-character
+body is confirmed. A deterministic match instead stores a hidden comment and
+pending case, returns 202 without body/rule details, and does not increment the
+visible counter. Only visible, non-deleted comments on active listings appear.
 Pages use `created_at DESC,id DESC`, default 20 / maximum 50, and opaque
 `<created-at-micros>:<id>` cursors that survive deletion of their anchor.
 Authors can idempotently soft-delete their own comments; only the first delete
@@ -283,8 +294,9 @@ creation allowance. Bodies must be rendered as text, not HTML.
 The default process-local limits are 60 rating mutations and 20 new comments
 per user per 600 seconds. Their four env overrides are listed above; 429
 responses carry `Retry-After`. Use a shared limiter store before multiple API
-replicas. Reports, blocks, comment editing/replies/reactions, and profanity
-filtering are not implemented; profanity filtering remains a launch blocker.
+replicas. Reports and blocks retain their Phase 9 semantics. Comment
+editing/replies/reactions and semantic/fuzzy/transliteration moderation are not
+implemented. The deterministic filter’s production rollout is described below.
 
 ```sh
 API='http://127.0.0.1:8080/api/v1'
@@ -304,6 +316,63 @@ curl -s -X POST "$API/listings/$SLUG/comments" \
   -H "x-csrf-token: $CSRF" -d '{"body":"دیدگاه من"}'
 curl -s -X DELETE "$API/comments/$COMMENT_ID" \
   -H "$AUTH" -H "x-csrf-token: $CSRF"
+```
+
+### Deterministic comment moderation (Phase 10)
+
+`moderation.rs` maps Arabic `ي`/`ى`→`ی` and `ك`→`ک`, lowercases ASCII, removes
+specified diacritics and zero-width/bidi/BOM controls, and collapses repeated
+alphanumerics. Phrase rules use normalized space boundaries; compact rules
+remove separators and match substrings. Admin rules are literal, trimmed to
+1–120 characters with at least two normalized alphanumerics; no regex, fuzzy
+matching, transliteration, external provider, or dependency is involved.
+Migration 0010 seeds 143 deduplicated rules (28 phrase + 115 compact). The
+pinned MIT source and license are in `../../THIRD_PARTY_NOTICES.md`.
+
+Rule reads require admin and `private,no-store`; mutations require admin + CSRF
+and a 1–500-character reason. Actual mutations increment the global revision;
+phrase/mode edits also increment the rule revision. Exact duplicate creates and
+no-op patches return current state without an audit or revision change. The
+queue exposes pending/confirmed_hidden/restored cases and matched snapshots
+only to admins. Confirm-hidden requires a reason; restore is allowed only for a
+hidden, non-deleted comment and stores exact rule/revision clearances. Actual
+decisions write one audit and preserve `comment_count = visible AND non-deleted`.
+Report restore cannot bypass a pending/confirmed automatic case.
+
+A rescan starts with null cursor/revision and continues with both values from
+the last confirmed response; supplying only one is a validation error. Batches
+contain 1–50 rows (default 50), return
+exactly `rules_revision,next_cursor,has_more,scanned_count,flagged_count`, and
+write one `moderation.rescan` audit per committed request. A stale rules
+revision rejects the whole batch; retry keeps the same cursor. Rescan never
+auto-restores, and zero active rules hide nothing. It is admin-driven rather
+than a durable worker. Before claiming the existing corpus passed the launch
+blocker, complete one full production rescan and review its initial pending
+backlog; repeat a full rescan after rule changes.
+
+```sh
+API='http://127.0.0.1:8080/api/v1'
+ADMIN_AUTH="cookie: shabdar_session=$ADMIN_SESSION; shabdar_csrf=$ADMIN_CSRF"
+
+curl -s "$API/admin/moderation/rules?active=active&limit=20" -H "$ADMIN_AUTH"
+curl -s -X POST "$API/admin/moderation/rules" \
+  -H "$ADMIN_AUTH" -H 'content-type: application/json' \
+  -H "x-csrf-token: $ADMIN_CSRF" \
+  -d '{"phrase":"عبارت آزمون","match_mode":"phrase","reason":"افزودن قانون"}'
+curl -s -X PATCH "$API/admin/moderation/rules/$RULE_ID" \
+  -H "$ADMIN_AUTH" -H 'content-type: application/json' \
+  -H "x-csrf-token: $ADMIN_CSRF" \
+  -d '{"is_active":false,"reason":"بررسی مثبت کاذب"}'
+curl -s "$API/admin/moderation/comments?status=pending&limit=20" -H "$ADMIN_AUTH"
+curl -s -X POST "$API/admin/moderation/comments/$COMMENT_ID/actions" \
+  -H "$ADMIN_AUTH" -H 'content-type: application/json' \
+  -H "x-csrf-token: $ADMIN_CSRF" \
+  -d '{"action":"restore","reason":"تأیید مثبت کاذب"}'
+curl -s -X POST "$API/admin/moderation/rescan" \
+  -H "$ADMIN_AUTH" -H 'content-type: application/json' \
+  -H "x-csrf-token: $ADMIN_CSRF" \
+  -d '{"cursor":null,"rules_revision":null,"limit":50}'
+# Continue with the returned next_cursor + rules_revision until has_more=false.
 ```
 
 Multipart upload recipe (field name `file`; the server ignores the client
@@ -337,6 +406,12 @@ With `OTP_DEV_MODE=true` in a debug build:
    feed shows it, detail renders, remove → detail goes 410.
 
 ## Known limits
+
+- Comment matching is deterministic and literal, not semantic; false positives
+  require admin review and rule tuning. Existing comments are covered only by a
+  complete rescan, and per-request rescan totals after ambiguous retries are
+  informational rather than audit state. Rating/comment/report limiter windows
+  remain process-local and need shared storage before multiple API replicas.
 
 - No SMS provider: debug builds print the OTP code to the log; real SMS
   sending arrives with the provider decision. Phase 5 closed the former

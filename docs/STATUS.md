@@ -1,17 +1,148 @@
-# Status — Phase 9 trust & safety
+# Status — Phase 10 comment moderation & launch safety
 
-Updated 2026-10-28 on Arena.ai Agent Mode after the final enforcing GitHub
+Updated 2026-10-31 on Arena.ai Agent Mode after the final enforcing GitHub
 Actions gate on the real Axum/Nuxt/MariaDB stack.
+
+- **Phase 10 is COMPLETE — approved deterministic Persian Comment Moderation &
+  Launch Safety (Tasks 1–10).** This is completion of the approved comment
+  domain, not a claim that every public-launch requirement is finished.
+- **Branch: `arena/4b608814-shabdar`.** The approved design/plan began in
+  `31cefed`/`24bdee4` on base `4dc1c4c`; the final whole-stack code gate ran at
+  `5ea15c2fbdff44e7e053f544c97b03db23bbaae0`. Task 10 updates the API, database,
+  product, architecture, README, plan, and this status entry. No agent merge or
+  PR close was performed.
+- **Next product domain: image-moderation decision and remaining launch-safety
+  hardening, after separate scope approval.** Chat, notifications, semantic
+  moderation, attachments, seller reviews, and distributed abuse controls are
+  not implied by this PASS.
+
+## What Phase 10 built
+
+- **DB and attribution** — migration `0010_comment_moderation.sql` creates
+  literal rules, one current case per comment, and singleton rule-set settings.
+  It seeds 143 normalized/deduplicated rules (28 phrase + 115 compact) from 146
+  upstream entries, with the pinned MIT source and complete notice in
+  `THIRD_PARTY_NOTICES.md`. Empty-schema migration and all older reset/drop
+  helpers are FK-safe. Existing comments are deliberately not backfilled.
+- **Deterministic matching** — Persian/Arabic letter mapping, ASCII case
+  folding, listed diacritic/zero-width/bidi/BOM removal, repeated-character
+  collapsing, boundary-aware phrase matching, and compact separator-evasion
+  matching use one pure Rust implementation for comments and rules. There is
+  no arbitrary regex, fuzzy/phonetic/semantic matching, transliteration,
+  external provider, new dependency, or global client store.
+- **Creation and privacy** — clean comments retain exact 200
+  `{public_id,body,author,created_at}` behavior. A match returns 202 exactly
+  `{public_id,status:"pending_review",created_at}`, stores hidden + pending,
+  and does not increment the visible counter or enter any public/viewer feed.
+  It echoes no body/rule/internal ID, manufactures no user report, writes no
+  admin decision audit, and never automatically deletes or suspends. Pending
+  authors can still delete without a counter delta. Reports alone still never
+  hide content; viewer filtering remains blocker-only.
+- **Rules and review** — admin CRUD/activation, filters/cursors, required
+  reasons, exact duplicate/no-op behavior, per-rule and global revisions, and
+  one audit per actual mutation are implemented. The separate oldest-first
+  queue exposes safe snapshots without internal IDs/phones/clearance data.
+  Audited confirm-hidden/restore transitions are idempotent and preserve exact
+  counters, including deleted targets and concurrent create/delete/report/
+  filter/rescan operations. Restore stores durable rule/revision clearances;
+  changed text/mode may reopen, while unchanged reactivation cannot.
+- **Report interoperability** — admin comment targets include
+  `moderation_status`. Report restore cannot bypass a pending/confirmed
+  automatic case; a restored case still permits an independent later report
+  hide/restore cycle. Every automatic/admin comment mutation preserves the
+  listing → comment → case lock order and unsigned exact counters.
+- **Rescan** — admin-driven batches of at most 50 visible/non-deleted comments
+  use public-ID cursors, one active-rule snapshot, settings locking, expected
+  revisions, one audit per committed batch, and bounded whole-transaction
+  MariaDB 1020/1213 retry. Retries cannot decrement twice; stale revisions
+  reject all batch writes. Zero active rules hide and restore nothing.
+- **Web** — the comment form announces pending review without optimistic
+  list/count/cursor changes and retains drafts on failures. RTL
+  `/admin/moderation` and `/admin/moderation/rules` provide accessible CRUD,
+  filters, stable pagination, valid actions, failure preservation, safe text,
+  and confirmed-only rescan progress with retry/stop/stale-restart behavior.
+  Admin code remains route-split out of Home/Detail.
+
+## Verification results (Phase 10 — PASS)
+
+| Vertical slice | Canonical RED run | Canonical GREEN run |
+|---|---:|---:|
+| Migration, seed, notices + resets | `41182929740` | `41183701485` |
+| Normalization + matcher | `41184698799` | `41185381090` |
+| Rule APIs + revisions/audits | `41186432130` | `41187111578` |
+| Clean 200 versus pending 202 | `41187892770` | `41188286416` |
+| Queue, reports + concurrency | `41189108266` | `41189611450` |
+| Rescan + durable clearances | `41190516472` | `41203219015` |
+| Pending-comment web experience | `41203932136` | `41204421066` |
+| Admin rules/queue/rescan web | `41205079437` | `41206350464` |
+| Whole-stack quality/performance | — | `41206964350` |
+
+- **Final enforcing run `41206964350`**, job `124553917408`, head `5ea15c2`:
+  `cargo fmt --check`, full MariaDB `cargo test`, Clippy with warnings denied,
+  Nuxt typecheck, production build, both independent route budgets, and all
+  Lighthouse assertions passed. All **93/93 real-stack Playwright tests** ran,
+  including both new admin routes at 375/768/1024/1440px in light/dark,
+  landscape, reduced motion, keyboard/focus/44px targets, axe, overflow, and
+  unexpected-runtime-request guards. No database/browser suite was skipped and
+  no test or budget was weakened. Formatting-only and invalid-fixture runs are
+  not cited as behavioral evidence.
+- Initial production JS is Home **93,579 gzip bytes / 3 scripts** and Detail
+  **98,051 gzip bytes / 3 scripts**, against their unchanged separate
+  114,627-byte ceilings. Admin moderation code did not enter those public
+  route chunks. Self-hosted Arabic/Latin WOFF2 files total **80,832 bytes**.
+- Enforced mobile medians of three Lighthouse runs: Home FCP **691.42ms**, LCP
+  **2402.83ms**, CLS **0.0066187523**, TBT **130.5ms**, Accessibility **100**;
+  Detail FCP **699.34ms**, LCP **2406.71ms**, CLS **0.0053043629**, TBT **151ms**,
+  Accessibility **100**. All six individual LCP runs were below 2500ms. Raw
+  reports and the client manifest uploaded as `web-performance-41206964350`.
+- Native execution provided no independent subagent reviewer. The cumulative
+  whole-branch review was therefore author self-review, explicitly weaker than
+  independent review; the user decides whether this evidence is sufficient to
+  merge. No automatic merge was performed.
+
+## Required rollout before clearing this launch blocker
+
+1. Apply migration 0010 through the normal startup migrator and verify the
+   attributed seed/settings row. Do not manufacture cases for old comments.
+2. From `/admin/moderation`, complete one full rescan through `has_more=false`
+   on the production corpus. A failed batch retries the same cursor; a changed
+   rule revision requires an explicit fresh full run.
+3. Review the initial pending backlog, confirming true matches and restoring
+   false positives with reasons. Database state and audits, not browser totals,
+   are authoritative.
+4. Only after steps 2–3 may the team claim that the **existing comment corpus**
+   passed this launch blocker. Later rule changes require another full rescan
+   to affect existing visible comments. This does not clear the other launch
+   checks below.
+
+## Phase 10 accepted ceilings and remaining work
+
+- Literal deterministic matching cannot understand intent or every
+  obfuscation; the seed's length-based mode policy is only a starting point.
+  Human review remains necessary, and semantic/fuzzy/transliteration upgrades
+  need separate scope and evidence.
+- Rescan is not a durable background worker. Leaving the page stops later
+  batches and a later page load starts fresh. Per-request counts after
+  ambiguous network retries are informational. Existing hidden/deleted
+  comments are not reopened or automatically restored.
+- Authors receive confirmed pending feedback but no persistent pending list or
+  notification. Comment editing/replies/reactions remain out of scope.
+- Rating/comment/report limiters remain process-local and require shared
+  storage before multiple API replicas. Single-replica assumptions are
+  unchanged.
+- Lighthouse used simulated mobile throttling in headless Chromium, not a
+  physical phone or RUM. Real SMS, HTTPS/deployment, backups, privacy/terms,
+  image moderation/processing, chat/notifications, distributed abuse controls,
+  and the other recorded public-launch checks remain open.
+
+## Phase 9 delivery record
 
 - **Phase 9 is COMPLETE — approved Reports + Blocks + admin queue (Tasks 1–10).**
 - **Branch: `arena/d645adc0-shabdar`.** The approved design/plan began in
   `f15a8c6`; implementation and verification are in `f15a8c6..f2d1ad9`.
   The final code gate ran at `f2d1ad9d47dcccefd5e4d56546735b5151bc5d60`.
-  Task 10 updates the API, database, README, plan, and this status entry. No
-  agent merge or PR close was performed.
-- **Next product domain: launch-blocking profanity filtering and launch-safety
-  hardening, after separate scope approval.** Chat, notifications, attachments,
-  seller reviews, and distributed abuse controls are not implied by this PASS.
+  Task 10 updated the API, database, README, plan, and status entry. No agent
+  merge or PR close was performed.
 
 ## What Phase 9 built
 
@@ -81,9 +212,10 @@ Actions gate on the real Axum/Nuxt/MariaDB stack.
 - Report/rating/comment limiters are process-local and reset on restart. Move
   them to shared storage before multiple API replicas; these defaults are not
   a distributed abuse-control system.
-- Advanced Persian profanity filtering remains a **public-launch blocker** and
-  was deliberately outside Phase 9. Blocking currently filters comments only;
-  chat/message enforcement belongs to the separately scoped chat domain.
+- Phase 9 deliberately excluded automated profanity filtering; Phase 10 above
+  now implements the deterministic comment domain and its rollout boundary.
+  Blocking still filters comments only; chat/message enforcement belongs to
+  the separately scoped chat domain.
 - Admin report targets are current summaries, not immutable historical
   snapshots. A deleted target renders unavailable; audit history retains the
   decision but not a full former target payload.
@@ -108,9 +240,10 @@ Actions gate on the real Axum/Nuxt/MariaDB stack.
   `my_stars:null`. Listing-row-locked old-row deltas keep `rating_sum`,
   `rating_count`, and the returned average exact, including concurrent writes.
 - API — public `GET /listings/{slug}/comments` returns visible, non-deleted
-  comments newest-first with default 20 / maximum 50 keyset pages. POST trims
-  and validates 1–1000 Unicode characters, publishes immediately, and permits
-  seller self-comments. Author-only DELETE sets `deleted_at`, returns
+  comments newest-first with default 20 / maximum 50 keyset pages. At Phase 8,
+  POST trimmed and validated 1–1000 Unicode characters and published every
+  comment immediately; Phase 10 above now distinguishes clean 200 from pending
+  202 while retaining seller self-comments. Author-only DELETE sets `deleted_at`, returns
   `{ok:true}` idempotently, and changes the visible count only once. Equal
   timestamps and deleted cursor anchors retain complete, duplicate-free
   pagination.
@@ -180,9 +313,9 @@ Actions gate on the real Axum/Nuxt/MariaDB stack.
   distributed abuse-control system. Move them to a shared store before running
   multiple API replicas; the documented defaults are not a substitute for
   production abuse monitoring.
-- Comments have no Persian profanity filter. This remains a **public-launch
-  blocker**. Reports, blocks, report-driven hiding/restoration, and their admin
-  queues are deferred to the separately approved trust-and-safety domain.
+- Phase 8 comments had no automated filter at that time; Phase 9 later added
+  reports/blocks and Phase 10 above superseded this historical limitation.
+  The Phase 8 counter and privacy invariants remain in force.
 - Logged-in Detail still uses one private browser request after public SSR;
   the first comments read is a separate nonfatal public request. Own rating,
   favorite, and delete/form controls are never embedded in anonymous HTML.
@@ -551,7 +684,7 @@ lives outside the repo; the durable form of those assertions is
   with `vue-tsc`, a production build, independent route budgets, and enforced
   Lighthouse medians. A physical-phone pass remains separate.
 - API items were verified against scratch `*_test` databases on MariaDB 11 in
-  Docker (Railway VM for earlier phases, GitHub Actions for Phases 6–8), not
+  Docker (Railway VM for earlier phases, GitHub Actions for Phases 6–10), not
   the user's own database; re-run `cargo test` with the real
   `TEST_DATABASE_URL` before release.
 
@@ -572,8 +705,8 @@ lives outside the repo; the durable form of those assertions is
 - npm install cost: wall time **to record**; `apps/web/node_modules` measured
   **224 MB** on the Railway VM (2026-10-24). `package-lock.json` is committed;
   use `npm ci` for reproducible installs.
-- Persian profanity filter, image-moderation decision, privacy/terms,
-  backup/restore test (unchanged).
+- Complete the Phase 10 production rescan and initial pending-backlog review;
+  image-moderation decision, privacy/terms, and backup/restore test remain open.
 - Phone-browser smoke of the Phase 3 pages (`/`, `/post`, `/listings/[slug]`,
   `/admin/queue`) — open. Phase 4's web work was exercised in a real Chromium
   at 375 px on the VM (not a physical phone).
@@ -600,7 +733,12 @@ lives outside the repo; the durable form of those assertions is
 - **Phase 8 — COMPLETE (Tasks 1–8) on `arena/4fdc08a7-shabdar`: full MariaDB
   API suite + 66/66 browser tests + typecheck/build + independent JS budgets +
   enforcing Lighthouse at `c8e39fa` / run `40236444619`.**
-- **Next: Reports & Blocks / trust and safety after scope approval, or a
-  selected public-launch blocker.** Physical-phone
-  verification, profanity filtering, real SMS, HTTPS, and the other recorded
-  public-launch blockers remain open in their recorded order.
+- **Phase 9 — COMPLETE (Tasks 1–10) on `arena/d645adc0-shabdar`: full MariaDB
+  API suite + 81/81 browser tests + typecheck/build + independent JS budgets +
+  enforcing Lighthouse at `f2d1ad9` / run `40657436917`.**
+- **Phase 10 — COMPLETE (Tasks 1–10) on `arena/4b608814-shabdar`: full MariaDB
+  API suite + 93/93 browser tests + typecheck/build + independent JS budgets +
+  enforcing Lighthouse at `5ea15c2` / run `41206964350`.** Production rescan and
+  initial backlog review are still required before clearing the existing-corpus
+  launch blocker. Next domain: image-moderation decision after scope approval;
+  physical-phone/RUM, real SMS, HTTPS, and other launch checks remain open.
