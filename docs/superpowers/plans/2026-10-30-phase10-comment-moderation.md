@@ -218,7 +218,7 @@ Required: all new state/concurrency tests plus every older report/comment/admin 
 - Consumes: Task 5 `CommentTransition::Hide` and Task 2 clearance/snapshot structures.
 - Produces: `rescan(pool,admin_id,cursor:Option<&str>,rules_revision:Option<u64>,limit:Option<u64>) -> Result<serde_json::Value,ApiError>` and the exact spec §9 route/response. The route body retains `limit` as `serde_json::Value` until validation so non-integers become `fields.limit="invalid"`; numeric values outside 1–50 become `fields.limit="out_of_range"`.
 
-- [ ] **Step 1: Write failing rescan tests**
+- [x] **Step 1: Write failing rescan tests**
 
 Cover new/continuation validation, malformed cursors, 0/51/non-integer limits, admin/CSRF, 51 comments across two batches, exact counts/cursors, deleted or hidden anchors, retry without a second decrement, one batch audit per committed request, and zero-active-rule behavior. Change rules between batches and assert `rules_revision="changed"` with zero new writes/audits. Prove unchanged restored rules stay cleared, edited phrase/mode reopens a case, deactivation never restores, and concurrent rescan/delete/report/restore operations preserve counters.
 
