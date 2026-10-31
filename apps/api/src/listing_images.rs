@@ -195,7 +195,7 @@ pub async fn validate_stored_images(
 ) -> Result<Vec<(u64, u16, u16)>, ApiError> {
     let mut validated = Vec::with_capacity(images.len());
     for (id, key) in images {
-        let expected_extension =
+        let expected_content_type =
             valid_media_key(key).ok_or_else(|| image_validation("invalid_image"))?;
         let file = tokio::fs::File::open(std::path::Path::new(&cfg.media_dir).join(key))
             .await
@@ -212,7 +212,13 @@ pub async fn validate_stored_images(
             .await
             .map_err(|_| ApiError::Internal)?
             .map_err(|error| image_validation(error.reason()))?;
-        if decoded.extension != expected_extension {
+        let actual_content_type = match decoded.extension {
+            "jpg" => "image/jpeg",
+            "png" => "image/png",
+            "webp" => "image/webp",
+            _ => return Err(image_validation("invalid_image")),
+        };
+        if actual_content_type != expected_content_type {
             return Err(image_validation("invalid_image"));
         }
         validated.push((*id, decoded.width, decoded.height));
