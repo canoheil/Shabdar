@@ -542,12 +542,8 @@ impl ScanComment {
     fn from_row(row: &sqlx::mysql::MySqlRow) -> Result<Self, ApiError> {
         Ok(Self {
             id: row.try_get("id").map_err(|_| ApiError::Internal)?,
-            public_id: row
-                .try_get("public_id")
-                .map_err(|_| ApiError::Internal)?,
-            listing_id: row
-                .try_get("listing_id")
-                .map_err(|_| ApiError::Internal)?,
+            public_id: row.try_get("public_id").map_err(|_| ApiError::Internal)?,
+            listing_id: row.try_get("listing_id").map_err(|_| ApiError::Internal)?,
             body: row.try_get("body").map_err(|_| ApiError::Internal)?,
         })
     }
@@ -575,9 +571,7 @@ async fn load_batch_cases(
         .map_err(|_| ApiError::Internal)?;
     let mut cases = HashMap::with_capacity(rows.len());
     for row in &rows {
-        let comment_id = row
-            .try_get("comment_id")
-            .map_err(|_| ApiError::Internal)?;
+        let comment_id = row.try_get("comment_id").map_err(|_| ApiError::Internal)?;
         cases.insert(comment_id, CaseLock::from_row(row)?);
     }
     Ok(cases)
