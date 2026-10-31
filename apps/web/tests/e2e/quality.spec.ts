@@ -75,6 +75,8 @@ const routes = [
   { label: 'admin', path: () => '/admin/queue', role: 'admin' },
   { label: 'admin-reports', path: () => '/admin/reports', role: 'admin' },
   { label: 'admin-users', path: () => '/admin/users', role: 'admin' },
+  { label: 'admin-moderation', path: () => '/admin/moderation', role: 'admin' },
+  { label: 'admin-moderation-rules', path: () => '/admin/moderation/rules', role: 'admin' },
 ] as const
 
 for (const route of routes) {
@@ -145,6 +147,56 @@ test('@quality phone landscape reduced motion and focused search stay clear of f
   expect(geometry.top).toBeGreaterThanOrEqual(0)
   if (geometry.navigationPosition === 'fixed') {
     expect(geometry.bottom).toBeLessThanOrEqual(geometry.navigationTop + 1)
+  }
+
+  expect(runtime.externalRequests).toEqual([])
+  expect(runtime.pageErrors).toEqual([])
+  expect(runtime.consoleErrors).toEqual([])
+})
+
+test('@quality admin moderation landscape reduced motion and keyboard focus remain operable', async ({ page }) => {
+  test.setTimeout(180_000)
+  const runtime = monitorRuntime(page)
+  await page.setViewportSize({ width: 844, height: 390 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.addInitScript(() => localStorage.setItem('nuxt-color-mode', 'light'))
+  await applyStorage(page, readFixtures().adminStorage)
+
+  for (const route of [
+    { label: 'admin-moderation', path: '/admin/moderation' },
+    { label: 'admin-moderation-rules', path: '/admin/moderation/rules' },
+  ]) {
+    await page.goto(route.path)
+    await expect(page.locator('main')).toBeVisible()
+    await waitForEnhancedFont(page)
+    for (const theme of ['light', 'dark'] as const) {
+      await selectTheme(page, theme)
+      await auditAndCapture(page, `${route.label}-landscape-reduced`, 844, theme)
+    }
+
+    const motion = await page.locator('.shell__brand').evaluate((element) => {
+      const style = getComputedStyle(element)
+      return {
+        animation: Number.parseFloat(style.animationDuration),
+        transition: Number.parseFloat(style.transitionDuration),
+        scroll: style.scrollBehavior,
+      }
+    })
+    expect(motion.animation).toBeLessThanOrEqual(0.001)
+    expect(motion.transition).toBeLessThanOrEqual(0.001)
+    expect(motion.scroll).toBe('auto')
+
+    const firstControl = page.locator('main').locator('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])').first()
+    await firstControl.focus()
+    await expect(firstControl).toBeFocused()
+    await page.keyboard.press('Tab')
+    const focused = page.locator('main :focus')
+    await expect(focused).toBeVisible()
+    const focusStyle = await focused.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return { outline: style.outlineStyle, width: Number.parseFloat(style.outlineWidth), shadow: style.boxShadow }
+    })
+    expect(focusStyle.outline !== 'none' && focusStyle.width >= 2 || focusStyle.shadow !== 'none').toBe(true)
   }
 
   expect(runtime.externalRequests).toEqual([])
