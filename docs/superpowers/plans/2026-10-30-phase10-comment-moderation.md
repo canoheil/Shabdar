@@ -148,7 +148,7 @@ Include concurrent duplicate/no-op requests, all older suites, fmt, and Clippy. 
 - Consumes: `moderation_rules::active_rules` and `moderation::matching_rules`.
 - Produces: `comments::CreateResult::{Visible(serde_json::Value),Pending(serde_json::Value)}`; the route maps Visible to 200 and Pending to 202. Public list shapes remain unchanged.
 
-- [ ] **Step 1: Write failing creation/privacy/counter tests**
+- [x] **Step 1: Write failing creation/privacy/counter tests**
 
 Using a synthetic active rule, assert a clean body retains exact 200/four keys/count +1, while a matched body returns 202/three keys, stores hidden + one pending case/snapshots, and leaves count/SSR/public and viewer-filtered lists unchanged. Assert no matched rule, submitted comment body, or internal ID in the 202 response. Cover normalized evasions, author deletion of pending without a count delta, suspended/anonymous/CSRF behavior, limiter consumption and `Retry-After`, and two independent users/listings.
 
