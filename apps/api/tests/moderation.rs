@@ -40,7 +40,10 @@ fn rule_validation_uses_unicode_scalar_limits_and_normalized_alphanumerics() {
     assert!(normalize_rule(&valid_120, MatchMode::Phrase).is_ok());
     let too_long = format!("{valid_120}آ");
     assert_eq!(too_long.chars().count(), 121);
-    assert_eq!(normalize_rule(&too_long, MatchMode::Compact), Err("too_long"));
+    assert_eq!(
+        normalize_rule(&too_long, MatchMode::Compact),
+        Err("too_long")
+    );
 }
 
 #[test]
@@ -125,7 +128,10 @@ fn benign_persian_near_matches_do_not_match_phrase_rules() {
     ];
     for body in benign {
         for phrase in ["عن", "گوه", "بد"] {
-            assert!(!matches(phrase, body, MatchMode::Phrase), "{phrase}: {body}");
+            assert!(
+                !matches(phrase, body, MatchMode::Phrase),
+                "{phrase}: {body}"
+            );
         }
     }
 }
