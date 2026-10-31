@@ -388,12 +388,7 @@ async fn approve_publishes_exact_reviewed_images_with_detail_and_audit() {
         .as_str()
         .unwrap()
         .starts_with("/media/"));
-    assert_private_admin_get(
-        app.clone(),
-        "/api/v1/admin/listings/queue",
-        &admin_cookie,
-    )
-    .await;
+    assert_private_admin_get(app.clone(), "/api/v1/admin/listings/queue", &admin_cookie).await;
     assert_private_admin_get(
         app.clone(),
         &format!("/api/v1/admin/listings/{public_id}"),
