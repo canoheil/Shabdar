@@ -584,18 +584,16 @@ async fn comment_moderation_schema_seed_and_foreign_keys_enforce_invariants() {
         .await
         .expect("moderation rules table and deterministic seed");
     assert_eq!(seeded_rules, 143, "one row per distinct dedupe key");
-    let phrase_rules: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM moderation_rules WHERE match_mode = 'phrase'",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("phrase seed count");
-    let compact_rules: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM moderation_rules WHERE match_mode = 'compact'",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("compact seed count");
+    let phrase_rules: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM moderation_rules WHERE match_mode = 'phrase'")
+            .fetch_one(&pool)
+            .await
+            .expect("phrase seed count");
+    let compact_rules: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM moderation_rules WHERE match_mode = 'compact'")
+            .fetch_one(&pool)
+            .await
+            .expect("compact seed count");
     assert_eq!((phrase_rules, compact_rules), (28, 115));
     let settings_revision: u64 =
         sqlx::query_scalar("SELECT revision FROM moderation_settings WHERE id = 1")
@@ -620,11 +618,7 @@ async fn comment_moderation_schema_seed_and_foreign_keys_enforce_invariants() {
 
     for (table, column, expected) in [
         ("moderation_rules", "public_id", "char(26)"),
-        (
-            "moderation_rules",
-            "match_mode",
-            "enum('phrase','compact')",
-        ),
+        ("moderation_rules", "match_mode", "enum('phrase','compact')"),
         (
             "comment_moderation_cases",
             "status",
@@ -676,11 +670,10 @@ async fn comment_moderation_schema_seed_and_foreign_keys_enforce_invariants() {
         .expect_err("dedupe key is unique across modes")
         .to_string()
         .contains("uq_moderation_rules_dedupe"));
-    let second_settings = sqlx::query(
-        "INSERT INTO moderation_settings (id, revision) VALUES (2, 1)",
-    )
-    .execute(&pool)
-    .await;
+    let second_settings =
+        sqlx::query("INSERT INTO moderation_settings (id, revision) VALUES (2, 1)")
+            .execute(&pool)
+            .await;
     assert!(second_settings
         .expect_err("settings must remain a singleton")
         .to_string()
@@ -715,11 +708,12 @@ async fn comment_moderation_schema_seed_and_foreign_keys_enforce_invariants() {
     .execute(&pool)
     .await
     .expect("moderation listing");
-    let listing: u64 =
-        sqlx::query_scalar("SELECT id FROM listings WHERE public_id = 'JJJJJJJJJJJJJJJJJJJJJJJJJJ'")
-            .fetch_one(&pool)
-            .await
-            .expect("moderation listing ID");
+    let listing: u64 = sqlx::query_scalar(
+        "SELECT id FROM listings WHERE public_id = 'JJJJJJJJJJJJJJJJJJJJJJJJJJ'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("moderation listing ID");
     sqlx::query(
         "INSERT INTO listing_comments \
          (public_id, listing_id, author_id, body, created_at, updated_at) \
