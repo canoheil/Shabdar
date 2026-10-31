@@ -101,7 +101,7 @@ pub async fn lock_settings_revision(
     sqlx::query_scalar("SELECT revision FROM moderation_settings WHERE id = 1 FOR UPDATE")
         .fetch_one(&mut **tx)
         .await
-        .map_err(|_| ApiError::Internal)
+        .map_err(crate::error::database_error)
 }
 
 async fn lock_settings(tx: &mut Transaction<'_, sqlx::MySql>) -> Result<(), ApiError> {
@@ -378,6 +378,6 @@ pub async fn active_rules_in_tx(
     ))
     .fetch_all(&mut **tx)
     .await
-    .map_err(|_| ApiError::Internal)?;
+    .map_err(crate::error::database_error)?;
     matcher_rules(&rows)
 }

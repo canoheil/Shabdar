@@ -53,6 +53,27 @@ pub enum ApiError {
     /// `payload_too_large`).
     PayloadTooLarge,
     Internal,
+    /// Internal marker for a transaction that MariaDB rolled back after a
+    /// retryable conflict. It has the same public envelope as `Internal`;
+    /// only the rescan transaction loop handles it specially.
+    RetryableDatabase,
+}
+
+/// Preserve only database conflicts whose server contract guarantees a full
+/// transaction rollback. SQLSTATE is too coarse for MySQL error 1020, so use
+/// the native server number rather than matching human-readable SQL text.
+pub(crate) fn database_error(error: sqlx::Error) -> ApiError {
+    let retryable = match &error {
+        sqlx::Error::Database(error) => error
+            .try_downcast_ref::<sqlx::mysql::MySqlDatabaseError>()
+            .is_some_and(|error| matches!(error.number(), 1020 | 1213)),
+        _ => false,
+    };
+    if retryable {
+        ApiError::RetryableDatabase
+    } else {
+        ApiError::Internal
+    }
 }
 
 impl ApiError {
@@ -72,7 +93,9 @@ impl ApiError {
             ApiError::NotFound => StatusCode::NOT_FOUND,
             ApiError::CsrfFailed | ApiError::Forbidden => StatusCode::FORBIDDEN,
             ApiError::Gone => StatusCode::GONE,
-            ApiError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+            ApiError::Internal | ApiError::RetryableDatabase => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
         }
     }
 
@@ -93,7 +116,7 @@ impl ApiError {
             ApiError::Gone => "gone",
             ApiError::InvalidRequest { .. } => "invalid_request",
             ApiError::PayloadTooLarge => "payload_too_large",
-            ApiError::Internal => "internal_error",
+            ApiError::Internal | ApiError::RetryableDatabase => "internal_error",
         }
     }
 
@@ -116,7 +139,7 @@ impl ApiError {
             ApiError::Gone => "Listing is no longer available",
             ApiError::InvalidRequest { .. } => "Request body is not valid JSON",
             ApiError::PayloadTooLarge => "Request body is too large",
-            ApiError::Internal => "Internal server error",
+            ApiError::Internal | ApiError::RetryableDatabase => "Internal server error",
         }
     }
 }
@@ -187,7 +210,7 @@ mod tests {
     /// variant, plus a non-empty message on every one.
     #[tokio::test]
     async fn status_and_code_match_contract_for_every_variant() {
-        let cases: [(super::ApiError, StatusCode, &str); 16] = [
+        let cases: [(super::ApiError, StatusCode, &str); 17] = [
             (
                 super::ApiError::Validation {
                     fields: fields(&[]),
@@ -234,6 +257,11 @@ mod tests {
             ),
             (
                 super::ApiError::Internal,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+            ),
+            (
+                super::ApiError::RetryableDatabase,
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internal_error",
             ),
@@ -334,7 +362,11 @@ mod tests {
 
     #[tokio::test]
     async fn fields_key_is_absent_on_non_validation_errors() {
-        for err in [super::ApiError::InvalidCode, super::ApiError::Internal] {
+        for err in [
+            super::ApiError::InvalidCode,
+            super::ApiError::Internal,
+            super::ApiError::RetryableDatabase,
+        ] {
             let (_status, body) = render(err).await;
             assert!(
                 body["error"].get("fields").is_none(),

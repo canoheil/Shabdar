@@ -10,17 +10,8 @@ use std::collections::{BTreeMap, HashMap};
 use chrono::{DateTime, Utc};
 use sqlx::{MySqlPool, Row, Transaction};
 
-use crate::error::ApiError;
+use crate::error::{database_error, ApiError};
 use crate::moderation::{ModerationRule, RuleClearance};
-
-#[track_caller]
-fn trace_internal<E: std::fmt::Debug>(error: E) -> ApiError {
-    eprintln!(
-        "comment_moderation internal at {}: {error:?}",
-        std::panic::Location::caller()
-    );
-    ApiError::Internal
-}
 
 fn validation(field: &str, reason: &str) -> ApiError {
     let mut fields = BTreeMap::new();
@@ -64,7 +55,7 @@ async fn lock_listing(
         .bind(listing_id)
         .fetch_optional(&mut **tx)
         .await
-        .map_err(trace_internal)?
+        .map_err(database_error)?
         .ok_or_else(invalid_transition)
 }
 
@@ -81,17 +72,17 @@ async fn lock_comment(
     .bind(listing_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(trace_internal)?
+    .map_err(database_error)?
     .ok_or_else(invalid_transition)?;
-    let deleted_at: Option<DateTime<Utc>> = row.try_get("deleted_at").map_err(trace_internal)?;
+    let deleted_at: Option<DateTime<Utc>> = row.try_get("deleted_at").map_err(database_error)?;
     Ok(CommentLock {
-        status: row.try_get("status").map_err(trace_internal)?,
+        status: row.try_get("status").map_err(database_error)?,
         deleted: deleted_at.is_some(),
     })
 }
 
 fn clearances_from_json(bytes: &[u8]) -> Result<Vec<RuleClearance>, ApiError> {
-    let value: serde_json::Value = serde_json::from_slice(bytes).map_err(trace_internal)?;
+    let value: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| ApiError::Internal)?;
     let entries = value.as_array().ok_or(ApiError::Internal)?;
     entries
         .iter()
@@ -123,19 +114,19 @@ async fn lock_case_for_restore(
     .bind(comment_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(trace_internal)?;
+    .map_err(database_error)?;
     let Some(row) = row else {
         if filter {
             return Err(invalid_transition());
         }
         return Ok(Vec::new());
     };
-    let status: String = row.try_get("status").map_err(trace_internal)?;
+    let status: String = row.try_get("status").map_err(database_error)?;
     if filter {
         if !matches!(status.as_str(), "pending" | "confirmed_hidden") {
             return Err(invalid_transition());
         }
-        let matched_rules: Vec<u8> = row.try_get("matched_rules").map_err(trace_internal)?;
+        let matched_rules: Vec<u8> = row.try_get("matched_rules").map_err(database_error)?;
         clearances_from_json(&matched_rules)
     } else {
         if matches!(status.as_str(), "pending" | "confirmed_hidden") {
@@ -178,15 +169,12 @@ pub async fn transition_comment_in_tx(
             .bind(comment_id)
             .execute(&mut **tx)
             .await
-            .map_err(trace_internal)?;
+            .map_err(database_error)?;
     if updated.rows_affected() != 1 {
         return Err(ApiError::Internal);
     }
     let count = match transition {
-        CommentTransition::Hide => count.checked_sub(1).ok_or_else(|| {
-            eprintln!("comment counter underflow: listing={listing_id} comment={comment_id}");
-            ApiError::Internal
-        })?,
+        CommentTransition::Hide => count.checked_sub(1).ok_or(ApiError::Internal)?,
         CommentTransition::RestoreReport | CommentTransition::RestoreFilter => {
             count.checked_add(1).ok_or(ApiError::Internal)?
         }
@@ -196,7 +184,7 @@ pub async fn transition_comment_in_tx(
         .bind(listing_id)
         .execute(&mut **tx)
         .await
-        .map_err(trace_internal)?;
+        .map_err(database_error)?;
     if updated.rows_affected() != 1 {
         return Err(ApiError::Internal);
     }
@@ -390,7 +378,7 @@ async fn lock_optional_case(
     .bind(comment_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| ApiError::Internal)?;
+    .map_err(database_error)?;
     row.as_ref().map(CaseLock::from_row).transpose()
 }
 
@@ -574,10 +562,10 @@ async fn load_batch_cases(
     for id in comment_ids {
         query = query.bind(id);
     }
-    let rows = query.fetch_all(&mut **tx).await.map_err(trace_internal)?;
+    let rows = query.fetch_all(&mut **tx).await.map_err(database_error)?;
     let mut cases = HashMap::with_capacity(rows.len());
     for row in &rows {
-        let comment_id = row.try_get("comment_id").map_err(trace_internal)?;
+        let comment_id = row.try_get("comment_id").map_err(database_error)?;
         cases.insert(comment_id, CaseLock::from_row(row)?);
     }
     Ok(cases)
@@ -632,7 +620,7 @@ async fn hide_and_reopen_in_tx(
             })
         })
         .collect::<Vec<_>>();
-    let matched_rules = serde_json::to_string(&snapshots).map_err(trace_internal)?;
+    let matched_rules = serde_json::to_string(&snapshots).map_err(|_| ApiError::Internal)?;
     match transition_comment_in_tx(tx, comment.listing_id, comment.id, CommentTransition::Hide)
         .await
     {
@@ -653,7 +641,7 @@ async fn hide_and_reopen_in_tx(
         .bind(case.id)
         .execute(&mut **tx)
         .await
-        .map_err(trace_internal)?
+        .map_err(database_error)?
     } else {
         sqlx::query(
             "INSERT INTO comment_moderation_cases \
@@ -666,13 +654,9 @@ async fn hide_and_reopen_in_tx(
         .bind(now)
         .execute(&mut **tx)
         .await
-        .map_err(trace_internal)?
+        .map_err(database_error)?
     };
     if changed.rows_affected() != 1 {
-        eprintln!(
-            "rescan case write affected {} rows",
-            changed.rows_affected()
-        );
         return Err(ApiError::Internal);
     }
     Ok(true)
@@ -692,7 +676,29 @@ fn valid_rescan_cursor(raw: &str) -> bool {
 /// Scan one bounded batch under the same settings lock used by rule writes.
 /// A continuation retry sees already-hidden rows as absent and therefore only
 /// reports new visible → hidden transitions, never a second decrement.
+/// MariaDB snapshot conflicts and deadlocks roll back the whole transaction;
+/// rebuild the batch from a fresh snapshot instead of exposing a transient 500.
 pub async fn rescan(
+    pool: &MySqlPool,
+    admin_id: u64,
+    cursor: Option<&str>,
+    rules_revision: Option<u64>,
+    limit: Option<u64>,
+) -> Result<serde_json::Value, ApiError> {
+    const MAX_RETRIES: u8 = 3;
+    let mut remaining_retries = MAX_RETRIES;
+    loop {
+        match rescan_batch(pool, admin_id, cursor, rules_revision, limit).await {
+            Err(ApiError::RetryableDatabase) if remaining_retries > 0 => {
+                remaining_retries -= 1;
+            }
+            Err(ApiError::RetryableDatabase) => return Err(ApiError::Internal),
+            result => return result,
+        }
+    }
+}
+
+async fn rescan_batch(
     pool: &MySqlPool,
     admin_id: u64,
     cursor: Option<&str>,
@@ -713,9 +719,9 @@ pub async fn rescan(
     if !(1..=50).contains(&limit) {
         return Err(validation("limit", "out_of_range"));
     }
-    let limit = usize::try_from(limit).map_err(trace_internal)?;
+    let limit = usize::try_from(limit).map_err(|_| ApiError::Internal)?;
 
-    let mut tx = pool.begin().await.map_err(trace_internal)?;
+    let mut tx = pool.begin().await.map_err(database_error)?;
     let revision = crate::moderation_rules::lock_settings_revision(&mut tx).await?;
     if rules_revision.is_some_and(|expected| expected != revision) {
         return Err(validation("rules_revision", "changed"));
@@ -734,7 +740,7 @@ pub async fn rescan(
         query = query.bind(cursor);
     }
     query = query.bind((limit + 1) as i64);
-    let mut rows = query.fetch_all(&mut *tx).await.map_err(trace_internal)?;
+    let mut rows = query.fetch_all(&mut *tx).await.map_err(database_error)?;
     let has_more = rows.len() > limit;
     rows.truncate(limit);
     let scanned = rows
@@ -754,7 +760,7 @@ pub async fn rescan(
             flagged_count += 1;
         }
     }
-    let scanned_count = u64::try_from(scanned.len()).map_err(trace_internal)?;
+    let scanned_count = u64::try_from(scanned.len()).map_err(|_| ApiError::Internal)?;
     let next_cursor = if has_more {
         scanned.last().map(|comment| comment.public_id.clone())
     } else {
@@ -776,7 +782,7 @@ pub async fn rescan(
         Some(&metadata),
     )
     .await?;
-    tx.commit().await.map_err(trace_internal)?;
+    tx.commit().await.map_err(database_error)?;
     Ok(serde_json::json!({
         "rules_revision": revision,
         "next_cursor": next_cursor,
