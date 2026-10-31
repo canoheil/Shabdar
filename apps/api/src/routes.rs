@@ -86,6 +86,14 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/listings/{public_id}/images/order",
             patch(images_order),
         )
+        .route(
+            "/api/v1/admin/moderation/rules",
+            get(admin_moderation_rules).post(admin_create_moderation_rule),
+        )
+        .route(
+            "/api/v1/admin/moderation/rules/{public_id}",
+            patch(admin_update_moderation_rule),
+        )
         .route("/api/v1/admin/reports", get(admin_reports_queue))
         .route(
             "/api/v1/admin/reports/{public_id}/actions",
@@ -640,6 +648,87 @@ struct AdminReasonBody {
 struct AdminReportActionBody {
     action: Option<String>,
     reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct AdminModerationRuleCreateBody {
+    phrase: Option<String>,
+    match_mode: Option<String>,
+    reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct AdminModerationRulePatchBody {
+    phrase: Option<String>,
+    match_mode: Option<String>,
+    is_active: Option<bool>,
+    reason: Option<String>,
+}
+
+/// GET /api/v1/admin/moderation/rules — private newest-first rule pages.
+async fn admin_moderation_rules(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<axum::response::Response, ApiError> {
+    crate::admin::require_admin(&user)?;
+    let body = crate::moderation_rules::list(
+        &state.pool,
+        params.get("active").map(String::as_str),
+        params.get("cursor").map(String::as_str),
+        params.get("limit").map(String::as_str),
+    )
+    .await?;
+    let mut response = Json(body).into_response();
+    mark_private_viewer(&mut response);
+    Ok(response)
+}
+
+/// POST /api/v1/admin/moderation/rules — create or return an exact duplicate.
+async fn admin_create_moderation_rule(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    ApiJson(body): ApiJson<AdminModerationRuleCreateBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::moderation_rules::create(
+            &state.pool,
+            user.user_id,
+            body.phrase.as_deref(),
+            body.match_mode.as_deref(),
+            body.reason.as_deref(),
+        )
+        .await?,
+    ))
+}
+
+/// PATCH /api/v1/admin/moderation/rules/{public_id} — one audited actual edit.
+async fn admin_update_moderation_rule(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    ApiJson(body): ApiJson<AdminModerationRulePatchBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::moderation_rules::update(
+            &state.pool,
+            user.user_id,
+            &public_id,
+            crate::moderation_rules::RulePatch {
+                phrase: body.phrase,
+                match_mode: body.match_mode,
+                is_active: body.is_active,
+                reason: body.reason.unwrap_or_default(),
+            },
+        )
+        .await?,
+    ))
 }
 
 /// GET /api/v1/admin/reports — oldest-first filtered report queue.

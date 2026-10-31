@@ -16,6 +16,7 @@ pub mod favorites;
 pub mod listing_images;
 pub mod listings;
 pub mod moderation;
+pub mod moderation_rules;
 pub mod otp;
 pub mod otp_service;
 pub mod phone;

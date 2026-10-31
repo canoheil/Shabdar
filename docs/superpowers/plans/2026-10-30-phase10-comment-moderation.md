@@ -122,11 +122,11 @@ Verify all seed rows and older API tests. Include a benign text corpus and evasi
 
 Cover anonymous/non-admin/CSRF, `private,no-store`, reason and rule validation, 2/120/121-character boundaries, literal wildcard text, active filters, default/cap/cursors, exact public JSON, create/edit/toggle/no-op behavior, duplicate key across modes, `fields.patch="no_changes"`, and 404s. Race two identical creates and two different actual edits to one rule; assert one dedupe row, one create audit, two edit audits, monotonically increasing settings/rule revisions, and no lost update. Activation changes only global revision; phrase/mode changes also increment rule revision.
 
-- [ ] **Step 2: Run canonical RED**
+- [x] **Step 2: Run canonical RED**
 
 Expected: all new routes return 404 while matcher/migration and older suites pass. Record run/job/head.
 
-- [ ] **Step 3: Implement rule service and thin routes**
+- [x] **Step 3: Implement rule service and thin routes**
 
 Validate before writing. Recompute matcher and dedupe keys on phrase/mode changes. Lock settings then rule for every mutation, recheck duplicates in the transaction, increment global revision once per actual change, and use the existing audit helper with minimal metadata. Exact duplicate create and no-op patch return current state without reactivation/audit/revision. Load active rules through one ordered SELECT for Task 4.
 
