@@ -184,9 +184,8 @@ pub async fn create(
     .await
     .map_err(|_| ApiError::Internal)?;
     let result = if pending {
-        let created_at: chrono::DateTime<chrono::Utc> = row
-            .try_get("created_at")
-            .map_err(|_| ApiError::Internal)?;
+        let created_at: chrono::DateTime<chrono::Utc> =
+            row.try_get("created_at").map_err(|_| ApiError::Internal)?;
         CreateResult::Pending(serde_json::json!({
             "public_id": public_id,
             "status": "pending_review",
