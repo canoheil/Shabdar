@@ -78,8 +78,8 @@ fn image_validation(reason: &str) -> ApiError {
 fn is_animated_png(bytes: &[u8]) -> bool {
     let mut offset = 8_usize;
     while offset.checked_add(8).is_some_and(|end| end <= bytes.len()) {
-        let length = u32::from_be_bytes(bytes[offset..offset + 4].try_into().expect("four bytes"))
-            as usize;
+        let length =
+            u32::from_be_bytes(bytes[offset..offset + 4].try_into().expect("four bytes")) as usize;
         let kind = &bytes[offset + 4..offset + 8];
         if kind == b"acTL" {
             return true;
@@ -107,8 +107,11 @@ fn is_animated_webp(bytes: &[u8]) -> bool {
     let mut offset = 12_usize;
     while offset.checked_add(8).is_some_and(|end| end <= bytes.len()) {
         let kind = &bytes[offset..offset + 4];
-        let length = u32::from_le_bytes(bytes[offset + 4..offset + 8].try_into().expect("four bytes"))
-            as usize;
+        let length = u32::from_le_bytes(
+            bytes[offset + 4..offset + 8]
+                .try_into()
+                .expect("four bytes"),
+        ) as usize;
         if kind == b"ANIM" || kind == b"ANMF" {
             return true;
         }
@@ -449,9 +452,21 @@ mod tests {
     #[test]
     fn real_static_fixtures_decode_their_dimensions() {
         for (bytes, extension, dimensions) in [
-            (&include_bytes!("../tests/fixtures/tiny.png")[..], "png", (3, 2)),
-            (&include_bytes!("../tests/fixtures/tiny.jpg")[..], "jpg", (4, 3)),
-            (&include_bytes!("../tests/fixtures/tiny.webp")[..], "webp", (5, 4)),
+            (
+                &include_bytes!("../tests/fixtures/tiny.png")[..],
+                "png",
+                (3, 2),
+            ),
+            (
+                &include_bytes!("../tests/fixtures/tiny.jpg")[..],
+                "jpg",
+                (4, 3),
+            ),
+            (
+                &include_bytes!("../tests/fixtures/tiny.webp")[..],
+                "webp",
+                (5, 4),
+            ),
         ] {
             let image = decode_image(bytes).expect("valid checked-in fixture");
             assert_eq!(image.extension, extension);
