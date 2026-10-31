@@ -166,11 +166,11 @@ Expected: matched submissions incorrectly return the old public 200 object and h
 
 Read active rules once, match before insertion, then keep the existing listing → comment transaction. Insert visible/count +1 for clean results; insert hidden + pending case and no counter write for matches. Return the enum and set 202 only in the route. Do not add moderation fields to list/Detail responses or write an admin audit.
 
-- [ ] **Step 4: Run GREEN and all comment/rating/report/block suites**
+- [x] **Step 4: Run GREEN and all comment/rating/report/block suites**
 
 Prove healthy behavior and viewer privacy are unchanged, including concurrent clean/matched creation and author deletion.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 `feat(api): hold filtered comments for review`
 
