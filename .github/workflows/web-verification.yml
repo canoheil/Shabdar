@@ -126,7 +126,7 @@ jobs:
         working-directory: apps/api
         run: |
           set +e
-          cargo test > /tmp/shabdar-api-tests.log 2>&1
+          cargo test --no-fail-fast > /tmp/shabdar-api-tests.log 2>&1
           status=$?
           if [ "$status" -ne 0 ]; then
             python - <<'PY'
