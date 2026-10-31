@@ -347,18 +347,16 @@ async fn clean_and_matched_creation_have_exact_contracts_and_privacy() {
     let listing = create_listing(&t.pool, seller.id, "active").await;
     let rule_id = insert_rule(&t.pool, "BadWord", MatchMode::Compact, true).await;
 
-    let (status, _, clean) = post_comment(
-        t.app.clone(),
-        &listing,
-        &author,
-        "ordinary safe text",
-    )
-    .await;
+    let (status, _, clean) =
+        post_comment(t.app.clone(), &listing, &author, "ordinary safe text").await;
     assert_eq!(status, StatusCode::OK, "{clean}");
     assert_clean_shape(&clean, &author);
     assert_eq!(clean["body"], "ordinary safe text");
     let clean_id = clean["public_id"].as_str().expect("clean ID").to_string();
-    assert_eq!(assert_counter_matches_visible_rows(&t.pool, listing.id).await, 1);
+    assert_eq!(
+        assert_counter_matches_visible_rows(&t.pool, listing.id).await,
+        1
+    );
 
     let matched_body = "  <script>alert('x')</script> b.a.d.w.o.r.d  ";
     let (status, _, pending) = post_comment(t.app.clone(), &listing, &author, matched_body).await;
@@ -383,14 +381,26 @@ async fn clean_and_matched_creation_have_exact_contracts_and_privacy() {
     .fetch_one(&t.pool)
     .await
     .expect("pending database row");
-    assert_eq!(row.try_get::<String, _>("body").expect("body"), matched_body.trim());
-    assert_eq!(row.try_get::<String, _>("status").expect("status"), "hidden");
+    assert_eq!(
+        row.try_get::<String, _>("body").expect("body"),
+        matched_body.trim()
+    );
+    assert_eq!(
+        row.try_get::<String, _>("status").expect("status"),
+        "hidden"
+    );
     assert!(row
         .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("deleted_at")
         .expect("deleted_at")
         .is_none());
-    assert_eq!(row.try_get::<String, _>("case_status").expect("case"), "pending");
-    assert!(row.try_get::<Option<u64>, _>("handled_by").expect("handler").is_none());
+    assert_eq!(
+        row.try_get::<String, _>("case_status").expect("case"),
+        "pending"
+    );
+    assert!(row
+        .try_get::<Option<u64>, _>("handled_by")
+        .expect("handler")
+        .is_none());
     assert!(row
         .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("handled_at")
         .expect("handled_at")
@@ -403,7 +413,10 @@ async fn clean_and_matched_creation_have_exact_contracts_and_privacy() {
     let snapshots: serde_json::Value = serde_json::from_slice(&snapshots).expect("snapshot JSON");
     let snapshot_array = snapshots.as_array().expect("snapshot array");
     assert_eq!(snapshot_array.len(), 1);
-    assert_eq!(snapshot_array[0].as_object().map(serde_json::Map::len), Some(4));
+    assert_eq!(
+        snapshot_array[0].as_object().map(serde_json::Map::len),
+        Some(4)
+    );
     assert_eq!(snapshot_array[0]["public_id"], rule_id);
     assert_eq!(snapshot_array[0]["phrase"], "BadWord");
     assert_eq!(snapshot_array[0]["match_mode"], "compact");
@@ -414,8 +427,14 @@ async fn clean_and_matched_creation_have_exact_contracts_and_privacy() {
         .fetch_one(&t.pool)
         .await
         .expect("report count");
-    assert_eq!(reports, 0, "automatic filtering manufactures no user report");
-    assert_eq!(assert_counter_matches_visible_rows(&t.pool, listing.id).await, 1);
+    assert_eq!(
+        reports, 0,
+        "automatic filtering manufactures no user report"
+    );
+    assert_eq!(
+        assert_counter_matches_visible_rows(&t.pool, listing.id).await,
+        1
+    );
 
     for current_viewer in [None, Some(&author), Some(&viewer)] {
         let (status, _, page) = list_comments(t.app.clone(), &listing, current_viewer).await;
@@ -442,7 +461,10 @@ async fn clean_and_matched_creation_have_exact_contracts_and_privacy() {
             delete_comment(t.app.clone(), &pending_id, &author).await.0,
             StatusCode::OK
         );
-        assert_eq!(assert_counter_matches_visible_rows(&t.pool, listing.id).await, 1);
+        assert_eq!(
+            assert_counter_matches_visible_rows(&t.pool, listing.id).await,
+            1
+        );
     }
     let deleted = sqlx::query(
         "SELECT c.status, c.deleted_at, mc.status AS case_status FROM listing_comments c \
@@ -452,12 +474,18 @@ async fn clean_and_matched_creation_have_exact_contracts_and_privacy() {
     .fetch_one(&t.pool)
     .await
     .expect("deleted pending row");
-    assert_eq!(deleted.try_get::<String, _>("status").expect("status"), "hidden");
+    assert_eq!(
+        deleted.try_get::<String, _>("status").expect("status"),
+        "hidden"
+    );
     assert!(deleted
         .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("deleted_at")
         .expect("deleted_at")
         .is_some());
-    assert_eq!(deleted.try_get::<String, _>("case_status").expect("case"), "pending");
+    assert_eq!(
+        deleted.try_get::<String, _>("case_status").expect("case"),
+        "pending"
+    );
 }
 
 #[tokio::test]
@@ -469,7 +497,9 @@ async fn active_rules_apply_normalized_evasions_without_retroactive_writes() {
     let compact_id = insert_rule(&t.pool, "BadWord", MatchMode::Compact, false).await;
 
     assert_eq!(
-        post_comment(t.app.clone(), &listing, &author, "badword").await.0,
+        post_comment(t.app.clone(), &listing, &author, "badword")
+            .await
+            .0,
         StatusCode::OK,
         "inactive rules do not filter"
     );
@@ -489,14 +519,18 @@ async fn active_rules_apply_normalized_evasions_without_retroactive_writes() {
         assert_pending_shape(&response);
     }
     assert_eq!(
-        post_comment(t.app.clone(), &listing, &author, "badger").await.0,
+        post_comment(t.app.clone(), &listing, &author, "badger")
+            .await
+            .0,
         StatusCode::OK,
         "safe near-match remains public"
     );
 
     insert_rule(&t.pool, "safe phrase", MatchMode::Phrase, true).await;
     assert_eq!(
-        post_comment(t.app.clone(), &listing, &author, "SAFE   PHRASE").await.0,
+        post_comment(t.app.clone(), &listing, &author, "SAFE   PHRASE")
+            .await
+            .0,
         StatusCode::ACCEPTED
     );
     for safe in ["safephrase", "safe phrasely"] {
@@ -505,7 +539,10 @@ async fn active_rules_apply_normalized_evasions_without_retroactive_writes() {
             StatusCode::OK
         );
     }
-    assert_eq!(assert_counter_matches_visible_rows(&t.pool, listing.id).await, 4);
+    assert_eq!(
+        assert_counter_matches_visible_rows(&t.pool, listing.id).await,
+        4
+    );
     assert_eq!(case_count(&t.pool).await, 5);
     assert_eq!(comment_row_count(&t.pool).await, 9);
 }
@@ -555,7 +592,9 @@ async fn matched_requests_preserve_auth_csrf_validation_and_target_guards() {
         slug: "unknown-listing".to_string(),
     };
     assert_eq!(
-        post_comment(t.app.clone(), &unknown, &author, "badword").await.0,
+        post_comment(t.app.clone(), &unknown, &author, "badword")
+            .await
+            .0,
         StatusCode::NOT_FOUND
     );
     sqlx::query("UPDATE users SET status = 'suspended' WHERE id = ?")
@@ -564,13 +603,18 @@ async fn matched_requests_preserve_auth_csrf_validation_and_target_guards() {
         .await
         .expect("suspend fixture");
     assert_eq!(
-        post_comment(t.app.clone(), &listing, &author, "badword").await.0,
+        post_comment(t.app.clone(), &listing, &author, "badword")
+            .await
+            .0,
         StatusCode::UNAUTHORIZED
     );
     assert_eq!(comment_row_count(&t.pool).await, 0);
     assert_eq!(case_count(&t.pool).await, 0);
     assert_eq!(automatic_audit_count(&t.pool).await, 0);
-    assert_eq!(assert_counter_matches_visible_rows(&t.pool, listing.id).await, 0);
+    assert_eq!(
+        assert_counter_matches_visible_rows(&t.pool, listing.id).await,
+        0
+    );
 }
 
 #[tokio::test]
@@ -579,7 +623,9 @@ async fn matched_creation_consumes_limiter_and_pending_delete_is_free() {
         cfg.comment_user_limit = 2;
         cfg.comment_user_window_secs = 60;
     });
-    let Some(t) = setup_with(cfg).await else { return };
+    let Some(t) = setup_with(cfg).await else {
+        return;
+    };
     let seller = create_user(&t.pool, &t.cfg, "+989100000001").await;
     let first = create_user(&t.pool, &t.cfg, "+989100000002").await;
     let second = create_user(&t.pool, &t.cfg, "+989100000003").await;
@@ -588,13 +634,17 @@ async fn matched_creation_consumes_limiter_and_pending_delete_is_free() {
     insert_rule(&t.pool, "BadWord", MatchMode::Compact, true).await;
 
     assert_eq!(
-        post_comment(t.app.clone(), &first_listing, &first, "clean").await.0,
+        post_comment(t.app.clone(), &first_listing, &first, "clean")
+            .await
+            .0,
         StatusCode::OK
     );
-    let (status, _, pending) =
-        post_comment(t.app.clone(), &first_listing, &first, "badword").await;
+    let (status, _, pending) = post_comment(t.app.clone(), &first_listing, &first, "badword").await;
     assert_eq!(status, StatusCode::ACCEPTED, "{pending}");
-    let pending_id = pending["public_id"].as_str().expect("pending ID").to_string();
+    let pending_id = pending["public_id"]
+        .as_str()
+        .expect("pending ID")
+        .to_string();
     let (status, headers, response) =
         post_comment(t.app.clone(), &first_listing, &first, "b.a.d.w.o.r.d").await;
     assert_eq!(status, StatusCode::TOO_MANY_REQUESTS, "{response}");
@@ -607,20 +657,31 @@ async fn matched_creation_consumes_limiter_and_pending_delete_is_free() {
     assert!((1..=60).contains(&retry_after));
 
     assert_eq!(
-        post_comment(t.app.clone(), &second_listing, &second, "badword").await.0,
+        post_comment(t.app.clone(), &second_listing, &second, "badword")
+            .await
+            .0,
         StatusCode::ACCEPTED,
         "another user and listing have independent state"
     );
     assert_eq!(comment_row_count(&t.pool).await, 3);
     assert_eq!(case_count(&t.pool).await, 2);
-    assert_eq!(assert_counter_matches_visible_rows(&t.pool, first_listing.id).await, 1);
-    assert_eq!(assert_counter_matches_visible_rows(&t.pool, second_listing.id).await, 0);
+    assert_eq!(
+        assert_counter_matches_visible_rows(&t.pool, first_listing.id).await,
+        1
+    );
+    assert_eq!(
+        assert_counter_matches_visible_rows(&t.pool, second_listing.id).await,
+        0
+    );
     for _ in 0..2 {
         assert_eq!(
             delete_comment(t.app.clone(), &pending_id, &first).await.0,
             StatusCode::OK
         );
-        assert_eq!(assert_counter_matches_visible_rows(&t.pool, first_listing.id).await, 1);
+        assert_eq!(
+            assert_counter_matches_visible_rows(&t.pool, first_listing.id).await,
+            1
+        );
     }
 }
 
@@ -638,7 +699,9 @@ async fn viewer_filtering_remains_blocker_only() {
     assert_clean_shape(&clean, &clean_author);
     let clean_id = clean["public_id"].as_str().expect("clean ID").to_string();
     assert_eq!(
-        post_comment(t.app.clone(), &listing, &pending_author, "badword").await.0,
+        post_comment(t.app.clone(), &listing, &pending_author, "badword")
+            .await
+            .0,
         StatusCode::ACCEPTED
     );
     let (status, _, blocked) = send(
@@ -656,11 +719,19 @@ async fn viewer_filtering_remains_blocker_only() {
     assert_eq!(comment_ids(&anonymous), vec![clean_id.clone()]);
     let (_, headers, blocked_page) = list_comments(t.app.clone(), &listing, Some(&viewer)).await;
     assert!(comment_ids(&blocked_page).is_empty());
-    assert_eq!(headers.get("cache-control").and_then(|value| value.to_str().ok()), Some("private, no-store"));
+    assert_eq!(
+        headers
+            .get("cache-control")
+            .and_then(|value| value.to_str().ok()),
+        Some("private, no-store")
+    );
     let (_, _, pending_author_page) =
         list_comments(t.app.clone(), &listing, Some(&pending_author)).await;
     assert_eq!(comment_ids(&pending_author_page), vec![clean_id]);
-    assert_eq!(assert_counter_matches_visible_rows(&t.pool, listing.id).await, 1);
+    assert_eq!(
+        assert_counter_matches_visible_rows(&t.pool, listing.id).await,
+        1
+    );
 }
 
 #[tokio::test]
@@ -685,11 +756,23 @@ async fn concurrent_clean_matched_creation_and_deletion_keep_counters_exact() {
     assert_eq!(comment_row_count(&t.pool).await, 4);
     assert_eq!(case_count(&t.pool).await, 2);
     assert_eq!(automatic_audit_count(&t.pool).await, 0);
-    assert_eq!(assert_counter_matches_visible_rows(&t.pool, listing.id).await, 2);
+    assert_eq!(
+        assert_counter_matches_visible_rows(&t.pool, listing.id).await,
+        2
+    );
 
-    let clean_one_id = clean_one.2["public_id"].as_str().expect("clean ID").to_string();
-    let pending_one_id = pending_one.2["public_id"].as_str().expect("pending ID").to_string();
-    let clean_two_id = clean_two.2["public_id"].as_str().expect("clean ID").to_string();
+    let clean_one_id = clean_one.2["public_id"]
+        .as_str()
+        .expect("clean ID")
+        .to_string();
+    let pending_one_id = pending_one.2["public_id"]
+        .as_str()
+        .expect("pending ID")
+        .to_string();
+    let clean_two_id = clean_two.2["public_id"]
+        .as_str()
+        .expect("clean ID")
+        .to_string();
     let (deleted_clean, deleted_pending, duplicate_pending, clean_three) = tokio::join!(
         delete_comment(t.app.clone(), &clean_one_id, &first),
         delete_comment(t.app.clone(), &pending_one_id, &first),
@@ -700,12 +783,20 @@ async fn concurrent_clean_matched_creation_and_deletion_keep_counters_exact() {
     assert_eq!(deleted_pending.0, StatusCode::OK);
     assert_eq!(duplicate_pending.0, StatusCode::OK);
     assert_eq!(clean_three.0, StatusCode::OK, "{:?}", clean_three.2);
-    assert_eq!(assert_counter_matches_visible_rows(&t.pool, listing.id).await, 2);
+    assert_eq!(
+        assert_counter_matches_visible_rows(&t.pool, listing.id).await,
+        2
+    );
     assert_eq!(case_count(&t.pool).await, 2);
     let (_, _, page) = list_comments(t.app.clone(), &listing, None).await;
     let ids = comment_ids(&page);
     assert_eq!(ids.len(), 2);
     assert!(ids.contains(&clean_two_id));
-    assert!(ids.contains(&clean_three.2["public_id"].as_str().expect("new ID").to_string()));
+    assert!(ids.contains(
+        &clean_three.2["public_id"]
+            .as_str()
+            .expect("new ID")
+            .to_string()
+    ));
     assert!(!ids.contains(&pending_one_id));
 }
