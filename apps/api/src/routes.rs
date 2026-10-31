@@ -31,8 +31,8 @@ use crate::state::AppState;
 /// Builds the full router. New endpoints are added here, not in main.rs.
 pub fn router(state: AppState) -> Router {
     // Multipart is the largest accepted request. The small overhead allowance
-    // covers boundaries/headers while keeping every route's body buffered cap
-    // explicit; per-file and decoded-image limits remain separate.
+    // covers boundaries/headers. Scope the larger cap to that route only so
+    // the API JSON extractor's independent 2 MiB/413 contract is unchanged.
     let max_body_bytes = usize::try_from(state.config.max_image_bytes.saturating_add(64 * 1024))
         .unwrap_or(usize::MAX);
     Router::new()
@@ -82,7 +82,10 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/listings/{public_id}/archive",
             post(archive_listing),
         )
-        .route("/api/v1/listings/{public_id}/images", post(upload_image))
+        .route(
+            "/api/v1/listings/{public_id}/images",
+            post(upload_image).layer(axum::extract::DefaultBodyLimit::max(max_body_bytes)),
+        )
         .route(
             "/api/v1/listings/{public_id}/images/{image_id}",
             delete(delete_image),
@@ -148,7 +151,6 @@ pub fn router(state: AppState) -> Router {
         )
         // Unknown paths: 404 in the documented envelope (plan Task 4).
         .fallback(not_found)
-        .layer(axum::extract::DefaultBodyLimit::max(max_body_bytes))
         // Request IDs wrap every route, fallback included.
         .layer(middleware::from_fn(request_id_middleware))
         .with_state(state)
