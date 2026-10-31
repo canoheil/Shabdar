@@ -34,6 +34,9 @@ struct ListingFixture {
 
 async fn reset_db(pool: &MySqlPool) {
     for table in [
+        "comment_moderation_cases",
+        "moderation_rules",
+        "moderation_settings",
         "reports",
         "blocks",
         "listing_comments",

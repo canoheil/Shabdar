@@ -44,6 +44,8 @@ export async function runSql(sql: string): Promise<string> {
 
 export async function resetDynamicRows(): Promise<void> {
   await runSql(`
+    DELETE FROM comment_moderation_cases;
+    DELETE FROM moderation_rules WHERE phrase LIKE 'e2e%';
     DELETE FROM reports;
     DELETE FROM blocks;
     DELETE FROM listing_comments;

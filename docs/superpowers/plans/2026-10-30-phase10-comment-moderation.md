@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-30-phase10-comment-moderation-design.md`; the user approved the written spec on 2026-10-30. Read it with this plan.
 
+**Execution:** The user approved this written plan and selected Native execution on 2026-10-30, with continuous implementation and no per-section approval prompts.
+
 ## Global Constraints
 
 - Base is `main` merge `4dc1c4c`; spec commit is `31cefed`. Work and push only on `arena/4b608814-shabdar`; update the workflow push branch in Task 1. Never merge or close a PR automatically.
@@ -43,7 +45,7 @@
 - Produces: `moderation_rules`, `comment_moderation_cases`, and singleton `moderation_settings` from the spec; migration `0010` is the only schema change.
 - Seed contract: 143 distinct dedupe keys, 28 `phrase` rules and 115 `compact` rules, settings revision 1.
 
-- [ ] **Step 1: Add failing migration/reset/notice tests and enable this branch**
+- [x] **Step 1: Add failing migration/reset/notice tests and enable this branch**
 
 Assert all three tables, rule columns/enums/unique dedupe key, case JSON/FKs/indexes, settings CHECK/revision, listing cascade, handler SET NULL, 143/28/115 seed counts, and clean migration reapplication. Assert `../THIRD_PARTY_NOTICES.md` contains the pinned commit, upstream URL, Thekawasaki copyright, and MIT grant. Add cases before comments/users and rules/settings to every drop/reset list. Change only the workflow push branch to `arena/4b608814-shabdar`; retain pull-request verification.
 
