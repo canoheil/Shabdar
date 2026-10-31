@@ -249,6 +249,28 @@ async fn draft_listing_id(
     row.try_get("id").map_err(|_| ApiError::Internal)
 }
 
+async fn lock_editable_listing(
+    tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
+    listing_id: u64,
+) -> Result<(), ApiError> {
+    let status: Option<String> = sqlx::query_scalar(
+        "SELECT status FROM listings WHERE id = ? AND deleted_at IS NULL FOR UPDATE",
+    )
+    .bind(listing_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| ApiError::Internal)?;
+    match status.as_deref() {
+        Some("draft" | "rejected") => Ok(()),
+        Some(_) => {
+            let mut fields = std::collections::BTreeMap::new();
+            fields.insert("status".to_string(), "not_editable".to_string());
+            Err(ApiError::Validation { fields })
+        }
+        None => Err(ApiError::NotFound),
+    }
+}
+
 async fn clear_review_in_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
     listing_id: u64,
@@ -307,54 +329,58 @@ pub async fn add_image(
         .await
         .map_err(|_| ApiError::Internal)?;
 
-    // MAX over TINYINT UNSIGNED decodes into Option<u64> (same-sign widening;
-    // Option<i64> is rejected by sqlx's type check on non-NULL values).
-    let next: Option<u64> =
-        sqlx::query_scalar("SELECT MAX(sort_order) FROM listing_images WHERE listing_id = ?")
-            .bind(listing_id)
-            .fetch_one(pool)
-            .await
-            .map_err(|_| ApiError::Internal)?;
-    let order = next.map(|n| n + 1).unwrap_or(0) as u8;
-    let now = chrono::Utc::now();
-    // The insert id comes from the statement result itself: LAST_INSERT_ID()
-    // is connection-scoped, and a separate SELECT may land on another pool
-    // connection (regression: every upload after the first returned id 1).
-    let mut tx = match pool.begin().await {
-        Ok(tx) => tx,
-        Err(_) => {
-            let _ = tokio::fs::remove_file(&path).await;
-            return Err(ApiError::Internal);
+    let outcome = async {
+        let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
+        // Every mutation uses listing → image lock order, also rechecking
+        // editability and count after any concurrent submit/upload.
+        lock_editable_listing(&mut tx, listing_id).await?;
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM listing_images WHERE listing_id = ?")
+                .bind(listing_id)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|_| ApiError::Internal)?;
+        if count >= cfg.max_images_per_listing as i64 {
+            return Err(image_validation("too_many"));
         }
-    };
-    let outcome = sqlx::query(
-        "INSERT INTO listing_images \
-         (listing_id, storage_key, sort_order, width, height, created_at) \
-         VALUES (?, ?, ?, ?, ?, ?)",
-    )
-    .bind(listing_id)
-    .bind(&key)
-    .bind(order)
-    .bind(validated.width)
-    .bind(validated.height)
-    .bind(now)
-    .execute(&mut *tx)
+        // MAX over TINYINT UNSIGNED decodes into Option<u64> (same-sign widening;
+        // Option<i64> is rejected by sqlx's type check on non-NULL values).
+        let next: Option<u64> =
+            sqlx::query_scalar("SELECT MAX(sort_order) FROM listing_images WHERE listing_id = ?")
+                .bind(listing_id)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|_| ApiError::Internal)?;
+        let order = next.map(|n| n + 1).unwrap_or(0) as u8;
+        let now = chrono::Utc::now();
+        // The insert id comes from the statement result itself: LAST_INSERT_ID()
+        // is connection-scoped, and a separate SELECT may use another connection.
+        let result = sqlx::query(
+            "INSERT INTO listing_images \
+             (listing_id, storage_key, sort_order, width, height, created_at) \
+             VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(listing_id)
+        .bind(&key)
+        .bind(order)
+        .bind(validated.width)
+        .bind(validated.height)
+        .bind(now)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| ApiError::Internal)?;
+        clear_review_in_tx(&mut tx, listing_id).await?;
+        tx.commit().await.map_err(|_| ApiError::Internal)?;
+        Ok::<_, ApiError>(result)
+    }
     .await;
     let result = match outcome {
         Ok(result) => result,
-        Err(_) => {
+        Err(error) => {
             let _ = tokio::fs::remove_file(&path).await;
-            return Err(ApiError::Internal);
+            return Err(error);
         }
     };
-    if clear_review_in_tx(&mut tx, listing_id).await.is_err() {
-        let _ = tokio::fs::remove_file(&path).await;
-        return Err(ApiError::Internal);
-    }
-    if tx.commit().await.is_err() {
-        let _ = tokio::fs::remove_file(&path).await;
-        return Err(ApiError::Internal);
-    }
     Ok(ImageOut {
         id: result.last_insert_id(),
         url: format!("/media/{key}"),
@@ -375,18 +401,19 @@ pub async fn remove_image(
     image_id: u64,
 ) -> Result<(), ApiError> {
     let listing_id = draft_listing_id(pool, seller_id, public_id).await?;
+    let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
+    lock_editable_listing(&mut tx, listing_id).await?;
     let key: Option<String> = sqlx::query_scalar(
-        "SELECT storage_key FROM listing_images WHERE id = ? AND listing_id = ?",
+        "SELECT storage_key FROM listing_images WHERE id = ? AND listing_id = ? FOR UPDATE",
     )
     .bind(image_id)
     .bind(listing_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|_| ApiError::Internal)?;
     let Some(key) = key else {
         return Err(ApiError::NotFound);
     };
-    let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
     let deleted = sqlx::query("DELETE FROM listing_images WHERE id = ? AND listing_id = ?")
         .bind(image_id)
         .bind(listing_id)
@@ -411,12 +438,15 @@ pub async fn set_order(
     ids: &[u64],
 ) -> Result<(), ApiError> {
     let listing_id = draft_listing_id(pool, seller_id, public_id).await?;
-    let current: Vec<u64> =
-        sqlx::query_scalar("SELECT id FROM listing_images WHERE listing_id = ? ORDER BY id")
-            .bind(listing_id)
-            .fetch_all(pool)
-            .await
-            .map_err(|_| ApiError::Internal)?;
+    let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
+    lock_editable_listing(&mut tx, listing_id).await?;
+    let current: Vec<u64> = sqlx::query_scalar(
+        "SELECT id FROM listing_images WHERE listing_id = ? ORDER BY id FOR UPDATE",
+    )
+    .bind(listing_id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(|_| ApiError::Internal)?;
     let mut want: Vec<u64> = ids.to_vec();
     want.sort_unstable();
     if want != current {
@@ -424,7 +454,6 @@ pub async fn set_order(
         fields.insert("image_ids".to_string(), "mismatch".to_string());
         return Err(ApiError::Validation { fields });
     }
-    let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
     // Two passes: a straight swap would trip UNIQUE(listing_id, sort_order)
     // midway (row A takes row B's old slot while B still holds it). The temp
     // band 128..135 can never collide — positions stay below max_images (8).

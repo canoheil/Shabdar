@@ -131,6 +131,22 @@ async fn send_authed(
     (status, serde_json::from_slice(&bytes).expect("JSON body"))
 }
 
+async fn assert_private_admin_get(app: axum::Router, path: &str, cookie: &str) {
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(path)
+        .header("cookie", cookie)
+        .body(Body::empty())
+        .unwrap();
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers().get("cache-control").unwrap(),
+        "private, no-store"
+    );
+    assert_eq!(response.headers().get("vary").unwrap(), "Cookie");
+}
+
 fn admin_test_config() -> shabdar_api::config::Config {
     let dir = std::env::temp_dir().join(format!("shabdar-admin-review-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -372,6 +388,18 @@ async fn approve_publishes_exact_reviewed_images_with_detail_and_audit() {
         .as_str()
         .unwrap()
         .starts_with("/media/"));
+    assert_private_admin_get(
+        app.clone(),
+        "/api/v1/admin/listings/queue",
+        &admin_cookie,
+    )
+    .await;
+    assert_private_admin_get(
+        app.clone(),
+        &format!("/api/v1/admin/listings/{public_id}"),
+        &admin_cookie,
+    )
+    .await;
 
     let (status, body) = send_authed(
         app.clone(),
@@ -653,6 +681,12 @@ async fn legacy_queue_pages_and_exact_review_restores_without_rewriting_publicat
     );
     assert_eq!(first_page["data"][0]["image_count"], 1);
     assert!(first_page["data"][0]["cover_image"].is_string());
+    assert_private_admin_get(
+        app.clone(),
+        "/api/v1/admin/listings/image-review-queue?limit=1",
+        &admin_cookie,
+    )
+    .await;
     assert_eq!(first_page["page"]["has_more"], true);
     let cursor = first_page["page"]["next_cursor"].as_str().unwrap();
     let (_, second_page) = send_authed(

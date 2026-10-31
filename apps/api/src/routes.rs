@@ -963,16 +963,17 @@ async fn admin_queue(
     State(state): State<AppState>,
     user: CurrentUser,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<axum::response::Response, ApiError> {
     crate::admin::require_admin(&user)?;
-    Ok(Json(
-        crate::admin::queue(
-            &state.pool,
-            params.get("cursor").map(String::as_str),
-            params.get("limit").map(String::as_str),
-        )
-        .await?,
-    ))
+    let body = crate::admin::queue(
+        &state.pool,
+        params.get("cursor").map(String::as_str),
+        params.get("limit").map(String::as_str),
+    )
+    .await?;
+    let mut response = Json(body).into_response();
+    mark_private_viewer(&mut response);
+    Ok(response)
 }
 
 /// GET /api/v1/admin/listings/image-review-queue — active legacy image sets.
@@ -980,16 +981,17 @@ async fn admin_image_review_queue(
     State(state): State<AppState>,
     user: CurrentUser,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<axum::response::Response, ApiError> {
     crate::admin::require_admin(&user)?;
-    Ok(Json(
-        crate::admin::image_review_queue(
-            &state.pool,
-            params.get("cursor").map(String::as_str),
-            params.get("limit").map(String::as_str),
-        )
-        .await?,
-    ))
+    let body = crate::admin::image_review_queue(
+        &state.pool,
+        params.get("cursor").map(String::as_str),
+        params.get("limit").map(String::as_str),
+    )
+    .await?;
+    let mut response = Json(body).into_response();
+    mark_private_viewer(&mut response);
+    Ok(response)
 }
 
 /// GET /api/v1/admin/listings/{public_id} — full view with seller info.
@@ -997,11 +999,12 @@ async fn admin_detail(
     State(state): State<AppState>,
     user: CurrentUser,
     Path(public_id): Path<String>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<axum::response::Response, ApiError> {
     crate::admin::require_admin(&user)?;
-    Ok(Json(
-        crate::admin::admin_detail(&state.pool, &public_id).await?,
-    ))
+    let body = crate::admin::admin_detail(&state.pool, &public_id).await?;
+    let mut response = Json(body).into_response();
+    mark_private_viewer(&mut response);
+    Ok(response)
 }
 
 /// POST /api/v1/admin/listings/{public_id}/approve — pending → active.
