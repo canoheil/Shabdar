@@ -118,7 +118,7 @@ Verify all seed rows and older API tests. Include a benign text corpus and evasi
 - Produces: `RulePatch { phrase:Option<String>, match_mode:Option<String>, is_active:Option<bool>, reason:String }`.
 - Produces: `list(pool,active,cursor,limit)`, `create(pool,admin_id,phrase,match_mode,reason)`, `update(pool,admin_id,public_id,RulePatch)`, and `active_rules(pool) -> Result<Vec<ModerationRule>,ApiError>`; route paths are exactly those in spec §6.
 
-- [ ] **Step 1: Write failing rule API tests**
+- [x] **Step 1: Write failing rule API tests**
 
 Cover anonymous/non-admin/CSRF, `private,no-store`, reason and rule validation, 2/120/121-character boundaries, literal wildcard text, active filters, default/cap/cursors, exact public JSON, create/edit/toggle/no-op behavior, duplicate key across modes, `fields.patch="no_changes"`, and 404s. Race two identical creates and two different actual edits to one rule; assert one dedupe row, one create audit, two edit audits, monotonically increasing settings/rule revisions, and no lost update. Activation changes only global revision; phrase/mode changes also increment rule revision.
 
