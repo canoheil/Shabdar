@@ -226,13 +226,12 @@ async fn audit_count(pool: &MySqlPool, action: &str) -> i64 {
 }
 
 async fn rule_state(pool: &MySqlPool, public_id: &str) -> (String, bool, u64) {
-    let row = sqlx::query(
-        "SELECT phrase, is_active, revision FROM moderation_rules WHERE public_id = ?",
-    )
-    .bind(public_id)
-    .fetch_one(pool)
-    .await
-    .expect("rule state");
+    let row =
+        sqlx::query("SELECT phrase, is_active, revision FROM moderation_rules WHERE public_id = ?")
+            .bind(public_id)
+            .fetch_one(pool)
+            .await
+            .expect("rule state");
     (
         row.try_get("phrase").expect("phrase"),
         row.try_get("is_active").expect("active"),
@@ -312,7 +311,9 @@ async fn routes_require_admin_csrf_and_private_cache() {
     let (status, headers, body) = list_rules(t.app.clone(), &admin, "").await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(
-        headers.get("cache-control").and_then(|value| value.to_str().ok()),
+        headers
+            .get("cache-control")
+            .and_then(|value| value.to_str().ok()),
         Some("private, no-store")
     );
     assert_eq!(body["data"].as_array().map(Vec::len), Some(20));
@@ -474,7 +475,10 @@ async fn create_duplicates_toggles_noops_and_revisions_are_exact() {
     assert_rule_shape(&created);
     assert_eq!(created["is_active"], true);
     assert_eq!(created["revision"], 1);
-    let public_id = created["public_id"].as_str().expect("public ID").to_string();
+    let public_id = created["public_id"]
+        .as_str()
+        .expect("public ID")
+        .to_string();
     assert_eq!(settings_revision(&t.pool).await, 2);
     assert_eq!(audit_count(&t.pool, "moderation_rule.create").await, 1);
 
@@ -597,8 +601,14 @@ async fn list_filters_limits_and_cursor_survive_anchor_activation_change() {
 
     let (status, _, first) = list_rules(t.app.clone(), &admin, "?active=active&limit=1").await;
     assert_eq!(status, StatusCode::OK, "{first}");
-    let anchor = first["data"][0]["public_id"].as_str().expect("anchor").to_string();
-    let cursor = first["page"]["next_cursor"].as_str().expect("cursor").to_string();
+    let anchor = first["data"][0]["public_id"]
+        .as_str()
+        .expect("anchor")
+        .to_string();
+    let cursor = first["page"]["next_cursor"]
+        .as_str()
+        .expect("cursor")
+        .to_string();
     let (status, _, _) = patch_rule(
         t.app.clone(),
         &admin,
@@ -640,7 +650,8 @@ async fn concurrent_identical_creates_write_one_row_revision_and_audit() {
     let Some(t) = setup().await else { return };
     clear_rules(&t.pool).await;
     let admin = create_admin(&t.pool, &t.cfg).await;
-    let body = serde_json::json!({"phrase": "Concurrent", "match_mode": "compact", "reason": "race"});
+    let body =
+        serde_json::json!({"phrase": "Concurrent", "match_mode": "compact", "reason": "race"});
     let first = create_rule(t.app.clone(), &admin, body.clone());
     let second = create_rule(t.app.clone(), &admin, body);
     let (first, second) = tokio::join!(first, second);
@@ -663,7 +674,10 @@ async fn concurrent_edits_and_noops_preserve_both_changes_without_extra_audits()
         serde_json::json!({"phrase": "Original", "match_mode": "compact", "reason": "initial"}),
     )
     .await;
-    let public_id = created["public_id"].as_str().expect("public ID").to_string();
+    let public_id = created["public_id"]
+        .as_str()
+        .expect("public ID")
+        .to_string();
 
     let deactivate = patch_rule(
         t.app.clone(),
@@ -696,10 +710,12 @@ async fn concurrent_edits_and_noops_preserve_both_changes_without_extra_audits()
     assert_eq!(settings_revision(&t.pool).await, 4);
     assert_eq!(audit_count(&t.pool, "moderation_rule.update").await, 2);
 
-    let rows = sqlx::query("SELECT metadata FROM admin_audit_logs WHERE action = 'moderation_rule.update'")
-        .fetch_all(&t.pool)
-        .await
-        .expect("audit metadata");
+    let rows = sqlx::query(
+        "SELECT metadata FROM admin_audit_logs WHERE action = 'moderation_rule.update'",
+    )
+    .fetch_all(&t.pool)
+    .await
+    .expect("audit metadata");
     for row in rows {
         let metadata: String = row.try_get("metadata").expect("metadata");
         assert!(!metadata.contains("Changed"));
