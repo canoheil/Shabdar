@@ -373,11 +373,26 @@ fn assert_keys(value: &serde_json::Value, expected: &[&str]) {
 fn assert_item_shape(item: &serde_json::Value) {
     assert_keys(
         item,
-        &["comment", "status", "flagged_at", "matched_rules", "handled_at", "handled_by"],
+        &[
+            "comment",
+            "status",
+            "flagged_at",
+            "matched_rules",
+            "handled_at",
+            "handled_by",
+        ],
     );
     assert_keys(
         &item["comment"],
-        &["public_id", "body", "status", "deleted", "created_at", "author", "listing_slug"],
+        &[
+            "public_id",
+            "body",
+            "status",
+            "deleted",
+            "created_at",
+            "author",
+            "listing_slug",
+        ],
     );
     assert_keys(&item["comment"]["author"], &["public_id", "display_name"]);
     if !item["handled_by"].is_null() {
@@ -458,7 +473,10 @@ async fn queue_requires_admin_private_cache_and_exact_safe_shapes() {
     .await;
     insert_case(&t.pool, comment.id, "pending", &snapshots(1), now).await;
 
-    assert_eq!(queue(t.app.clone(), None, "").await.0, StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        queue(t.app.clone(), None, "").await.0,
+        StatusCode::UNAUTHORIZED
+    );
     assert_eq!(
         queue(t.app.clone(), Some(&non_admin), "").await.0,
         StatusCode::FORBIDDEN
@@ -466,10 +484,15 @@ async fn queue_requires_admin_private_cache_and_exact_safe_shapes() {
     let (status, headers, body) = queue(t.app.clone(), Some(&admin), "").await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(
-        headers.get("cache-control").and_then(|value| value.to_str().ok()),
+        headers
+            .get("cache-control")
+            .and_then(|value| value.to_str().ok()),
         Some("private, no-store")
     );
-    assert_eq!(headers.get("vary").and_then(|value| value.to_str().ok()), Some("Cookie"));
+    assert_eq!(
+        headers.get("vary").and_then(|value| value.to_str().ok()),
+        Some("Cookie")
+    );
     assert_eq!(body["data"].as_array().map(Vec::len), Some(1));
     let item = &body["data"][0];
     assert_item_shape(item);
@@ -480,7 +503,10 @@ async fn queue_requires_admin_private_cache_and_exact_safe_shapes() {
     assert_eq!(item["comment"]["deleted"], false);
     assert_eq!(item["comment"]["listing_slug"], listing.slug);
     assert_eq!(item["comment"]["author"]["public_id"], author.public_id);
-    assert_eq!(item["matched_rules"][0]["phrase"], "<script>rule 0</script>");
+    assert_eq!(
+        item["matched_rules"][0]["phrase"],
+        "<script>rule 0</script>"
+    );
     assert!(item["handled_by"].is_null());
     assert!(item["handled_at"].is_null());
     for (query, field) in [("?status=bad", "status"), ("?cursor=bad", "cursor")] {
@@ -501,13 +527,7 @@ async fn queue_filters_limits_and_cursor_survive_anchor_decisions() {
     let mut comments = Vec::new();
     for _ in 0..55 {
         let comment = insert_comment(
-            &t.pool,
-            listing.id,
-            author.id,
-            "queued",
-            "hidden",
-            false,
-            now,
+            &t.pool, listing.id, author.id, "queued", "hidden", false, now,
         )
         .await;
         insert_case(&t.pool, comment.id, "pending", &snapshot, now).await;
@@ -516,19 +536,34 @@ async fn queue_filters_limits_and_cursor_survive_anchor_decisions() {
     let (_, _, default) = queue(t.app.clone(), Some(&admin), "").await;
     assert_eq!(default["data"].as_array().map(Vec::len), Some(20));
     assert_eq!(default["page"]["has_more"], true);
-    assert_eq!(default["data"][0]["comment"]["public_id"], comments[0].public_id);
+    assert_eq!(
+        default["data"][0]["comment"]["public_id"],
+        comments[0].public_id
+    );
     let expected_second = default["data"][1]["comment"]["public_id"].clone();
     let (_, _, capped) = queue(t.app.clone(), Some(&admin), "?status=all&limit=100").await;
     assert_eq!(capped["data"].as_array().map(Vec::len), Some(50));
     assert_eq!(capped["page"]["has_more"], true);
 
     let (_, _, first) = queue(t.app.clone(), Some(&admin), "?limit=1").await;
-    let cursor = first["page"]["next_cursor"].as_str().expect("cursor").to_string();
-    let anchor = first["data"][0]["comment"]["public_id"].as_str().expect("anchor").to_string();
+    let cursor = first["page"]["next_cursor"]
+        .as_str()
+        .expect("cursor")
+        .to_string();
+    let anchor = first["data"][0]["comment"]["public_id"]
+        .as_str()
+        .expect("anchor")
+        .to_string();
     assert_eq!(
-        action(t.app.clone(), &admin, &anchor, "confirm_hidden", Some("review"))
-            .await
-            .0,
+        action(
+            t.app.clone(),
+            &admin,
+            &anchor,
+            "confirm_hidden",
+            Some("review")
+        )
+        .await
+        .0,
         StatusCode::OK
     );
     let encoded = cursor.replace(':', "%3A");
@@ -538,13 +573,18 @@ async fn queue_filters_limits_and_cursor_survive_anchor_decisions() {
         &format!("?limit=1&cursor={encoded}"),
     )
     .await;
-    assert_eq!(continued["data"][0]["comment"]["public_id"], expected_second);
+    assert_eq!(
+        continued["data"][0]["comment"]["public_id"],
+        expected_second
+    );
     let (_, _, confirmed) = queue(t.app.clone(), Some(&admin), "?status=confirmed_hidden").await;
     assert_eq!(confirmed["data"].as_array().map(Vec::len), Some(1));
     assert_eq!(confirmed["data"][0]["comment"]["public_id"], anchor);
 
     assert_eq!(
-        action(t.app.clone(), &admin, &anchor, "restore", None).await.0,
+        action(t.app.clone(), &admin, &anchor, "restore", None)
+            .await
+            .0,
         StatusCode::OK
     );
     let (_, _, restored) = queue(t.app.clone(), Some(&admin), "?status=restored").await;
@@ -562,25 +602,56 @@ async fn confirm_restore_reversal_deleted_and_idempotency_are_exact() {
     let author = create_user(&t.pool, &t.cfg, "+989100000002").await;
     let listing = create_listing(&t.pool, author.id).await;
     let now = chrono::Utc::now();
-    insert_comment(&t.pool, listing.id, author.id, "visible", "visible", false, now).await;
-    let comment = insert_comment(&t.pool, listing.id, author.id, "pending", "hidden", false, now).await;
+    insert_comment(
+        &t.pool, listing.id, author.id, "visible", "visible", false, now,
+    )
+    .await;
+    let comment = insert_comment(
+        &t.pool, listing.id, author.id, "pending", "hidden", false, now,
+    )
+    .await;
     let matched = snapshots(2);
     insert_case(&t.pool, comment.id, "pending", &matched, now).await;
-    let ordinary = insert_comment(&t.pool, listing.id, author.id, "ordinary", "visible", false, now).await;
+    let ordinary = insert_comment(
+        &t.pool, listing.id, author.id, "ordinary", "visible", false, now,
+    )
+    .await;
 
     assert_eq!(
-        decide(t.app.clone(), Some(&admin), None, &comment.public_id, serde_json::json!({"action":"confirm_hidden","reason":"x"}))
-            .await
-            .0,
+        decide(
+            t.app.clone(),
+            Some(&admin),
+            None,
+            &comment.public_id,
+            serde_json::json!({"action":"confirm_hidden","reason":"x"})
+        )
+        .await
+        .0,
         StatusCode::FORBIDDEN
     );
     for (body, field, expected) in [
         (serde_json::json!({}), "action", "required"),
         (serde_json::json!({"action":"explode"}), "action", "invalid"),
-        (serde_json::json!({"action":"confirm_hidden"}), "reason", "required"),
-        (serde_json::json!({"action":"confirm_hidden","reason":" "}), "reason", "required"),
-        (serde_json::json!({"action":"confirm_hidden","reason":"x".repeat(501)}), "reason", "too_long"),
-        (serde_json::json!({"action":"restore","reason":"x".repeat(501)}), "reason", "too_long"),
+        (
+            serde_json::json!({"action":"confirm_hidden"}),
+            "reason",
+            "required",
+        ),
+        (
+            serde_json::json!({"action":"confirm_hidden","reason":" "}),
+            "reason",
+            "required",
+        ),
+        (
+            serde_json::json!({"action":"confirm_hidden","reason":"x".repeat(501)}),
+            "reason",
+            "too_long",
+        ),
+        (
+            serde_json::json!({"action":"restore","reason":"x".repeat(501)}),
+            "reason",
+            "too_long",
+        ),
     ] {
         let (status, _, response) = decide(
             t.app.clone(),
@@ -594,18 +665,33 @@ async fn confirm_restore_reversal_deleted_and_idempotency_are_exact() {
         assert_eq!(response["error"]["fields"][field], expected);
     }
     assert_eq!(
-        action(t.app.clone(), &admin, &ordinary.public_id, "confirm_hidden", Some("x"))
-            .await
-            .0,
+        action(
+            t.app.clone(),
+            &admin,
+            &ordinary.public_id,
+            "confirm_hidden",
+            Some("x")
+        )
+        .await
+        .0,
         StatusCode::BAD_REQUEST
     );
     assert_eq!(
-        action(t.app.clone(), &admin, &"0".repeat(26), "confirm_hidden", Some("x"))
-            .await
-            .0,
+        action(
+            t.app.clone(),
+            &admin,
+            &"0".repeat(26),
+            "confirm_hidden",
+            Some("x")
+        )
+        .await
+        .0,
         StatusCode::NOT_FOUND
     );
-    assert_eq!(audit_count(&t.pool, "comment.filter_confirm_hidden").await, 0);
+    assert_eq!(
+        audit_count(&t.pool, "comment.filter_confirm_hidden").await,
+        0
+    );
 
     let reason = "ر".repeat(500);
     let (status, _, confirmed) = action(
@@ -623,7 +709,10 @@ async fn confirm_restore_reversal_deleted_and_idempotency_are_exact() {
     assert_eq!(confirmed["handled_by"]["public_id"], admin.public_id);
     assert!(confirmed["handled_at"].is_string());
     assert_eq!(assert_counter(&t.pool, listing.id).await, 2);
-    assert_eq!(audit_count(&t.pool, "comment.filter_confirm_hidden").await, 1);
+    assert_eq!(
+        audit_count(&t.pool, "comment.filter_confirm_hidden").await,
+        1
+    );
     let (status, _, repeated) = action(
         t.app.clone(),
         &admin,
@@ -634,9 +723,13 @@ async fn confirm_restore_reversal_deleted_and_idempotency_are_exact() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(repeated, confirmed);
-    assert_eq!(audit_count(&t.pool, "comment.filter_confirm_hidden").await, 1);
+    assert_eq!(
+        audit_count(&t.pool, "comment.filter_confirm_hidden").await,
+        1
+    );
 
-    let (status, _, restored) = action(t.app.clone(), &admin, &comment.public_id, "restore", None).await;
+    let (status, _, restored) =
+        action(t.app.clone(), &admin, &comment.public_id, "restore", None).await;
     assert_eq!(status, StatusCode::OK, "{restored}");
     assert_eq!(restored["status"], "restored");
     assert_eq!(restored["comment"]["status"], "visible");
@@ -647,7 +740,8 @@ async fn confirm_restore_reversal_deleted_and_idempotency_are_exact() {
         {"public_id": matched[1]["public_id"], "revision": matched[1]["revision"]}
     ]);
     assert_eq!(clearances(&t.pool, comment.id).await, expected_clearances);
-    let (status, _, repeated_restore) = action(t.app.clone(), &admin, &comment.public_id, "restore", None).await;
+    let (status, _, repeated_restore) =
+        action(t.app.clone(), &admin, &comment.public_id, "restore", None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(repeated_restore, restored);
     assert_eq!(assert_counter(&t.pool, listing.id).await, 3);
@@ -672,35 +766,63 @@ async fn confirm_restore_reversal_deleted_and_idempotency_are_exact() {
     .expect("decision audits");
     assert_eq!(audits.len(), 2);
     for row in audits {
-        assert_eq!(row.try_get::<String, _>("target_type").expect("target"), "comment");
+        assert_eq!(
+            row.try_get::<String, _>("target_type").expect("target"),
+            "comment"
+        );
         let metadata: String = row.try_get("metadata").expect("metadata");
         let metadata: serde_json::Value = serde_json::from_str(&metadata).expect("metadata JSON");
-        assert_eq!(metadata, serde_json::json!({"source":"automatic_profanity"}));
+        assert_eq!(
+            metadata,
+            serde_json::json!({"source":"automatic_profanity"})
+        );
     }
 
-    let deleted = insert_comment(&t.pool, listing.id, author.id, "deleted", "hidden", true, now).await;
+    let deleted = insert_comment(
+        &t.pool, listing.id, author.id, "deleted", "hidden", true, now,
+    )
+    .await;
     insert_case(&t.pool, deleted.id, "pending", &snapshots(1), now).await;
     assert_eq!(
-        action(t.app.clone(), &admin, &deleted.public_id, "confirm_hidden", Some("close"))
-            .await
-            .0,
+        action(
+            t.app.clone(),
+            &admin,
+            &deleted.public_id,
+            "confirm_hidden",
+            Some("close")
+        )
+        .await
+        .0,
         StatusCode::OK,
         "deleted pending cases can be closed"
     );
     assert_eq!(case_status(&t.pool, deleted.id).await, "confirmed_hidden");
-    let (status, _, response) = action(t.app.clone(), &admin, &deleted.public_id, "restore", None).await;
+    let (status, _, response) =
+        action(t.app.clone(), &admin, &deleted.public_id, "restore", None).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(response["error"]["fields"]["status"], "invalid_transition");
     assert_eq!(assert_counter(&t.pool, listing.id).await, 3);
-    assert_eq!(audit_count(&t.pool, "comment.filter_confirm_hidden").await, 2);
+    assert_eq!(
+        audit_count(&t.pool, "comment.filter_confirm_hidden").await,
+        2
+    );
     assert_eq!(audit_count(&t.pool, "comment.filter_restore").await, 1);
     assert_eq!(
-        action(t.app.clone(), &admin, &deleted.public_id, "confirm_hidden", Some("retry"))
-            .await
-            .0,
+        action(
+            t.app.clone(),
+            &admin,
+            &deleted.public_id,
+            "confirm_hidden",
+            Some("retry")
+        )
+        .await
+        .0,
         StatusCode::OK
     );
-    assert_eq!(audit_count(&t.pool, "comment.filter_confirm_hidden").await, 2);
+    assert_eq!(
+        audit_count(&t.pool, "comment.filter_confirm_hidden").await,
+        2
+    );
 }
 
 #[tokio::test]
@@ -712,19 +834,28 @@ async fn report_status_and_restore_guard_respect_automatic_cases() {
     let second_reporter = create_user(&t.pool, &t.cfg, "+989100000004").await;
     let listing = create_listing(&t.pool, author.id).await;
     let now = chrono::Utc::now();
-    let comment = insert_comment(&t.pool, listing.id, author.id, "reported", "visible", false, now).await;
+    let comment = insert_comment(
+        &t.pool, listing.id, author.id, "reported", "visible", false, now,
+    )
+    .await;
     let first_report = insert_report(&t.pool, first_reporter.id, comment.id).await;
 
-    let (status, _, hidden) = report_action(t.app.clone(), &admin, &first_report, "hide_comment").await;
+    let (status, _, hidden) =
+        report_action(t.app.clone(), &admin, &first_report, "hide_comment").await;
     assert_eq!(status, StatusCode::OK, "{hidden}");
-    assert_eq!(hidden["target"]["moderation_status"], serde_json::Value::Null);
+    assert_eq!(
+        hidden["target"]["moderation_status"],
+        serde_json::Value::Null
+    );
     assert_eq!(assert_counter(&t.pool, listing.id).await, 0);
     insert_case(&t.pool, comment.id, "pending", &snapshots(1), now).await;
-    let (status, _, current) = report_action(t.app.clone(), &admin, &first_report, "hide_comment").await;
+    let (status, _, current) =
+        report_action(t.app.clone(), &admin, &first_report, "hide_comment").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(current["target"]["moderation_status"], "pending");
     for _ in 0..2 {
-        let (status, _, response) = report_action(t.app.clone(), &admin, &first_report, "restore_comment").await;
+        let (status, _, response) =
+            report_action(t.app.clone(), &admin, &first_report, "restore_comment").await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
         assert_eq!(response["error"]["fields"]["status"], "invalid_transition");
         assert_eq!(assert_counter(&t.pool, listing.id).await, 0);
@@ -732,33 +863,46 @@ async fn report_status_and_restore_guard_respect_automatic_cases() {
     assert_eq!(audit_count(&t.pool, "report.restore_comment").await, 0);
 
     assert_eq!(
-        action(t.app.clone(), &admin, &comment.public_id, "confirm_hidden", Some("automatic"))
-            .await
-            .0,
+        action(
+            t.app.clone(),
+            &admin,
+            &comment.public_id,
+            "confirm_hidden",
+            Some("automatic")
+        )
+        .await
+        .0,
         StatusCode::OK
     );
-    let (status, _, current) = report_action(t.app.clone(), &admin, &first_report, "hide_comment").await;
+    let (status, _, current) =
+        report_action(t.app.clone(), &admin, &first_report, "hide_comment").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(current["target"]["moderation_status"], "confirmed_hidden");
-    let (status, _, restored) = action(t.app.clone(), &admin, &comment.public_id, "restore", None).await;
+    let (status, _, restored) =
+        action(t.app.clone(), &admin, &comment.public_id, "restore", None).await;
     assert_eq!(status, StatusCode::OK, "{restored}");
     assert_eq!(assert_counter(&t.pool, listing.id).await, 1);
     let automatic_clearances = clearances(&t.pool, comment.id).await;
 
     let second_report = insert_report(&t.pool, second_reporter.id, comment.id).await;
-    let (status, _, hidden) = report_action(t.app.clone(), &admin, &second_report, "hide_comment").await;
+    let (status, _, hidden) =
+        report_action(t.app.clone(), &admin, &second_report, "hide_comment").await;
     assert_eq!(status, StatusCode::OK, "{hidden}");
     assert_eq!(hidden["target"]["moderation_status"], "restored");
     assert_eq!(case_status(&t.pool, comment.id).await, "restored");
     assert_eq!(assert_counter(&t.pool, listing.id).await, 0);
-    let (status, _, restored) = report_action(t.app.clone(), &admin, &second_report, "restore_comment").await;
+    let (status, _, restored) =
+        report_action(t.app.clone(), &admin, &second_report, "restore_comment").await;
     assert_eq!(status, StatusCode::OK, "{restored}");
     assert_eq!(restored["target"]["moderation_status"], "restored");
     assert_eq!(assert_counter(&t.pool, listing.id).await, 1);
     assert_eq!(clearances(&t.pool, comment.id).await, automatic_clearances);
     assert_eq!(audit_count(&t.pool, "report.hide_comment").await, 2);
     assert_eq!(audit_count(&t.pool, "report.restore_comment").await, 1);
-    assert_eq!(audit_count(&t.pool, "comment.filter_confirm_hidden").await, 1);
+    assert_eq!(
+        audit_count(&t.pool, "comment.filter_confirm_hidden").await,
+        1
+    );
     assert_eq!(audit_count(&t.pool, "comment.filter_restore").await, 1);
 }
 
@@ -769,17 +913,38 @@ async fn concurrent_filter_decisions_are_idempotent_and_counter_exact() {
     let author = create_user(&t.pool, &t.cfg, "+989100000002").await;
     let listing = create_listing(&t.pool, author.id).await;
     let now = chrono::Utc::now();
-    insert_comment(&t.pool, listing.id, author.id, "visible", "visible", false, now).await;
-    let comment = insert_comment(&t.pool, listing.id, author.id, "pending", "hidden", false, now).await;
+    insert_comment(
+        &t.pool, listing.id, author.id, "visible", "visible", false, now,
+    )
+    .await;
+    let comment = insert_comment(
+        &t.pool, listing.id, author.id, "pending", "hidden", false, now,
+    )
+    .await;
     insert_case(&t.pool, comment.id, "pending", &snapshots(1), now).await;
 
     let (first, second) = tokio::join!(
-        action(t.app.clone(), &admin, &comment.public_id, "confirm_hidden", Some("one")),
-        action(t.app.clone(), &admin, &comment.public_id, "confirm_hidden", Some("two")),
+        action(
+            t.app.clone(),
+            &admin,
+            &comment.public_id,
+            "confirm_hidden",
+            Some("one")
+        ),
+        action(
+            t.app.clone(),
+            &admin,
+            &comment.public_id,
+            "confirm_hidden",
+            Some("two")
+        ),
     );
     assert_eq!(first.0, StatusCode::OK, "{:?}", first.2);
     assert_eq!(second.0, StatusCode::OK, "{:?}", second.2);
-    assert_eq!(audit_count(&t.pool, "comment.filter_confirm_hidden").await, 1);
+    assert_eq!(
+        audit_count(&t.pool, "comment.filter_confirm_hidden").await,
+        1
+    );
     assert_eq!(assert_counter(&t.pool, listing.id).await, 1);
 
     let (first, second) = tokio::join!(
@@ -794,8 +959,20 @@ async fn concurrent_filter_decisions_are_idempotent_and_counter_exact() {
     assert_eq!(case_status(&t.pool, comment.id).await, "restored");
 
     let (first, second) = tokio::join!(
-        action(t.app.clone(), &admin, &comment.public_id, "confirm_hidden", Some("bad")),
-        action(t.app.clone(), &admin, &comment.public_id, "confirm_hidden", Some("bad")),
+        action(
+            t.app.clone(),
+            &admin,
+            &comment.public_id,
+            "confirm_hidden",
+            Some("bad")
+        ),
+        action(
+            t.app.clone(),
+            &admin,
+            &comment.public_id,
+            "confirm_hidden",
+            Some("bad")
+        ),
     );
     assert_eq!(first.0, StatusCode::BAD_REQUEST);
     assert_eq!(second.0, StatusCode::BAD_REQUEST);
@@ -811,38 +988,47 @@ async fn concurrent_create_delete_report_and_filter_actions_never_corrupt_counte
     let other = create_user(&t.pool, &t.cfg, "+989100000004").await;
     let listing = create_listing(&t.pool, author.id).await;
     let now = chrono::Utc::now();
-    let comment = insert_comment(&t.pool, listing.id, author.id, "pending", "hidden", false, now).await;
+    let comment = insert_comment(
+        &t.pool, listing.id, author.id, "pending", "hidden", false, now,
+    )
+    .await;
     insert_case(&t.pool, comment.id, "pending", &snapshots(1), now).await;
     let report = insert_report(&t.pool, reporter.id, comment.id).await;
 
-    let (
-        created,
-        deleted,
-        report_hidden,
-        report_restored,
-        confirmed,
-        filter_restored,
-    ) = tokio::join!(
+    let (created, deleted, report_hidden, report_restored, confirmed, filter_restored) = tokio::join!(
         create_comment(t.app.clone(), &other, &listing.slug, "new clean"),
         delete_comment(t.app.clone(), &author, &comment.public_id),
         report_action(t.app.clone(), &admin, &report, "hide_comment"),
         report_action(t.app.clone(), &admin, &report, "restore_comment"),
-        action(t.app.clone(), &admin, &comment.public_id, "confirm_hidden", Some("race")),
+        action(
+            t.app.clone(),
+            &admin,
+            &comment.public_id,
+            "confirm_hidden",
+            Some("race")
+        ),
         action(t.app.clone(), &admin, &comment.public_id, "restore", None),
     );
     assert_eq!(created, StatusCode::OK);
     assert_eq!(deleted, StatusCode::OK);
-    for status in [report_hidden.0, report_restored.0, confirmed.0, filter_restored.0] {
-        assert!(status == StatusCode::OK || status == StatusCode::BAD_REQUEST, "unexpected {status}");
+    for status in [
+        report_hidden.0,
+        report_restored.0,
+        confirmed.0,
+        filter_restored.0,
+    ] {
+        assert!(
+            status == StatusCode::OK || status == StatusCode::BAD_REQUEST,
+            "unexpected {status}"
+        );
     }
     assert_eq!(assert_counter(&t.pool, listing.id).await, 1);
-    let deleted_at: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
-        "SELECT deleted_at FROM listing_comments WHERE id = ?",
-    )
-    .bind(comment.id)
-    .fetch_one(&t.pool)
-    .await
-    .expect("deleted target");
+    let deleted_at: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT deleted_at FROM listing_comments WHERE id = ?")
+            .bind(comment.id)
+            .fetch_one(&t.pool)
+            .await
+            .expect("deleted target");
     assert!(deleted_at.is_some());
     for action in [
         "comment.filter_confirm_hidden",
@@ -850,7 +1036,10 @@ async fn concurrent_create_delete_report_and_filter_actions_never_corrupt_counte
         "report.hide_comment",
         "report.restore_comment",
     ] {
-        assert!(audit_count(&t.pool, action).await <= 1, "duplicate {action}");
+        assert!(
+            audit_count(&t.pool, action).await <= 1,
+            "duplicate {action}"
+        );
     }
     let (_, _, page) = send(
         t.app.clone(),
