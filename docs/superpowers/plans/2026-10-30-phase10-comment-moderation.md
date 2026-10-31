@@ -130,11 +130,11 @@ Expected: all new routes return 404 while matcher/migration and older suites pas
 
 Validate before writing. Recompute matcher and dedupe keys on phrase/mode changes. Lock settings then rule for every mutation, recheck duplicates in the transaction, increment global revision once per actual change, and use the existing audit helper with minimal metadata. Exact duplicate create and no-op patch return current state without reactivation/audit/revision. Load active rules through one ordered SELECT for Task 4.
 
-- [ ] **Step 4: Run GREEN and complete API regression**
+- [x] **Step 4: Run GREEN and complete API regression**
 
 Include concurrent duplicate/no-op requests, all older suites, fmt, and Clippy. Confirm no phrase enters audit metadata or logs.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 `feat(api): add moderation rule administration`
 
