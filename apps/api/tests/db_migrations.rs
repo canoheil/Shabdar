@@ -777,7 +777,7 @@ async fn comment_moderation_schema_seed_and_foreign_keys_enforce_invariants() {
 fn moderation_seed_has_complete_upstream_notice() {
     let notice = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../THIRD_PARTY_NOTICES.md"
+        "/../../THIRD_PARTY_NOTICES.md"
     ))
     .expect("root third-party notice must exist");
     for required in [
