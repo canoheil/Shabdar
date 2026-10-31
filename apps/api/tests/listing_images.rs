@@ -6,6 +6,7 @@ mod common;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
 use http_body_util::BodyExt;
+use sqlx::Row;
 use tower::ServiceExt;
 
 /// All upload tests share one database; run them one at a time.
@@ -137,6 +138,37 @@ fn webp_bytes() -> Vec<u8> {
 }
 
 /// POST one multipart file field; returns status + parsed JSON.
+async fn mark_current_images_reviewed(pool: &sqlx::MySqlPool, public_id: &str) {
+    sqlx::query(
+        "UPDATE listings l SET image_reviewed_by = l.seller_id, image_reviewed_at = NOW(3), \
+         image_reviewed_ids = (SELECT JSON_ARRAYAGG(i.id) FROM listing_images i \
+         WHERE i.listing_id = l.id) WHERE l.public_id = ?",
+    )
+    .bind(public_id)
+    .execute(pool)
+    .await
+    .expect("current image review fixture");
+}
+
+async fn review_state(
+    pool: &sqlx::MySqlPool,
+    public_id: &str,
+) -> (Option<u64>, Option<chrono::DateTime<chrono::Utc>>, Option<String>) {
+    let row = sqlx::query(
+        "SELECT image_reviewed_by, image_reviewed_at, CAST(image_reviewed_ids AS CHAR) AS ids \
+         FROM listings WHERE public_id = ?",
+    )
+    .bind(public_id)
+    .fetch_one(pool)
+    .await
+    .expect("review state");
+    (
+        row.try_get("image_reviewed_by").unwrap(),
+        row.try_get("image_reviewed_at").unwrap(),
+        row.try_get("ids").unwrap(),
+    )
+}
+
 async fn upload(
     app: axum::Router,
     public_id: &str,
@@ -668,7 +700,7 @@ async fn upload_enforces_size_and_count_limits() {
 }
 
 #[tokio::test]
-async fn reorder_with_foreign_id_is_rejected_and_delete_removes_file() {
+async fn review_survives_reorder_and_resets_on_image_edits_and_submit() {
     let _lock = UPLOAD_LOCK.lock().await;
     let Some(pool) = common::test_pool().await else {
         return;
@@ -717,7 +749,8 @@ async fn reorder_with_foreign_id_is_rejected_and_delete_removes_file() {
     let resp = app.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
-    // Valid reorder → 200, then delete removes the row AND the file.
+    // Reorder changes presentation only, so the exact reviewed set survives.
+    mark_current_images_reviewed(&pool, &public_id).await;
     let key2 = second["storage_key"].as_str().unwrap().to_string();
     let req = Request::builder()
         .method(Method::PATCH)
@@ -731,7 +764,24 @@ async fn reorder_with_foreign_id_is_rejected_and_delete_removes_file() {
         .unwrap();
     let resp = app.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
+    let (_, reviewed_at, reviewed_ids) = review_state(&pool, &public_id).await;
+    assert!(reviewed_at.is_some());
+    assert!(reviewed_ids.is_some());
 
+    let (status, _) = upload(
+        app.clone(),
+        &public_id,
+        &cookie,
+        Some(&csrf),
+        "three.png",
+        "image/png",
+        &png_bytes(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(review_state(&pool, &public_id).await, (None, None, None));
+
+    mark_current_images_reviewed(&pool, &public_id).await;
     let req = Request::builder()
         .method(Method::DELETE)
         .uri(format!("/api/v1/listings/{public_id}/images/{id2}"))
@@ -739,8 +789,21 @@ async fn reorder_with_foreign_id_is_rejected_and_delete_removes_file() {
         .header("x-csrf-token", &csrf)
         .body(Body::empty())
         .unwrap();
-    let resp = app.oneshot(req).await.unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     assert!(!dir.join(&key2).exists(), "delete must remove the file too");
+    assert_eq!(review_state(&pool, &public_id).await, (None, None, None));
+
+    mark_current_images_reviewed(&pool, &public_id).await;
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/api/v1/listings/{public_id}/submit"))
+        .header("cookie", &cookie)
+        .header("x-csrf-token", &csrf)
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(review_state(&pool, &public_id).await, (None, None, None));
     let _ = std::fs::remove_dir_all(dir);
 }

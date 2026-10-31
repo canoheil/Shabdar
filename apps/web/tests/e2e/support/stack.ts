@@ -175,6 +175,7 @@ export async function createListing(input: CreateListingInput): Promise<{ public
     // Submission requires media. A zero-image fixture uploads one temporary
     // cover, completes moderation, then removes it to exercise real no-cover UI.
     const uploadCount = imageCount === 0 ? 1 : imageCount
+    const imageIds: number[] = []
     for (let index = 0; index < uploadCount; index += 1) {
       const uploaded = await seller.post(`/api/v1/listings/${listing.public_id}/images`, {
         multipart: {
@@ -182,11 +183,15 @@ export async function createListing(input: CreateListingInput): Promise<{ public
         },
       })
       if (!uploaded.ok()) throw await responseError(uploaded, `Upload fixture image ${index + 1}`)
+      const image = await uploaded.json() as { id: number }
+      imageIds.push(image.id)
     }
     const submitted = await seller.post(`/api/v1/listings/${listing.public_id}/submit`)
     if (!submitted.ok()) throw await responseError(submitted, 'Submit listing fixture')
     if (admin) {
-      const approved = await admin.post(`/api/v1/admin/listings/${listing.public_id}/approve`)
+      const approved = await admin.post(`/api/v1/admin/listings/${listing.public_id}/approve`, {
+        data: { image_ids: imageIds },
+      })
       if (!approved.ok()) throw await responseError(approved, 'Approve listing fixture')
       await markImagesReviewedForFixture(listing.public_id)
     }
