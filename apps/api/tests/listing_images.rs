@@ -1,6 +1,5 @@
-//! Phase 3 Task 5 (docs/PHASE3_PLAN.md): listing image uploads on local disk,
-//! reorder, and delete. Magic bytes + size + count only (no image decode —
-//! no `image` crate on Termux; the skip is pinned by magic_bytes_only below).
+//! Listing image uploads on local disk, full static-image validation,
+//! dimensions, media authorization, reorder, and delete (Phase 11).
 
 mod common;
 
@@ -110,15 +109,16 @@ async fn create_draft(app: &axum::Router, cookie: &str, csrf: &str) -> String {
     body["public_id"].as_str().unwrap().to_string()
 }
 
-/// Minimal magic-byte payloads (signatures only — the handler never decodes).
+/// Small real static images generated once for the checked-in test contract.
+/// The API must decode these bytes; filenames and multipart MIME are not proof.
 fn png_bytes() -> Vec<u8> {
-    vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00]
+    include_bytes!("fixtures/tiny.png").to_vec()
 }
 fn jpeg_bytes() -> Vec<u8> {
-    vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00]
+    include_bytes!("fixtures/tiny.jpg").to_vec()
 }
 fn webp_bytes() -> Vec<u8> {
-    b"RIFF\x01\x02\x03\x04WEBP".to_vec()
+    include_bytes!("fixtures/tiny.webp").to_vec()
 }
 
 /// POST one multipart file field; returns status + parsed JSON.
@@ -226,6 +226,18 @@ async fn uploaded_file_is_served_back_with_bytes() {
         dir.join(key).is_file(),
         "file must exist under MEDIA_DIR: {key}"
     );
+    assert_eq!(
+        (body["width"].as_u64(), body["height"].as_u64()),
+        (Some(3), Some(2))
+    );
+    let stored: (u16, u16) = sqlx::query_as(
+        "SELECT width, height FROM listing_images WHERE storage_key = ?",
+    )
+    .bind(key)
+    .fetch_one(&pool)
+    .await
+    .expect("decoded dimensions are persisted");
+    assert_eq!(stored, (3, 2));
     // WebP rides the same path (third accepted signature).
     let (status, body) = upload(
         app.clone(),
@@ -239,6 +251,7 @@ async fn uploaded_file_is_served_back_with_bytes() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert!(body["url"].as_str().unwrap().ends_with(".webp"));
+    assert_eq!((body["width"].as_u64(), body["height"].as_u64()), (Some(5), Some(4)));
 
     // The minted URL serves the exact bytes back (no auth needed — reading a
     // listing's photo is public, like the listing itself).
@@ -289,6 +302,7 @@ async fn upload_rejects_exe_bytes_and_wrong_owner_and_active_listing() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"]["code"], "validation_error");
+    assert_eq!(body["error"]["fields"]["images"], "invalid_type");
 
     // Another seller's listing → 403, no file written.
     let (status, body) = upload(
@@ -324,6 +338,139 @@ async fn upload_rejects_exe_bytes_and_wrong_owner_and_active_listing() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+async fn assert_image_rejections(
+    app: axum::Router,
+    pool: &sqlx::MySqlPool,
+    dir: &std::path::Path,
+    public_id: &str,
+    cookie: &str,
+    csrf: &str,
+    cases: &[(&str, &[u8], &str)],
+) {
+    let mut failures = Vec::new();
+    for (filename, bytes, expected) in cases.iter().copied() {
+        let content_type = match filename.rsplit('.').next() {
+            Some("jpg") => "image/jpeg",
+            Some("webp") => "image/webp",
+            _ => "image/png",
+        };
+        let (status, body) = upload(
+            app.clone(),
+            public_id,
+            cookie,
+            Some(csrf),
+            filename,
+            content_type,
+            bytes,
+        )
+        .await;
+        let actual = body["error"]["fields"]["images"].as_str();
+        if status != StatusCode::BAD_REQUEST || actual != Some(expected) {
+            failures.push(format!(
+                "{filename}: status={status}, reason={actual:?}, expected={expected}, body={body}"
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM listing_images")
+        .fetch_one(pool)
+        .await
+        .expect("image rows");
+    assert_eq!(rows, 0, "rejected input must not create an image row");
+    let top_level_files = std::fs::read_dir(dir)
+        .map(|entries| entries.count())
+        .unwrap_or(0);
+    assert_eq!(top_level_files, 0, "rejected input must not write media");
+}
+
+#[tokio::test]
+async fn upload_rejects_signature_garbage_and_truncated_real_images() {
+    let _lock = UPLOAD_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let dir = scratch_media_dir("media-corrupt");
+    let cfg = media_cfg(&dir);
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let public_id = create_draft(&app, &cookie, &csrf).await;
+    let garbage = vec![0xFF, 0xD8, 0xFF, b'!', b'!', b'!'];
+    let png = png_bytes();
+    let webp = webp_bytes();
+    assert_image_rejections(
+        app,
+        &pool,
+        &dir,
+        &public_id,
+        &cookie,
+        &csrf,
+        &[
+            ("garbage.jpg", &garbage, "invalid_image"),
+            ("truncated.png", &png[..png.len() / 2], "invalid_image"),
+            ("truncated.webp", &webp[..webp.len() - 8], "invalid_image"),
+        ],
+    )
+    .await;
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn upload_rejects_animated_png_and_webp() {
+    let _lock = UPLOAD_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let dir = scratch_media_dir("media-animated");
+    let cfg = media_cfg(&dir);
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let public_id = create_draft(&app, &cookie, &csrf).await;
+    assert_image_rejections(
+        app,
+        &pool,
+        &dir,
+        &public_id,
+        &cookie,
+        &csrf,
+        &[
+            ("animated.png", include_bytes!("fixtures/animated.png"), "animated"),
+            ("animated.webp", include_bytes!("fixtures/animated.webp"), "animated"),
+        ],
+    )
+    .await;
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn upload_rejects_excess_dimensions_and_decoded_pixels() {
+    let _lock = UPLOAD_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let dir = scratch_media_dir("media-dimensions");
+    let cfg = media_cfg(&dir);
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let public_id = create_draft(&app, &cookie, &csrf).await;
+    assert_image_rejections(
+        app,
+        &pool,
+        &dir,
+        &public_id,
+        &cookie,
+        &csrf,
+        &[
+            ("dimensions.png", include_bytes!("fixtures/dimensions.png"), "too_large"),
+            ("pixels.png", include_bytes!("fixtures/pixels.png"), "too_large"),
+        ],
+    )
+    .await;
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[tokio::test]
 async fn upload_enforces_size_and_count_limits() {
     let _lock = UPLOAD_LOCK.lock().await;
@@ -333,17 +480,16 @@ async fn upload_enforces_size_and_count_limits() {
     reset_db(&pool).await;
     let dir = scratch_media_dir("media-limits");
     let mut cfg = media_cfg(&dir);
-    cfg.max_image_bytes = 16;
+    cfg.max_image_bytes = 512;
     cfg.max_images_per_listing = 2;
     let app = common::spawn_app(cfg.clone()).await;
     let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
     let public_id = create_draft(&app, &cookie, &csrf).await;
 
-    // 17 bytes > 16-byte limit → 400.
-    let big = vec![
-        0x89, b'P', b'N', b'G', 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
-    ];
-    let (status, _) = upload(
+    // 513 bytes > 512-byte limit → 400 before decode or storage.
+    let mut big = png_bytes();
+    big.resize(513, 0);
+    let (status, body) = upload(
         app.clone(),
         &public_id,
         &cookie,
@@ -354,6 +500,7 @@ async fn upload_enforces_size_and_count_limits() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["fields"]["images"], "too_large");
 
     // Two small uploads fill the quota; the third → 400.
     for name in ["one.png", "two.png"] {

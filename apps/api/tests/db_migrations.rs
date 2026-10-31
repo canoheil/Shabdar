@@ -190,6 +190,92 @@ async fn listings_price_check_rejects_fixed_without_price() {
 }
 
 #[tokio::test]
+async fn image_review_schema_is_nullable_but_never_partially_attributed() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    drop_owned_tables(&pool).await;
+    run_migrations(&pool).await.expect("migrations apply");
+
+    sqlx::query(
+        "INSERT INTO users (public_id, phone_e164, created_at, updated_at) VALUES \
+         ('IIIIIIIIIIIIIIIIIIIIIIIIII', '+989111111191', NOW(3), NOW(3))",
+    )
+    .execute(&pool)
+    .await
+    .expect("image reviewer fixture");
+    let reviewer: u64 = sqlx::query_scalar(
+        "SELECT id FROM users WHERE public_id = 'IIIIIIIIIIIIIIIIIIIIIIIIII'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("reviewer ID");
+    sqlx::query(
+        "INSERT INTO listings (public_id, seller_id, category_id, city_id, title, slug, \
+         description, price_toman, price_type, status, created_at, updated_at) VALUES \
+         ('HHHHHHHHHHHHHHHHHHHHHHHHHH', ?, 1, 1, 'Legacy images', 'legacy-image-schema', \
+         'Description', 1000, 'fixed', 'active', NOW(3), NOW(3))",
+    )
+    .bind(reviewer)
+    .execute(&pool)
+    .await
+    .expect("legacy listing starts with NULL image review");
+
+    let initial: (Option<u64>, Option<chrono::DateTime<chrono::Utc>>, Option<Vec<u8>>) =
+        sqlx::query_as(
+            "SELECT image_reviewed_by, image_reviewed_at, image_reviewed_ids \
+             FROM listings WHERE public_id = 'HHHHHHHHHHHHHHHHHHHHHHHHHH'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("all legacy review fields exist and are NULL");
+    assert!(initial.0.is_none() && initial.1.is_none() && initial.2.is_none());
+
+    sqlx::query(
+        "UPDATE listings SET image_reviewed_by = ?, image_reviewed_at = NOW(3), \
+         image_reviewed_ids = JSON_ARRAY() \
+         WHERE public_id = 'HHHHHHHHHHHHHHHHHHHHHHHHHH'",
+    )
+    .bind(reviewer)
+    .execute(&pool)
+    .await
+    .expect("complete image review attribution is valid");
+
+    let partial = sqlx::query(
+        "UPDATE listings SET image_reviewed_ids = NULL \
+         WHERE public_id = 'HHHHHHHHHHHHHHHHHHHHHHHHHH'",
+    )
+    .execute(&pool)
+    .await;
+    assert!(partial
+        .expect_err("partial review attribution must fail")
+        .to_string()
+        .contains("chk_listings_image_review"));
+
+    let unknown_reviewer = sqlx::query(
+        "UPDATE listings SET image_reviewed_by = 999999 \
+         WHERE public_id = 'HHHHHHHHHHHHHHHHHHHHHHHHHH'",
+    )
+    .execute(&pool)
+    .await;
+    assert!(unknown_reviewer
+        .expect_err("reviewer FK must reject an unknown user")
+        .to_string()
+        .contains("fk_listings_image_reviewer"));
+
+    let index_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(DISTINCT INDEX_NAME) FROM information_schema.STATISTICS \
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'listings' \
+           AND INDEX_NAME = 'idx_listings_image_review'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("image review index metadata");
+    assert_eq!(index_count, 1);
+}
+
+#[tokio::test]
 async fn favorites_rows_cascade_with_user_and_listing() {
     let _lock = DB_LOCK.lock().await;
     let Some(pool) = common::test_pool().await else {
