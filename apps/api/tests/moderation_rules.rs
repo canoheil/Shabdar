@@ -560,14 +560,14 @@ async fn create_duplicates_toggles_noops_and_revisions_are_exact() {
     assert_eq!(settings_revision(&t.pool).await, 6);
     assert_eq!(audit_count(&t.pool, "moderation_rule.update").await, 4);
 
-    let metadata: String = sqlx::query_scalar(
+    let metadata: Vec<u8> = sqlx::query_scalar(
         "SELECT metadata FROM admin_audit_logs WHERE action = 'moderation_rule.update' \
          ORDER BY id DESC LIMIT 1",
     )
     .fetch_one(&t.pool)
     .await
     .expect("update metadata");
-    let metadata: serde_json::Value = serde_json::from_str(&metadata).expect("metadata JSON");
+    let metadata: serde_json::Value = serde_json::from_slice(&metadata).expect("metadata JSON");
     assert_eq!(metadata.as_object().map(serde_json::Map::len), Some(4));
     assert_eq!(metadata["public_id"], public_id);
     assert_eq!(metadata["revision"], 3);
@@ -724,7 +724,8 @@ async fn concurrent_edits_and_noops_preserve_both_changes_without_extra_audits()
     .await
     .expect("audit metadata");
     for row in rows {
-        let metadata: String = row.try_get("metadata").expect("metadata");
+        let metadata: Vec<u8> = row.try_get("metadata").expect("metadata");
+        let metadata = String::from_utf8(metadata).expect("metadata UTF-8");
         assert!(!metadata.contains("Changed"));
         assert!(!metadata.contains("Original"));
     }
