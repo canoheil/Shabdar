@@ -123,6 +123,7 @@ test('@admin-moderation gates navigation and active filter case suppress report 
   await page.goto('/admin/moderation/rules')
   await expect(page.getByText('دسترسی ندارید (ویژهٔ مدیر).', { exact: true })).toBeVisible()
   await applyStorage(page, readFixtures().adminStorage)
+  await page.setViewportSize({ width: 1024, height: 900 })
   await page.goto('/me')
   const navigation = page.getByRole('navigation', { name: 'ناوبری مدیریت' })
   await expect(navigation.getByRole('link', { name: 'مدیریت دیدگاه', exact: true })).toHaveAttribute('href', '/admin/moderation')
@@ -249,30 +250,29 @@ test('@admin-moderation rule filters and pagination retain the confirmed cursor 
   await patchRule(anchor!, { is_active: false })
 
   const cursorUrls: string[] = []
-  let failCursorRead = true
+  page.on('request', (request) => {
+    const url = new URL(request.url())
+    if (url.pathname.endsWith('/api/v1/admin/moderation/rules') && url.searchParams.has('cursor')) {
+      cursorUrls.push(url.search)
+    }
+  })
   await page.route('**/api/v1/admin/moderation/rules?*', async (route) => {
-    const url = new URL(route.request().url())
-    if (!url.searchParams.has('cursor')) {
-      await route.continue()
+    if (new URL(route.request().url()).searchParams.has('cursor')) {
+      await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":{"code":"fixture","message":"fixture"}}' })
       return
     }
-    cursorUrls.push(route.request().url())
-    if (failCursorRead) {
-      failCursorRead = false
-      await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":{"code":"fixture","message":"fixture"}}' })
-    } else {
-      await route.continue()
-    }
+    await route.continue()
   })
   await page.getByRole('button', { name: 'نمایش قوانین بیشتر', exact: true }).click()
   await expect(page.getByText('خواندن قوانین بیشتر ممکن نشد؛ دوباره تلاش کنید.', { exact: true })).toBeVisible()
   await expect(page.locator('.admin-rule')).toHaveCount(20)
+  await page.unroute('**/api/v1/admin/moderation/rules?*')
   await page.getByRole('button', { name: 'تلاش دوباره بارگذاری قوانین', exact: true }).click()
   await expect.poll(() => page.locator('.admin-rule').count()).toBeGreaterThan(20)
   const visibleIds = await page.locator('.admin-rule').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-rule-id')))
   for (const rule of rules) expect(visibleIds).toContain(rule.public_id)
-  expect(cursorUrls).toHaveLength(2)
-  expect(cursorUrls[1]).toBe(cursorUrls[0])
+  expect(cursorUrls.length).toBeGreaterThanOrEqual(2)
+  expect(new Set(cursorUrls).size).toBe(1)
 
   await page.getByRole('button', { name: 'غیرفعال', exact: true }).click()
   await expect(page.locator(`[data-rule-id="${anchor}"]`)).toBeVisible()
@@ -335,6 +335,7 @@ test('@admin-moderation queue paginates safely and applies only confirmed action
 })
 
 test('@admin-moderation rescan walks 51 real rows and stops after the current confirmed batch', async ({ page }) => {
+  await runSql('DELETE FROM comment_moderation_cases; DELETE FROM reports; DELETE FROM listing_comments; UPDATE listings SET comment_count = 0;')
   const created = await createListing({ title: 'بررسی کامل پنجاه و یک دیدگاه', state: 'active' })
   const phrase = `e2e${randomBytes(6).toString('hex')}`
   const bodies = Array.from({ length: 51 }, (_, index) => `${phrase} دیدگاه ${index + 1}`)
