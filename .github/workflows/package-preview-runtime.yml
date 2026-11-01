@@ -2,6 +2,9 @@ name: Package preview runtime
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - arena/a5192fe1-shabdar
 
 permissions:
   contents: read
