@@ -18,35 +18,24 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Build the real Axum API
+      - name: Build the real Axum API with development OTP support
         working-directory: apps/api
         run: |
-          cargo build --release --locked
-          strip target/release/shabdar-api
+          cargo build --locked
+          strip target/debug/shabdar-api
 
-      - name: Export official MariaDB root filesystem
-        run: |
-          docker pull mariadb:10.11
-          docker create --name shabdar-preview-mariadb mariadb:10.11
-          docker export shabdar-preview-mariadb | gzip -1 > /tmp/mariadb-rootfs.tar.gz
-
-      - name: Publish temporary Git blobs for the sandbox
+      - name: Publish a temporary Git blob for the sandbox
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          mkdir -p /tmp/shabdar-preview-blobs
-          cp apps/api/target/release/shabdar-api /tmp/shabdar-preview-blobs/api.bin
-          split -b 40M -d -a 2 /tmp/mariadb-rootfs.tar.gz /tmp/shabdar-preview-blobs/mariadb-rootfs.tar.gz.part-
-          for file in /tmp/shabdar-preview-blobs/*; do
-            python3 - "$file" <<'PY'
-          import base64, json, pathlib, sys
-          source = pathlib.Path(sys.argv[1])
+          python3 - <<'PY'
+          import base64, json, pathlib
+          source = pathlib.Path('apps/api/target/debug/shabdar-api')
           pathlib.Path('/tmp/shabdar-blob-payload.json').write_text(json.dumps({
               'content': base64.b64encode(source.read_bytes()).decode(),
               'encoding': 'base64',
           }))
           PY
-            sha=$(gh api -X POST "repos/${GH_REPO}/git/blobs" --input /tmp/shabdar-blob-payload.json --jq .sha)
-            echo "::notice::PREVIEW_BLOB $(basename "$file") $sha"
-          done
+          sha=$(gh api -X POST "repos/${GH_REPO}/git/blobs" --input /tmp/shabdar-blob-payload.json --jq .sha)
+          echo "::notice::PREVIEW_BLOB api-debug.bin $sha"
