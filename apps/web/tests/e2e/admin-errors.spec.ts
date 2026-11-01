@@ -9,9 +9,9 @@ async function applyStorage(page: Page, storagePath: string): Promise<void> {
   await page.context().addCookies(state.cookies)
 }
 
-test('@admin desktop queue distinguishes validation errors from successful actions', async ({ page }) => {
+test('@admin desktop queue preserves rejection and routes approval through image review', async ({ page }) => {
   const rejectedTitle = 'آگهی برای بررسی دلیل رد'
-  const approvedTitle = 'آگهی برای بررسی تأیید سریع'
+  const approvedTitle = 'آگهی برای تأیید پس از بررسی تصاویر'
   await createListing({ title: rejectedTitle, state: 'pending' })
   await createListing({ title: approvedTitle, state: 'pending' })
   await page.setViewportSize({ width: 1024, height: 800 })
@@ -34,7 +34,11 @@ test('@admin desktop queue distinguishes validation errors from successful actio
   await expect(rejectedRow).toHaveCount(0)
 
   const approvedRow = queue.locator('.card').filter({ hasText: approvedTitle })
-  await approvedRow.getByRole('button', { name: 'تأیید', exact: true }).click()
+  await approvedRow.getByRole('link', { name: /بررسی تصاویر/ }).click()
+  const confirmation = page.getByRole('checkbox', { name: /را بررسی کردم/ })
+  await expect(confirmation).toBeEnabled()
+  await confirmation.check()
+  await page.getByRole('button', { name: 'تأیید تصاویر و انتشار', exact: true }).click()
   await expect(action).toHaveAttribute('data-tone', 'success')
   await expect(action).toHaveText('آگهی تأیید و منتشر شد.')
   await expect(approvedRow).toHaveCount(0)

@@ -1,14 +1,22 @@
-//! Listing images: local-disk storage + image rows (Phase 3 Task 5).
+//! Listing images: bounded local decode, local-disk storage, and media access.
 //!
-//! Validation is magic bytes + size + count only (JPEG/PNG/WebP). No image
-//! decode — no `image` crate on Termux (approved decision 5). Width/height
-//! stay NULL until the image-moderation phase. Client filenames are ignored
-//! entirely; the storage key is server-generated.
+//! Client filenames and declared MIME are never trusted. Only static
+//! JPEG/PNG/WebP bytes are accepted, and the pure-Rust decoder runs on the
+//! blocking pool with explicit resource ceilings. The storage key remains
+//! server-generated.
 
+use std::io::Cursor;
+
+use image::{GenericImageView, ImageReader};
 use serde::Serialize;
 use sqlx::{MySqlPool, Row};
+use tokio::io::AsyncReadExt;
 
 use crate::error::ApiError;
+
+const MAX_IMAGE_DIMENSION: u32 = 8_000;
+const MAX_IMAGE_PIXELS: u64 = 16_000_000;
+const MAX_DECODER_ALLOCATION: u64 = 80 * 1024 * 1024;
 
 /// What the API returns per image (`url` is served from `MEDIA_DIR`).
 #[derive(Serialize)]
@@ -17,6 +25,8 @@ pub struct ImageOut {
     pub storage_key: String,
     pub url: String,
     pub sort_order: u8,
+    pub width: u16,
+    pub height: u16,
 }
 
 /// File signature → extension. Lengths are the shortest prefixes that pin
@@ -31,6 +41,189 @@ fn detect_ext(bytes: &[u8]) -> Option<&'static str> {
     } else {
         None
     }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum ImageRejection {
+    InvalidType,
+    InvalidImage,
+    Animated,
+    TooLarge,
+}
+
+impl ImageRejection {
+    fn reason(&self) -> &'static str {
+        match self {
+            Self::InvalidType => "invalid_type",
+            Self::InvalidImage => "invalid_image",
+            Self::Animated => "animated",
+            Self::TooLarge => "too_large",
+        }
+    }
+}
+
+struct ValidatedImage {
+    extension: &'static str,
+    width: u16,
+    height: u16,
+}
+
+fn image_validation(reason: &str) -> ApiError {
+    let mut fields = std::collections::BTreeMap::new();
+    fields.insert("images".to_string(), reason.to_string());
+    ApiError::Validation { fields }
+}
+
+/// Detect APNG structurally. Malformed chunk bounds are left to the full
+/// decoder, which rejects them; this pass only recognizes animation markers.
+fn is_animated_png(bytes: &[u8]) -> bool {
+    let mut offset = 8_usize;
+    while offset.checked_add(8).is_some_and(|end| end <= bytes.len()) {
+        let length =
+            u32::from_be_bytes(bytes[offset..offset + 4].try_into().expect("four bytes")) as usize;
+        let kind = &bytes[offset + 4..offset + 8];
+        if kind == b"acTL" {
+            return true;
+        }
+        let Some(data_end) = (offset + 8).checked_add(length) else {
+            return false;
+        };
+        let Some(next) = data_end.checked_add(4) else {
+            return false;
+        };
+        if next > bytes.len() {
+            return false;
+        }
+        if kind == b"IEND" {
+            return false;
+        }
+        offset = next;
+    }
+    false
+}
+
+/// Reject animated WebP by its VP8X animation flag or animation chunks. RIFF
+/// sizes and payload validity are still verified by the actual decoder.
+fn is_animated_webp(bytes: &[u8]) -> bool {
+    let mut offset = 12_usize;
+    while offset.checked_add(8).is_some_and(|end| end <= bytes.len()) {
+        let kind = &bytes[offset..offset + 4];
+        let length = u32::from_le_bytes(
+            bytes[offset + 4..offset + 8]
+                .try_into()
+                .expect("four bytes"),
+        ) as usize;
+        if kind == b"ANIM" || kind == b"ANMF" {
+            return true;
+        }
+        let data_start = offset + 8;
+        if kind == b"VP8X"
+            && length >= 1
+            && data_start < bytes.len()
+            && bytes[data_start] & 0x02 != 0
+        {
+            return true;
+        }
+        let Some(data_end) = data_start.checked_add(length) else {
+            return false;
+        };
+        let Some(next) = data_end.checked_add(length % 2) else {
+            return false;
+        };
+        if next > bytes.len() {
+            return false;
+        }
+        offset = next;
+    }
+    false
+}
+
+fn check_dimensions(width: u32, height: u32) -> Result<(), ImageRejection> {
+    if width == 0 || height == 0 {
+        return Err(ImageRejection::InvalidImage);
+    }
+    if width > MAX_IMAGE_DIMENSION
+        || height > MAX_IMAGE_DIMENSION
+        || u64::from(width) * u64::from(height) > MAX_IMAGE_PIXELS
+    {
+        return Err(ImageRejection::TooLarge);
+    }
+    Ok(())
+}
+
+/// Fully decode one supported static image with bounded dimensions/allocation.
+/// Signature detection chooses the decoder; it is never treated as validity.
+fn decode_image(bytes: &[u8]) -> Result<ValidatedImage, ImageRejection> {
+    let extension = detect_ext(bytes).ok_or(ImageRejection::InvalidType)?;
+    match extension {
+        "png" if is_animated_png(bytes) => return Err(ImageRejection::Animated),
+        "webp" if is_animated_webp(bytes) => return Err(ImageRejection::Animated),
+        _ => {}
+    }
+    let format = match extension {
+        "jpg" => image::ImageFormat::Jpeg,
+        "png" => image::ImageFormat::Png,
+        "webp" => image::ImageFormat::WebP,
+        _ => return Err(ImageRejection::InvalidType),
+    };
+    let mut reader = ImageReader::new(Cursor::new(bytes));
+    reader.set_format(format);
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_IMAGE_DIMENSION);
+    limits.max_image_height = Some(MAX_IMAGE_DIMENSION);
+    limits.max_alloc = Some(MAX_DECODER_ALLOCATION);
+    reader.limits(limits);
+    let decoded = reader.decode().map_err(|error| match error {
+        image::ImageError::Limits(_) => ImageRejection::TooLarge,
+        _ => ImageRejection::InvalidImage,
+    })?;
+    let (width, height) = decoded.dimensions();
+    check_dimensions(width, height)?;
+    Ok(ValidatedImage {
+        extension,
+        width: u16::try_from(width).map_err(|_| ImageRejection::TooLarge)?,
+        height: u16::try_from(height).map_err(|_| ImageRejection::TooLarge)?,
+    })
+}
+
+/// Revalidate stored files at a human review boundary. Reads are capped even
+/// for legacy/corrupted rows, keys are validated before joining the media
+/// path, and each image is decoded sequentially to bound total memory.
+pub async fn validate_stored_images(
+    cfg: &crate::config::Config,
+    images: &[(u64, String)],
+) -> Result<Vec<(u64, u16, u16)>, ApiError> {
+    let mut validated = Vec::with_capacity(images.len());
+    for (id, key) in images {
+        let expected_content_type =
+            valid_media_key(key).ok_or_else(|| image_validation("invalid_image"))?;
+        let file = tokio::fs::File::open(std::path::Path::new(&cfg.media_dir).join(key))
+            .await
+            .map_err(|_| image_validation("unreadable"))?;
+        let mut bytes = Vec::new();
+        file.take(cfg.max_image_bytes.saturating_add(1))
+            .read_to_end(&mut bytes)
+            .await
+            .map_err(|_| image_validation("unreadable"))?;
+        if bytes.len() as u64 > cfg.max_image_bytes {
+            return Err(image_validation("too_large"));
+        }
+        let decoded = tokio::task::spawn_blocking(move || decode_image(&bytes))
+            .await
+            .map_err(|_| ApiError::Internal)?
+            .map_err(|error| image_validation(error.reason()))?;
+        let actual_content_type = match decoded.extension {
+            "jpg" => "image/jpeg",
+            "png" => "image/png",
+            "webp" => "image/webp",
+            _ => return Err(image_validation("invalid_image")),
+        };
+        if actual_content_type != expected_content_type {
+            return Err(image_validation("invalid_image"));
+        }
+        validated.push((*id, decoded.width, decoded.height));
+    }
+    Ok(validated)
 }
 
 /// Server-generated key: `<ulid>/<ulid>.<ext>`. No client path segment can
@@ -56,14 +249,51 @@ async fn draft_listing_id(
     row.try_get("id").map_err(|_| ApiError::Internal)
 }
 
+async fn lock_editable_listing(
+    tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
+    listing_id: u64,
+) -> Result<(), ApiError> {
+    let status: Option<String> = sqlx::query_scalar(
+        "SELECT status FROM listings WHERE id = ? AND deleted_at IS NULL FOR UPDATE",
+    )
+    .bind(listing_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| ApiError::Internal)?;
+    match status.as_deref() {
+        Some("draft" | "rejected") => Ok(()),
+        Some(_) => {
+            let mut fields = std::collections::BTreeMap::new();
+            fields.insert("status".to_string(), "not_editable".to_string());
+            Err(ApiError::Validation { fields })
+        }
+        None => Err(ApiError::NotFound),
+    }
+}
+
+async fn clear_review_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
+    listing_id: u64,
+) -> Result<(), ApiError> {
+    sqlx::query(
+        "UPDATE listings SET image_reviewed_by = NULL, image_reviewed_at = NULL, \
+         image_reviewed_ids = NULL WHERE id = ?",
+    )
+    .bind(listing_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|_| ApiError::Internal)?;
+    Ok(())
+}
+
 /// Stores one upload: owner/status/count/size/signature checks, file write,
-/// then the row in the same logical unit (a DB failure removes the file).
+/// then the row and review reset in one DB transaction (failure removes file).
 pub async fn add_image(
     pool: &MySqlPool,
     cfg: &crate::config::Config,
     seller_id: u64,
     public_id: &str,
-    bytes: &[u8],
+    bytes: Vec<u8>,
 ) -> Result<ImageOut, ApiError> {
     let listing_id = draft_listing_id(pool, seller_id, public_id).await?;
 
@@ -78,17 +308,17 @@ pub async fn add_image(
         return Err(ApiError::Validation { fields });
     }
     if bytes.len() as u64 > cfg.max_image_bytes {
-        let mut fields = std::collections::BTreeMap::new();
-        fields.insert("images".to_string(), "too_large".to_string());
-        return Err(ApiError::Validation { fields });
+        return Err(image_validation("too_large"));
     }
-    let ext = detect_ext(bytes).ok_or_else(|| {
-        let mut fields = std::collections::BTreeMap::new();
-        fields.insert("images".to_string(), "invalid_type".to_string());
-        ApiError::Validation { fields }
-    })?;
+    let (bytes, validated) = tokio::task::spawn_blocking(move || {
+        let validated = decode_image(&bytes)?;
+        Ok::<_, ImageRejection>((bytes, validated))
+    })
+    .await
+    .map_err(|_| ApiError::Internal)?
+    .map_err(|error| image_validation(error.reason()))?;
 
-    let key = storage_key(ext);
+    let key = storage_key(validated.extension);
     let path = std::path::Path::new(&cfg.media_dir).join(&key);
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent)
@@ -99,34 +329,56 @@ pub async fn add_image(
         .await
         .map_err(|_| ApiError::Internal)?;
 
-    // MAX over TINYINT UNSIGNED decodes into Option<u64> (same-sign widening;
-    // Option<i64> is rejected by sqlx's type check on non-NULL values).
-    let next: Option<u64> =
-        sqlx::query_scalar("SELECT MAX(sort_order) FROM listing_images WHERE listing_id = ?")
-            .bind(listing_id)
-            .fetch_one(pool)
-            .await
-            .map_err(|_| ApiError::Internal)?;
-    let order = next.map(|n| n + 1).unwrap_or(0) as u8;
-    let now = chrono::Utc::now();
-    // The insert id comes from the statement result itself: LAST_INSERT_ID()
-    // is connection-scoped, and a separate SELECT may land on another pool
-    // connection (regression: every upload after the first returned id 1).
-    let outcome = sqlx::query(
-        "INSERT INTO listing_images (listing_id, storage_key, sort_order, created_at) \
-         VALUES (?, ?, ?, ?)",
-    )
-    .bind(listing_id)
-    .bind(&key)
-    .bind(order)
-    .bind(now)
-    .execute(pool)
+    let outcome = async {
+        let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
+        // Every mutation uses listing → image lock order, also rechecking
+        // editability and count after any concurrent submit/upload.
+        lock_editable_listing(&mut tx, listing_id).await?;
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM listing_images WHERE listing_id = ?")
+                .bind(listing_id)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|_| ApiError::Internal)?;
+        if count >= cfg.max_images_per_listing as i64 {
+            return Err(image_validation("too_many"));
+        }
+        // MAX over TINYINT UNSIGNED decodes into Option<u64> (same-sign widening;
+        // Option<i64> is rejected by sqlx's type check on non-NULL values).
+        let next: Option<u64> =
+            sqlx::query_scalar("SELECT MAX(sort_order) FROM listing_images WHERE listing_id = ?")
+                .bind(listing_id)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|_| ApiError::Internal)?;
+        let order = next.map(|n| n + 1).unwrap_or(0) as u8;
+        let now = chrono::Utc::now();
+        // The insert id comes from the statement result itself: LAST_INSERT_ID()
+        // is connection-scoped, and a separate SELECT may use another connection.
+        let result = sqlx::query(
+            "INSERT INTO listing_images \
+             (listing_id, storage_key, sort_order, width, height, created_at) \
+             VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(listing_id)
+        .bind(&key)
+        .bind(order)
+        .bind(validated.width)
+        .bind(validated.height)
+        .bind(now)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| ApiError::Internal)?;
+        clear_review_in_tx(&mut tx, listing_id).await?;
+        tx.commit().await.map_err(|_| ApiError::Internal)?;
+        Ok::<_, ApiError>((result, order))
+    }
     .await;
-    let result = match outcome {
+    let (result, order) = match outcome {
         Ok(result) => result,
-        Err(_) => {
+        Err(error) => {
             let _ = tokio::fs::remove_file(&path).await;
-            return Err(ApiError::Internal);
+            return Err(error);
         }
     };
     Ok(ImageOut {
@@ -134,6 +386,8 @@ pub async fn add_image(
         url: format!("/media/{key}"),
         storage_key: key,
         sort_order: order,
+        width: validated.width,
+        height: validated.height,
     })
 }
 
@@ -147,22 +401,30 @@ pub async fn remove_image(
     image_id: u64,
 ) -> Result<(), ApiError> {
     let listing_id = draft_listing_id(pool, seller_id, public_id).await?;
+    let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
+    lock_editable_listing(&mut tx, listing_id).await?;
     let key: Option<String> = sqlx::query_scalar(
-        "SELECT storage_key FROM listing_images WHERE id = ? AND listing_id = ?",
+        "SELECT storage_key FROM listing_images WHERE id = ? AND listing_id = ? FOR UPDATE",
     )
     .bind(image_id)
     .bind(listing_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|_| ApiError::Internal)?;
     let Some(key) = key else {
         return Err(ApiError::NotFound);
     };
-    sqlx::query("DELETE FROM listing_images WHERE id = ?")
+    let deleted = sqlx::query("DELETE FROM listing_images WHERE id = ? AND listing_id = ?")
         .bind(image_id)
-        .execute(pool)
+        .bind(listing_id)
+        .execute(&mut *tx)
         .await
         .map_err(|_| ApiError::Internal)?;
+    if deleted.rows_affected() != 1 {
+        return Err(ApiError::NotFound);
+    }
+    clear_review_in_tx(&mut tx, listing_id).await?;
+    tx.commit().await.map_err(|_| ApiError::Internal)?;
     let _ = tokio::fs::remove_file(std::path::Path::new(&cfg.media_dir).join(&key)).await;
     Ok(())
 }
@@ -176,12 +438,15 @@ pub async fn set_order(
     ids: &[u64],
 ) -> Result<(), ApiError> {
     let listing_id = draft_listing_id(pool, seller_id, public_id).await?;
-    let current: Vec<u64> =
-        sqlx::query_scalar("SELECT id FROM listing_images WHERE listing_id = ? ORDER BY id")
-            .bind(listing_id)
-            .fetch_all(pool)
-            .await
-            .map_err(|_| ApiError::Internal)?;
+    let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
+    lock_editable_listing(&mut tx, listing_id).await?;
+    let current: Vec<u64> = sqlx::query_scalar(
+        "SELECT id FROM listing_images WHERE listing_id = ? ORDER BY id FOR UPDATE",
+    )
+    .bind(listing_id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(|_| ApiError::Internal)?;
     let mut want: Vec<u64> = ids.to_vec();
     want.sort_unstable();
     if want != current {
@@ -189,7 +454,6 @@ pub async fn set_order(
         fields.insert("image_ids".to_string(), "mismatch".to_string());
         return Err(ApiError::Validation { fields });
     }
-    let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
     // Two passes: a straight swap would trip UNIQUE(listing_id, sort_order)
     // midway (row A takes row B's old slot while B still holds it). The temp
     // band 128..135 can never collide — positions stay below max_images (8).
@@ -243,18 +507,45 @@ fn is_crockford(s: &str) -> bool {
     })
 }
 
-/// Reads one stored file for `GET /media/…`. No auth: a listing's photos are
-/// public exactly like the listing, and the ULID keys are unguessable.
-/// Missing files and malformed keys are both 404 (no existence signal).
+/// Reads one stored file for `GET /media/…`. The parent listing is resolved
+/// before disk access: reviewed active images are public; every other image
+/// is owner/admin only. Missing, unknown, and unauthorized keys are all 404.
 pub async fn read_media(
+    pool: &MySqlPool,
     cfg: &crate::config::Config,
     key: &str,
-) -> Result<(Vec<u8>, &'static str), ApiError> {
+    viewer: Option<(u64, bool)>,
+) -> Result<(Vec<u8>, &'static str, bool), ApiError> {
     let content_type = valid_media_key(key).ok_or(ApiError::NotFound)?;
+    let row = sqlx::query(
+        "SELECT l.seller_id, l.status, l.deleted_at, \
+         l.image_reviewed_at IS NOT NULL AS image_reviewed \
+         FROM listing_images i JOIN listings l ON l.id = i.listing_id \
+         WHERE i.storage_key = ?",
+    )
+    .bind(key)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::Internal)?
+    .ok_or(ApiError::NotFound)?;
+    let status: String = row.try_get("status").map_err(|_| ApiError::Internal)?;
+    let deleted_at: Option<chrono::DateTime<chrono::Utc>> =
+        row.try_get("deleted_at").map_err(|_| ApiError::Internal)?;
+    let image_reviewed: bool = row
+        .try_get("image_reviewed")
+        .map_err(|_| ApiError::Internal)?;
+    let public = status == "active" && deleted_at.is_none() && image_reviewed;
+    if !public {
+        let seller_id: u64 = row.try_get("seller_id").map_err(|_| ApiError::Internal)?;
+        let allowed = viewer.is_some_and(|(user_id, is_admin)| is_admin || user_id == seller_id);
+        if !allowed {
+            return Err(ApiError::NotFound);
+        }
+    }
     let bytes = tokio::fs::read(std::path::Path::new(&cfg.media_dir).join(key))
         .await
         .map_err(|_| ApiError::NotFound)?;
-    Ok((bytes, content_type))
+    Ok((bytes, content_type, public))
 }
 
 #[cfg(test)]
@@ -284,14 +575,50 @@ mod tests {
         );
     }
 
-    // ponytail: magic bytes only — a payload with a valid signature but
-    // garbage after it still passes detect_ext. Full decode arrives with the
-    // image-moderation decision; this test pins the current ceiling.
     #[test]
-    fn magic_bytes_only_garbage_after_signature_passes() {
-        assert_eq!(
-            detect_ext(&[0xFF, 0xD8, 0xFF, b'!', b'!', b'!']),
-            Some("jpg")
-        );
+    fn signature_garbage_is_not_a_decoded_image() {
+        assert!(matches!(
+            decode_image(&[0xFF, 0xD8, 0xFF, b'!', b'!', b'!']),
+            Err(ImageRejection::InvalidImage)
+        ));
+    }
+
+    #[test]
+    fn real_static_fixtures_decode_their_dimensions() {
+        for (bytes, extension, dimensions) in [
+            (
+                &include_bytes!("../tests/fixtures/tiny.png")[..],
+                "png",
+                (3, 2),
+            ),
+            (
+                &include_bytes!("../tests/fixtures/tiny.jpg")[..],
+                "jpg",
+                (4, 3),
+            ),
+            (
+                &include_bytes!("../tests/fixtures/tiny.webp")[..],
+                "webp",
+                (5, 4),
+            ),
+        ] {
+            let image = decode_image(bytes).expect("valid checked-in fixture");
+            assert_eq!(image.extension, extension);
+            assert_eq!((image.width, image.height), dimensions);
+        }
+    }
+
+    #[test]
+    fn animation_and_decoded_pixel_ceiling_are_explicit() {
+        assert!(matches!(
+            decode_image(include_bytes!("../tests/fixtures/animated.png")),
+            Err(ImageRejection::Animated)
+        ));
+        assert!(matches!(
+            decode_image(include_bytes!("../tests/fixtures/animated.webp")),
+            Err(ImageRejection::Animated)
+        ));
+        assert_eq!(check_dimensions(4001, 4000), Err(ImageRejection::TooLarge));
+        assert_eq!(check_dimensions(4000, 4000), Ok(()));
     }
 }

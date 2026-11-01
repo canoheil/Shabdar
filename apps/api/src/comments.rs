@@ -47,7 +47,10 @@ async fn lock_listing_for_create(
     slug: &str,
 ) -> Result<CreatedListing, ApiError> {
     let row = sqlx::query(
-        "SELECT id, status, deleted_at, comment_count FROM listings WHERE slug = ? FOR UPDATE",
+        "SELECT l.id, l.status, l.deleted_at, l.comment_count, \
+         l.image_reviewed_at IS NOT NULL AS image_reviewed, \
+         EXISTS(SELECT 1 FROM listing_images i WHERE i.listing_id = l.id) AS has_images \
+         FROM listings l WHERE l.slug = ? FOR UPDATE",
     )
     .bind(slug)
     .fetch_optional(&mut *connection)
@@ -58,6 +61,7 @@ async fn lock_listing_for_create(
     let deleted_at: Option<chrono::DateTime<chrono::Utc>> =
         row.try_get("deleted_at").map_err(|_| ApiError::Internal)?;
     check_visibility(&status, deleted_at.is_some())?;
+    crate::listings::check_public_image_review(&row)?;
     Ok(CreatedListing {
         id: row.try_get("id").map_err(|_| ApiError::Internal)?,
         comment_count: row
@@ -208,17 +212,23 @@ pub async fn list(
     cursor: Option<&str>,
     limit_raw: Option<&str>,
 ) -> Result<serde_json::Value, ApiError> {
-    let listing = sqlx::query("SELECT id, status, deleted_at FROM listings WHERE slug = ?")
-        .bind(slug)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| ApiError::Internal)?
-        .ok_or(ApiError::NotFound)?;
+    let listing = sqlx::query(
+        "SELECT l.id, l.status, l.deleted_at, \
+         l.image_reviewed_at IS NOT NULL AS image_reviewed, \
+         EXISTS(SELECT 1 FROM listing_images i WHERE i.listing_id = l.id) AS has_images \
+         FROM listings l WHERE l.slug = ?",
+    )
+    .bind(slug)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::Internal)?
+    .ok_or(ApiError::NotFound)?;
     let status: String = listing.try_get("status").map_err(|_| ApiError::Internal)?;
     let deleted_at: Option<chrono::DateTime<chrono::Utc>> = listing
         .try_get("deleted_at")
         .map_err(|_| ApiError::Internal)?;
     check_visibility(&status, deleted_at.is_some())?;
+    crate::listings::check_public_image_review(&listing)?;
     let listing_id: u64 = listing.try_get("id").map_err(|_| ApiError::Internal)?;
 
     // Resolve the target before validating a cursor: unknown/non-public

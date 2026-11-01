@@ -42,8 +42,10 @@ async fn lock_listing(
     slug: &str,
 ) -> Result<LockedListing, ApiError> {
     let row = sqlx::query(
-        "SELECT id, seller_id, status, deleted_at, rating_sum, rating_count \
-         FROM listings WHERE slug = ? FOR UPDATE",
+        "SELECT l.id, l.seller_id, l.status, l.deleted_at, l.rating_sum, l.rating_count, \
+         l.image_reviewed_at IS NOT NULL AS image_reviewed, \
+         EXISTS(SELECT 1 FROM listing_images i WHERE i.listing_id = l.id) AS has_images \
+         FROM listings l WHERE l.slug = ? FOR UPDATE",
     )
     .bind(slug)
     .fetch_optional(&mut *connection)
@@ -59,6 +61,7 @@ async fn lock_listing(
     if status != "active" {
         return Err(ApiError::NotFound);
     }
+    crate::listings::check_public_image_review(&row)?;
     Ok(LockedListing {
         id: row.try_get("id").map_err(|_| ApiError::Internal)?,
         seller_id: row.try_get("seller_id").map_err(|_| ApiError::Internal)?,

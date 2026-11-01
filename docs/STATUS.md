@@ -1,4 +1,121 @@
-# Status — Phase 10 comment moderation & launch safety
+# Status — Phase 11 image moderation & launch safety
+
+Updated 2026-10-31 on Arena.ai Agent Mode after the post-review enforcing
+GitHub Actions gate on the real Axum/Nuxt/MariaDB stack.
+
+- **Phase 11 code and tests are COMPLETE — approved Image Moderation & Launch
+  Safety (Tasks 1–5).** This is not a claim that the production migration or
+  human image backlog has already run.
+- **Branch: `arena/79a6111c-shabdar`; base: `f59030f1dac06f3ffa9580ae45e03614a7fd0150`.**
+  The post-review whole-stack candidate is
+  `63c43b060887989025ef04fb4fb7ca8597e1657b`. The final documentation-only head
+  must pass the same workflow before PR delivery; no agent merge is implied.
+- **Contract:** [approved design](superpowers/specs/2026-10-31-phase11-image-moderation-design.md)
+  and [implementation plan](superpowers/plans/2026-10-31-phase11-image-moderation.md).
+- **Remaining rollout:** apply migration 0011 and explicitly clear the legacy
+  image queue. Decode establishes validity only; appropriateness remains a
+  human decision.
+
+## What Phase 11 built
+
+- **Bounded local decoding** — encoded bytes, 8000×8000 dimensions, 16 million
+  pixels, and an 80 MiB allocation ceiling are enforced before a durable image
+  row. Pinned `image = "=0.25.9"` uses only static JPEG/PNG/WebP decoders with
+  default features disabled. Malformed, truncated, animated, unsupported, and
+  resource-exceeding files are rejected; no external content service, native
+  image library, or automated safety score is involved.
+- **Authorized media** — an unguessable ULID is no longer the only protection.
+  Reviewed active listings use `public, no-cache` with revalidation; owner/admin
+  access is explicit and private, errors are `private, no-store`, and responses use
+  `nosniff`. Admin queue/detail GET responses also explicitly use private,
+  no-store caching with `Vary: Cookie`.
+- **Exact human review** — migration 0011 stores reviewer, timestamp, and the
+  exact reviewed image-ID set. Pending approval and active legacy restoration
+  require the exact current set. Add/delete and resubmission clear review;
+  reorder preserves it. Decisions lock/recheck the listing and repeated
+  decisions add no duplicate audit. Image mutations consistently take the
+  listing lock before image locks.
+- **Safe legacy behavior** — active image listings without review are suppressed
+  consistently from feed, detail, sitemap, favorites/interactions, and public
+  media until managers drain a separate re-review queue. Zero-image active
+  listings remain public. Existing rows are never silently marked reviewed.
+- **Accessible web workflow** — pending and legacy queues, every image and its
+  dimensions, broken/unloaded guards, exact posted IDs, preserved state after
+  errors, reasoned rejection/removal, and confirmed-only mutations are covered.
+  Persian upload errors explain supported formats and failure categories.
+  Admin code remains route-split out of public Home/Detail chunks.
+- **Operations and documentation** — upload/media/admin errors, audit metadata,
+  schema invariants, transaction ordering, backup/rollout, and dependency/MSRV
+  findings are recorded in `API.md`, `DATABASE.md`, `ARCHITECTURE.md`,
+  `PRODUCT.md`, and the package READMEs.
+- **Dependency/license audit** — 18 new resolved entries from 17 unique packages
+  were checked. Declared Rust floors do not exceed 1.85, and exact-version
+  license expressions are permissive with no copyleft. `THIRD_PARTY_NOTICES.md`
+  records the expressions and the requirement to generate complete applicable
+  notices when distributing compiled artifacts; no crate source was vendored.
+
+## Verification results (Phase 11 — PASS)
+
+| Vertical slice | Canonical RED run | Canonical GREEN run |
+|---|---:|---:|
+| Review schema + bounded local decoder | `41212032144` | `41212299441` |
+| Media authorization + public visibility gates | `41214333927` | `41214569711` |
+| Exact review, legacy queue + media authorization | `41216227602` | `41217146342` (API gate) |
+| Accessible pending/legacy review web | `41217882674` | `41219810465` |
+| Post-review hardening + full stack | — | `41221481425` |
+
+- **Post-review candidate run `41221481425`**, job `124596772150`, head
+  `63c43b0`: Rust formatting, Clippy with warnings denied, the full MariaDB API
+  suite, Nuxt typecheck/build, real-stack browser tests, Lighthouse, and both
+  independent client budgets passed. The compiled suite contains **270 Rust
+  tests** (64 unit + 206 integration; no ignored tests). All **100/100
+  Playwright tests** and the 1-test production quality suite passed.
+- New coverage includes corrupt/truncated/animated/oversized decodes, exact
+  review IDs, missing/stale sets, legacy restoration and timestamp preservation,
+  media authorization/cache/nosniff, mutation invalidation, private admin GETs,
+  actual browser image loading, broken/incomplete sets, reason preservation,
+  accessibility/touch targets, and public/admin chunk boundaries.
+- Initial production JS is Home **93,805 gzip bytes / 3 scripts** and Detail
+  **98,306 / 3**, against unchanged separate **114,627-byte** ceilings. Admin
+  code did not enter those public chunks. Self-hosted Arabic/Latin WOFF2 files
+  total **80,832 bytes**.
+- Enforced mobile medians of three Lighthouse runs: Home FCP **673.109ms**, LCP
+  **2404.217ms**, CLS **0.00661875**, TBT **68.5ms**, Accessibility **100**;
+  Detail FCP **672.471ms**, LCP **2402.942ms**, CLS **0.00530436**, TBT
+  **75.5ms**, Accessibility **100**. Budgets are medians, not a claim about
+  every historical individual run.
+- Native execution still provides no independent subagent reviewer. Cumulative
+  whole-branch review was author self-review, explicitly weaker than
+  independent review. Formatting/build-only runs are not cited as behavioral
+  evidence. No test or budget was weakened and no automatic merge was performed.
+
+## Required Phase 11 rollout
+
+1. Back up the database and `MEDIA_DIR` together and apply migration 0011 through
+   the normal startup migrator.
+2. Deploy the API/web contracts together. Existing active image listings become
+   non-public by design; zero-image active rows remain public.
+3. From `/admin/queue`, explicitly drain the active legacy image-review queue.
+   Reject/remove or repair unreadable and invalid stored entries rather than
+   approving them blindly. Database rows and audits, not browser totals, are
+   authoritative.
+4. Only after those operational steps may the team claim that the existing
+   image corpus cleared this launch blocker. Other recorded public-launch work
+   remains independent.
+
+## Phase 11 accepted ceilings and deferred work
+
+- Local decode checks validity, not intent or appropriateness. There is no
+  external classifier, semantic score, background worker, or automatic takedown.
+- Thumbnails, resizing, metadata stripping, responsive derivatives, and modern
+  output formats remain a separately measurable optimization phase. They must
+  not weaken original decode bounds, exact human review, authorization, or
+  audit contracts.
+- Lighthouse uses simulated mobile throttling in headless Chromium, not a
+  physical phone or RUM. Real SMS, HTTPS/deployment, backups, privacy/terms,
+  distributed abuse controls, and other recorded launch checks remain open.
+
+## Phase 10 delivery record
 
 Updated 2026-10-31 on Arena.ai Agent Mode after the final enforcing GitHub
 Actions gate on the real Axum/Nuxt/MariaDB stack.

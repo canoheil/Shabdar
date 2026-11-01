@@ -12,7 +12,7 @@
 - Soft delete (`deleted_at`) for users and listings. Hard delete only for personal data on request, after a retention review.
 - Uniqueness and check constraints are enforced in the database.
 - This is a logical design, not executable migration SQL. Migrations are written after approval. Each migration is tested on an empty database.
-- Phase 10 status (2026-10-31): migrations 0003–0010 build the launch reference/listing/media/audit tables plus favorites, ratings, comments, reports, blocks, literal moderation rules, comment moderation cases, and singleton moderation settings. Migration `0010_comment_moderation.sql` seeds 143 attributed/deduplicated rules and settings revision 1 without backfilling existing comments. Reset/drop helpers delete cases before comments/users and rules/settings in FK-safe order. Still deferred: `listing_locations`, `support_tickets`, conversations, messages, and notifications.
+- Phase 11 status (2026-10-31): migrations 0003–0011 build the launch reference/listing/media/audit tables plus favorites, ratings, comments, reports, blocks, moderation, and exact image-review attribution. Migration `0010_comment_moderation.sql` seeds 143 attributed/deduplicated rules without backfilling comments; `0011_image_moderation.sql` deliberately leaves legacy image review NULL. Reset/drop helpers remain FK-safe. Still deferred: `listing_locations`, `support_tickets`, conversations, messages, and notifications.
 
 ## 2. Tables
 
@@ -92,6 +92,10 @@ Seed: home sweets, home food, handicrafts, clothing and sewing, plants and flowe
 - `submitted_at DATETIME(3) NULL`
 - `reviewed_by BIGINT UNSIGNED NULL` FK → `users.id`
 - `reviewed_at DATETIME(3) NULL`
+- `image_reviewed_by BIGINT UNSIGNED NULL` FK → `users.id` (migration 0011)
+- `image_reviewed_at DATETIME(3) NULL`
+- `image_reviewed_ids JSON NULL` — exact reviewed image IDs
+- `CHECK`: all three image-review fields are NULL, or all three are non-NULL
 - `published_at DATETIME(3) NULL` (set on approval)
 - `sold_at DATETIME(3) NULL`
 - `removed_reason VARCHAR(500) NULL`
@@ -109,8 +113,9 @@ Indexes:
 - `(category_id, status, published_at)`
 - `(seller_id, status, updated_at)` for the seller dashboard
 - `(status, submitted_at)` for the admin queue
+- `(status, image_reviewed_at, published_at, id)` for the legacy image-review backlog
 
-Reasoning: `status` is the single source of truth for public visibility. The counters are kept in sync inside the same transaction as the action that changes them, so list pages never run `COUNT(*)`.
+Reasoning: public visibility requires `status='active'`, no deletion, and—when image rows exist—non-NULL current image-review attribution. An active zero-image listing has no image content to moderate. Add/delete and submit/resubmit clear all three review fields; reorder preserves them. Review mutations lock/recheck the exact current `(id,storage_key)` set before writing dimensions, attribution, status (where applicable), and audit in one transaction. Counters remain synchronized transactionally, so list pages never run `COUNT(*)` for public counters.
 
 ### `listing_images`
 - `id BIGINT UNSIGNED PK`
@@ -122,7 +127,7 @@ Reasoning: `status` is the single source of truth for public visibility. The cou
 - `created_at DATETIME(3) NOT NULL`
 - Unique: `(listing_id, sort_order)`
 
-Limit per listing (proposed): 8 images, 5 MB each. Final limits are checked in ARCHITECTURE.md.
+Enforced limit: 8 images and 5 MiB encoded bytes each. New uploads persist decoded dimensions immediately; legacy NULL dimensions are backfilled only after the stored file passes bounded review-time decoding. Review attribution stores IDs, not a fabricated safety score.
 
 ### `listing_ratings`
 

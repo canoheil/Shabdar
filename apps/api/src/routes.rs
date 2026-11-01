@@ -30,6 +30,11 @@ use crate::state::AppState;
 
 /// Builds the full router. New endpoints are added here, not in main.rs.
 pub fn router(state: AppState) -> Router {
+    // Multipart is the largest accepted request. The small overhead allowance
+    // covers boundaries/headers. Scope the larger cap to that route only so
+    // the API JSON extractor's independent 2 MiB/413 contract is unchanged.
+    let max_body_bytes = usize::try_from(state.config.max_image_bytes.saturating_add(64 * 1024))
+        .unwrap_or(usize::MAX);
     Router::new()
         .route("/api/v1/health", get(health))
         .route("/api/v1/auth/otp/request", post(otp_request))
@@ -77,7 +82,10 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/listings/{public_id}/archive",
             post(archive_listing),
         )
-        .route("/api/v1/listings/{public_id}/images", post(upload_image))
+        .route(
+            "/api/v1/listings/{public_id}/images",
+            post(upload_image).layer(axum::extract::DefaultBodyLimit::max(max_body_bytes)),
+        )
         .route(
             "/api/v1/listings/{public_id}/images/{image_id}",
             delete(delete_image),
@@ -121,10 +129,18 @@ pub fn router(state: AppState) -> Router {
             post(admin_unsuspend_user),
         )
         .route("/api/v1/admin/listings/queue", get(admin_queue))
+        .route(
+            "/api/v1/admin/listings/image-review-queue",
+            get(admin_image_review_queue),
+        )
         .route("/api/v1/admin/listings/{public_id}", get(admin_detail))
         .route(
             "/api/v1/admin/listings/{public_id}/approve",
             post(admin_approve),
+        )
+        .route(
+            "/api/v1/admin/listings/{public_id}/images/review",
+            post(admin_review_legacy_images),
         )
         .route(
             "/api/v1/admin/listings/{public_id}/reject",
@@ -628,7 +644,7 @@ async fn upload_image(
             &state.config,
             user.user_id,
             &public_id,
-            &bytes,
+            bytes,
         )
         .await?,
     ))
@@ -657,6 +673,11 @@ async fn delete_image(
 #[derive(Deserialize)]
 struct AdminReasonBody {
     reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct AdminImagesBody {
+    image_ids: Option<Vec<u64>>,
 }
 
 #[derive(Deserialize)]
@@ -942,16 +963,35 @@ async fn admin_queue(
     State(state): State<AppState>,
     user: CurrentUser,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<axum::response::Response, ApiError> {
     crate::admin::require_admin(&user)?;
-    Ok(Json(
-        crate::admin::queue(
-            &state.pool,
-            params.get("cursor").map(String::as_str),
-            params.get("limit").map(String::as_str),
-        )
-        .await?,
-    ))
+    let body = crate::admin::queue(
+        &state.pool,
+        params.get("cursor").map(String::as_str),
+        params.get("limit").map(String::as_str),
+    )
+    .await?;
+    let mut response = Json(body).into_response();
+    mark_private_viewer(&mut response);
+    Ok(response)
+}
+
+/// GET /api/v1/admin/listings/image-review-queue — active legacy image sets.
+async fn admin_image_review_queue(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<axum::response::Response, ApiError> {
+    crate::admin::require_admin(&user)?;
+    let body = crate::admin::image_review_queue(
+        &state.pool,
+        params.get("cursor").map(String::as_str),
+        params.get("limit").map(String::as_str),
+    )
+    .await?;
+    let mut response = Json(body).into_response();
+    mark_private_viewer(&mut response);
+    Ok(response)
 }
 
 /// GET /api/v1/admin/listings/{public_id} — full view with seller info.
@@ -959,11 +999,12 @@ async fn admin_detail(
     State(state): State<AppState>,
     user: CurrentUser,
     Path(public_id): Path<String>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<axum::response::Response, ApiError> {
     crate::admin::require_admin(&user)?;
-    Ok(Json(
-        crate::admin::admin_detail(&state.pool, &public_id).await?,
-    ))
+    let body = crate::admin::admin_detail(&state.pool, &public_id).await?;
+    let mut response = Json(body).into_response();
+    mark_private_viewer(&mut response);
+    Ok(response)
 }
 
 /// POST /api/v1/admin/listings/{public_id}/approve — pending → active.
@@ -972,11 +1013,41 @@ async fn admin_approve(
     user: CurrentUser,
     headers: HeaderMap,
     Path(public_id): Path<String>,
+    ApiJson(body): ApiJson<AdminImagesBody>,
 ) -> Result<Json<crate::listings::ListingOut>, ApiError> {
     crate::csrf::check_csrf(&headers)?;
     crate::admin::require_admin(&user)?;
     Ok(Json(
-        crate::admin::approve(&state.pool, &user, &public_id).await?,
+        crate::admin::approve(
+            &state.pool,
+            &state.config,
+            &user,
+            &public_id,
+            body.image_ids.as_deref(),
+        )
+        .await?,
+    ))
+}
+
+/// POST /api/v1/admin/listings/{public_id}/images/review — legacy re-review.
+async fn admin_review_legacy_images(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    ApiJson(body): ApiJson<AdminImagesBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::admin::review_legacy_images(
+            &state.pool,
+            &state.config,
+            &user,
+            &public_id,
+            body.image_ids.as_deref(),
+        )
+        .await?,
     ))
 }
 
@@ -1088,25 +1159,59 @@ async fn sitemap_listings(
     Ok(Json(page))
 }
 
-/// GET /media/{*key} — serves one stored listing photo (public, like the
-/// listing itself). Strict key shape; traversal and unknown keys → 404.
+/// GET /media/{*key} — reviewed active photos are public; all other photos
+/// require their owner or an admin. Unknown and unauthorized keys are 404.
 async fn serve_media(
     State(state): State<AppState>,
     Path(key): Path<String>,
-) -> Result<
-    (
-        StatusCode,
-        [(axum::http::header::HeaderName, &'static str); 1],
-        Vec<u8>,
-    ),
-    ApiError,
-> {
-    let (bytes, content_type) = crate::listing_images::read_media(&state.config, &key).await?;
-    Ok((
-        StatusCode::OK,
-        [(axum::http::header::CONTENT_TYPE, content_type)],
-        bytes,
-    ))
+    current_user: Result<CurrentUser, ApiError>,
+) -> axum::response::Response {
+    let result = async {
+        let viewer = match current_user {
+            Ok(user) => Some((user.user_id, user.is_admin)),
+            Err(ApiError::Unauthorized) => None,
+            Err(error) => return Err(error),
+        };
+        crate::listing_images::read_media(&state.pool, &state.config, &key, viewer).await
+    }
+    .await;
+    match result {
+        Ok((bytes, content_type, public)) => {
+            let cache_control = if public {
+                "public, no-cache"
+            } else {
+                "private, no-store"
+            };
+            (
+                StatusCode::OK,
+                [
+                    (axum::http::header::CONTENT_TYPE, content_type),
+                    (axum::http::header::CACHE_CONTROL, cache_control),
+                    (axum::http::header::VARY, "Cookie"),
+                    (
+                        axum::http::header::HeaderName::from_static("x-content-type-options"),
+                        "nosniff",
+                    ),
+                ],
+                bytes,
+            )
+                .into_response()
+        }
+        Err(error) => {
+            // Media errors must never become a shared-cache negative hit.
+            let mut response = error.into_response();
+            let headers = response.headers_mut();
+            headers.insert(
+                axum::http::header::CACHE_CONTROL,
+                axum::http::HeaderValue::from_static("private, no-store"),
+            );
+            headers.insert(
+                axum::http::header::HeaderName::from_static("x-content-type-options"),
+                axum::http::HeaderValue::from_static("nosniff"),
+            );
+            response
+        }
+    }
 }
 
 /// GET /api/v1/categories — active categories, sort-ordered (Phase 3 Task 2).

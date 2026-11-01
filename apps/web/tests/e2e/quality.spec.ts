@@ -7,7 +7,7 @@ import {
   expectNoSeriousA11y,
   expectTouchTargets,
 } from './support/quality'
-import { readFixtures } from './support/stack'
+import { createListing, readFixtures } from './support/stack'
 
 const ARTIFACTS = resolve(process.cwd(), 'quality-artifacts')
 const VIEWPORTS = [
@@ -63,6 +63,15 @@ async function auditAndCapture(page: Page, label: string, width: number, theme: 
   })
 }
 
+async function adminReviewPath(): Promise<string> {
+  const listing = await createListing({
+    title: 'آگهی کیفیت صفحهٔ بررسی تصاویر',
+    state: 'pending',
+    imageCount: 2,
+  })
+  return `/admin/listings/${listing.publicId}`
+}
+
 const routes = [
   { label: 'home', path: () => '/', role: null },
   { label: 'detail', path: () => readFixtures().detailPath, role: null },
@@ -73,6 +82,7 @@ const routes = [
   { label: 'blocks', path: () => '/me/blocks', role: 'seller' },
   { label: 'detail-auth', path: () => readFixtures().detailPath, role: 'buyer' },
   { label: 'admin', path: () => '/admin/queue', role: 'admin' },
+  { label: 'admin-listing-review', path: adminReviewPath, role: 'admin' },
   { label: 'admin-reports', path: () => '/admin/reports', role: 'admin' },
   { label: 'admin-users', path: () => '/admin/users', role: 'admin' },
   { label: 'admin-moderation', path: () => '/admin/moderation', role: 'admin' },
@@ -85,7 +95,7 @@ for (const route of routes) {
     const runtime = monitorRuntime(page)
     await page.addInitScript(() => localStorage.setItem('nuxt-color-mode', 'light'))
     if (route.role) await applyStorage(page, readFixtures()[`${route.role}Storage`])
-    await page.goto(route.path())
+    await page.goto(await route.path())
     await expect(page.locator('main')).toBeVisible()
     await waitForEnhancedFont(page)
 
@@ -161,10 +171,12 @@ test('@quality admin moderation landscape reduced motion and keyboard focus rema
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.addInitScript(() => localStorage.setItem('nuxt-color-mode', 'light'))
   await applyStorage(page, readFixtures().adminStorage)
+  const reviewPath = await adminReviewPath()
 
   for (const route of [
     { label: 'admin-moderation', path: '/admin/moderation' },
     { label: 'admin-moderation-rules', path: '/admin/moderation/rules' },
+    { label: 'admin-listing-review', path: reviewPath },
   ]) {
     await page.goto(route.path)
     await expect(page.locator('main')).toBeVisible()

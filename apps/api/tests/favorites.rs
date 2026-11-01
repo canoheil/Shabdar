@@ -657,6 +657,14 @@ async fn favorites_list_returns_only_viewers_active_cards() {
     .execute(&t.pool)
     .await
     .expect("cover fixture");
+    sqlx::query(
+        "UPDATE listings SET image_reviewed_by = seller_id, image_reviewed_at = NOW(3), \
+         image_reviewed_ids = JSON_ARRAY() WHERE id = ?",
+    )
+    .bind(visible.id)
+    .execute(&t.pool)
+    .await
+    .expect("reviewed cover fixture");
 
     let (status, _, body) = send(
         t.app.clone(),

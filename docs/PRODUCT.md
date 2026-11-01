@@ -32,7 +32,7 @@ The previous version is not available. The feature list from the user's screensh
 - Create, edit, and submit a listing for review. Fields: category, city, title, description, price in toman (or free, or negotiable), photos.
 - Every listing starts as `draft`, then goes to `pending` when submitted. Only an admin can move it to `active` (approved) or `rejected` (with a reason).
 - Seller actions after approval: mark as sold, archive, or delete (soft).
-- Admin moderation queue: list of pending listings, approve, reject with reason, remove an active listing with reason.
+- Admin moderation queue: pending listings plus a separate legacy image-review backlog. Detail shows every current image; exact human image approval publishes/restores, while rejection/removal keeps its required reason.
 
 ### Discovery
 - Public home feed of active listings only.
@@ -58,7 +58,7 @@ The previous version is not available. The feature list from the user's screensh
 
 ### Admin
 - Separate admin area with its own layout and API namespace.
-- Listing moderation queue (pending listings with flags, if any).
+- Listing moderation queue (pending listings with flags, if any) and active legacy image backlog. Accessible RTL detail requires every loaded image to be confirmed, shows dimensions/reviewer attribution, preserves state on errors, and never publishes optimistically.
 - Report queue: open reports with target, reason, and details; actions: hide comment, remove listing, suspend user, or dismiss report.
 - Comment-rule administration and a separate automatic-review queue with confirm-hidden/restore, safe matched-rule snapshots, and revision-checked rescan batches. Report restore cannot bypass an active automatic case.
 - Every admin action is written to the audit log.
@@ -72,7 +72,8 @@ The previous version is not available. The feature list from the user's screensh
 ## 4. Deferred (not in v1)
 
 - **Semantic, fuzzy, phonetic, transliteration, and external moderation services.** Phase 10 ships deterministic literal comment rules instead; any broader detection upgrade needs separate scope and evidence.
-- Automated image moderation (AI or external service).
+- Automated image moderation (AI or external service). Phase 11 local decode validates files only and human review determines suitability.
+- Image thumbnails, resizing, metadata stripping, and AVIF/modern derivative generation; these need a separate optimization scope and measurements.
 - Nearby sellers map and radius search (the feature exists in the old version and returns in a later phase, with privacy rules).
 - Paid ad reservations, billing, and ad inventory. The feed slot can be shown as a disabled placeholder until then.
 - Seller reviews separate from ratings (text reviews with eligibility rules).
@@ -88,8 +89,8 @@ The previous version is not available. The feature list from the user's screensh
 1. Logged-in seller opens "Post listing" and fills in category, city, title, description, price, and photos.
 2. Seller saves as draft or submits for review. Submit moves the listing to `pending`.
 3. Seller sees the status in the dashboard ("waiting for review").
-4. Admin opens the queue, reviews the listing, and approves or rejects it.
-5. Approved listing becomes `active` and appears in public feeds. Rejected listing shows the reason to the seller, who can edit and resubmit.
+4. Admin opens the queue and listing detail, reviews every loaded current image, and either confirms the exact set or rejects with a reason. Broken/unloaded images cannot be confirmed.
+5. Approved listing becomes `active` with reviewer/timestamp/exact-ID attribution and appears in public feeds. Rejected listing shows the reason to the seller, who can edit and resubmit; image edits or resubmission require fresh review.
 
 ### B. Rate and comment
 1. Logged-in user opens an active listing.
@@ -116,8 +117,8 @@ The previous version is not available. The feature list from the user's screensh
 
 ## 6. Business rules
 
-- **Listing states:** `draft` → `pending` → `active` or `rejected`. From `active`: `sold`, `archived`, or `removed` (admin). Only `active` listings are public.
-- **Admin approval:** only admins can set `active`. Automated checks never approve or reject.
+- **Listing states:** `draft` → `pending` → `active` or `rejected`. From `active`: `sold`, `archived`, or `removed` (admin). Active listings with images are public only with a current exact human image review; active zero-image listings retain public behavior.
+- **Admin approval:** only admins can set `active`, and only after reviewing the exact current image set. Local decoding never approves content. Legacy active image listings remain suppressed in the re-review backlog until restored or removed.
 - **Comments:** clean comments publish immediately. Deterministic Persian/Finglish literal rules normalize Arabic/Persian variants, listed controls/diacritics, repeated characters, and separator evasions; matched new or rescanned comments become hidden pending review, never automatically deleted or suspended. Authors receive pending feedback without matched-rule details. A user report alone never hides a comment. Admins resolve automatic cases or independent reports with audited transitions and exact counters. Comments longer than 1000 characters are rejected.
 - **Ratings:** integers 1 to 5. One rating per user per listing. Cannot rate own listing. Changing a rating updates the averages.
 - **Popular sort:** weighted average (Bayesian) so that a listing with one 5-star rating does not beat a listing with many 4.8-star ratings.

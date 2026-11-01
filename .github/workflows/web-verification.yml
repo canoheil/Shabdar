@@ -3,7 +3,7 @@ name: Web verification
 on:
   push:
     branches:
-      - arena/4b608814-shabdar
+      - arena/79a6111c-shabdar
     paths:
       - apps/api/**
       - apps/web/**
@@ -94,7 +94,22 @@ jobs:
 
       - name: Build Axum debug binary
         working-directory: apps/api
-        run: cargo build
+        run: |
+          set +e
+          cargo build > /tmp/shabdar-api-build.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            python - <<'PY'
+          import base64
+          from pathlib import Path
+
+          payload = Path('/tmp/shabdar-api-build.log').read_bytes()[-16000:]
+          encoded = base64.b64encode(payload).decode()
+          for offset in range(0, len(encoded), 3500):
+              print(f'::error::API_BUILD_LOG_BASE64={encoded[offset:offset + 3500]}')
+          PY
+          fi
+          exit "$status"
 
       - name: Check Rust formatting
         working-directory: apps/api
@@ -120,7 +135,22 @@ jobs:
 
       - name: Lint every Rust target
         working-directory: apps/api
-        run: cargo clippy --all-targets -- -D warnings
+        run: |
+          set +e
+          cargo clippy --all-targets -- -D warnings > /tmp/shabdar-api-clippy.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            python - <<'PY'
+          import base64
+          from pathlib import Path
+
+          payload = Path('/tmp/shabdar-api-clippy.log').read_bytes()[-32000:]
+          encoded = base64.b64encode(payload).decode()
+          for offset in range(0, len(encoded), 3500):
+              print(f'::error::API_CLIPPY_LOG_BASE64={encoded[offset:offset + 3500]}')
+          PY
+          fi
+          exit "$status"
 
       - name: Run the full API suite against MariaDB
         working-directory: apps/api
@@ -133,7 +163,7 @@ jobs:
           import base64
           from pathlib import Path
 
-          payload = Path('/tmp/shabdar-api-tests.log').read_bytes()[-16000:]
+          payload = Path('/tmp/shabdar-api-tests.log').read_bytes()[-64000:]
           encoded = base64.b64encode(payload).decode()
           for offset in range(0, len(encoded), 3500):
               print(f'::error::API_TEST_LOG_BASE64={encoded[offset:offset + 3500]}')

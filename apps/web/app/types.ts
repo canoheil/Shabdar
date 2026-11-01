@@ -226,7 +226,37 @@ export interface ApiQueueItem {
   city: string
   category: string
   submitted_at: string | null
+  published_at: string | null
+  cover_image: string | null
+  image_count: number
   seller: { public_id: string; display_name: string | null }
+}
+
+export interface ApiAdminListingImage extends ApiListingImage {
+  id: number
+  sort_order: number
+  width: number | null
+  height: number | null
+}
+
+export interface ApiAdminImageReview {
+  image_ids: number[]
+  reviewed_at: string
+  reviewer: { public_id: string | null; display_name: string | null }
+}
+
+export interface ApiAdminListingDetail extends ApiListingOut {
+  city: string
+  province: string
+  category: string
+  seller: {
+    public_id: string
+    display_name: string | null
+    phone_e164: string
+    status: string
+  }
+  images: ApiAdminListingImage[]
+  image_review: ApiAdminImageReview | null
 }
 
 // Phase 4 §4 contract: the seller's own counts. `favorite_count` is 0 until

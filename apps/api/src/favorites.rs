@@ -13,13 +13,17 @@ use crate::error::ApiError;
 /// original row (including created_at) and counter untouched.
 pub async fn save(pool: &MySqlPool, user_id: u64, public_id: &str) -> Result<(), ApiError> {
     let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
-    let row =
-        sqlx::query("SELECT id, status, deleted_at FROM listings WHERE public_id = ? FOR UPDATE")
-            .bind(public_id)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(|_| ApiError::Internal)?
-            .ok_or(ApiError::NotFound)?;
+    let row = sqlx::query(
+        "SELECT l.id, l.status, l.deleted_at, \
+         l.image_reviewed_at IS NOT NULL AS image_reviewed, \
+         EXISTS(SELECT 1 FROM listing_images i WHERE i.listing_id = l.id) AS has_images \
+         FROM listings l WHERE l.public_id = ? FOR UPDATE",
+    )
+    .bind(public_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| ApiError::Internal)?
+    .ok_or(ApiError::NotFound)?;
     let listing_id: u64 = row.try_get("id").map_err(|_| ApiError::Internal)?;
     let status: String = row.try_get("status").map_err(|_| ApiError::Internal)?;
     let deleted_at: Option<chrono::DateTime<Utc>> =
@@ -27,6 +31,7 @@ pub async fn save(pool: &MySqlPool, user_id: u64, public_id: &str) -> Result<(),
     if status != "active" || deleted_at.is_some() {
         return Err(ApiError::NotFound);
     }
+    crate::listings::check_public_image_review(&row)?;
 
     let inserted = sqlx::query(
         "INSERT IGNORE INTO favorites (user_id, listing_id, created_at) VALUES (?, ?, ?)",
@@ -105,7 +110,9 @@ pub async fn list(
          JOIN cities c ON c.id = l.city_id \
          JOIN provinces p ON p.id = c.province_id \
          JOIN categories cat ON cat.id = l.category_id \
-         WHERE f.user_id = ? AND l.status = 'active' AND l.deleted_at IS NULL",
+         WHERE f.user_id = ? AND l.status = 'active' AND l.deleted_at IS NULL \
+         AND (l.image_reviewed_at IS NOT NULL OR NOT EXISTS(\
+              SELECT 1 FROM listing_images i WHERE i.listing_id = l.id))",
     );
     if anchor.is_some() {
         sql.push_str(" AND (f.created_at, f.listing_id) < (?, ?)");

@@ -38,7 +38,7 @@ export interface CreateListingInput {
   priceToman?: number | null
   priceType?: 'fixed' | 'negotiable' | 'free'
   imageCount?: number
-  state: 'active' | 'pending'
+  state: 'active' | 'pending' | 'draft'
 }
 
 function requiredEnv(name: string): string {
@@ -175,6 +175,7 @@ export async function createListing(input: CreateListingInput): Promise<{ public
     // Submission requires media. A zero-image fixture uploads one temporary
     // cover, completes moderation, then removes it to exercise real no-cover UI.
     const uploadCount = imageCount === 0 ? 1 : imageCount
+    const imageIds: number[] = []
     for (let index = 0; index < uploadCount; index += 1) {
       const uploaded = await seller.post(`/api/v1/listings/${listing.public_id}/images`, {
         multipart: {
@@ -182,11 +183,17 @@ export async function createListing(input: CreateListingInput): Promise<{ public
         },
       })
       if (!uploaded.ok()) throw await responseError(uploaded, `Upload fixture image ${index + 1}`)
+      const image = await uploaded.json() as { id: number }
+      imageIds.push(image.id)
     }
-    const submitted = await seller.post(`/api/v1/listings/${listing.public_id}/submit`)
-    if (!submitted.ok()) throw await responseError(submitted, 'Submit listing fixture')
+    if (input.state !== 'draft') {
+      const submitted = await seller.post(`/api/v1/listings/${listing.public_id}/submit`)
+      if (!submitted.ok()) throw await responseError(submitted, 'Submit listing fixture')
+    }
     if (admin) {
-      const approved = await admin.post(`/api/v1/admin/listings/${listing.public_id}/approve`)
+      const approved = await admin.post(`/api/v1/admin/listings/${listing.public_id}/approve`, {
+        data: { image_ids: imageIds },
+      })
       if (!approved.ok()) throw await responseError(approved, 'Approve listing fixture')
     }
     if (imageCount === 0) await removeImagesForFixture(listing.public_id)
@@ -242,4 +249,16 @@ export async function removeImagesForFixture(publicId: string): Promise<void> {
   await runSql(
     `DELETE FROM listing_images WHERE listing_id = (SELECT id FROM listings WHERE public_id = '${escaped}')`,
   )
+}
+
+// Backlog fixtures have real uploaded media but pre-Phase-11 review state.
+export async function makeLegacyForFixture(publicId: string): Promise<void> {
+  const escaped = publicId.replaceAll("'", "''")
+  await runSql(
+    `UPDATE listings SET status = 'active', published_at = COALESCE(published_at, NOW(3)), reviewed_by = seller_id, reviewed_at = COALESCE(reviewed_at, NOW(3)), image_reviewed_by = NULL, image_reviewed_at = NULL, image_reviewed_ids = NULL WHERE public_id = '${escaped}' AND status = 'pending'`,
+  )
+  const count = await runSql(
+    `SELECT COUNT(*) FROM listings WHERE public_id = '${escaped}' AND status = 'active' AND image_reviewed_at IS NULL`,
+  )
+  if (count !== '1') throw new Error('Legacy fixture did not enter active-unreviewed state')
 }

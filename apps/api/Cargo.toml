@@ -23,6 +23,9 @@ ulid = "1.2.1"
 getrandom = "0.4.3"
 sha2 = "0.10.9"
 hmac = "0.12.1"
+# Phase 11: exact 0.25.9 keeps the Rust 1.85 MSRV; pure-Rust static
+# JPEG/PNG/WebP decoding only, with no default/native/AVIF/threading features.
+image = { version = "=0.25.9", default-features = false, features = ["jpeg", "png", "webp"] }
 
 [dev-dependencies]
 tower = { version = "0.5.3", features = ["util"] }

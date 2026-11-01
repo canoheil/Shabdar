@@ -12,13 +12,14 @@ function acceptsGzip(header: string | undefined) {
   })
 }
 
-// Public listing photos live on the API disk (MEDIA_DIR, served at
-// GET /media/… by Axum). The browser only talks to :3000, so /media/**
-// proxies to Axum exactly like /api/** does (same-origin proxy,
-// ARCHITECTURE.md §3). No auth, no CSRF header: reading a photo is public,
-// exactly like reading the listing. Key-shape validation (strict ULID/ULID
-// charset, traversal impossible) stays server-side in Axum's read_media.
-// Decoded media bytes and statuses remain untouched. PNG alone gets optional
+// Listing photos live on the API disk (MEDIA_DIR, served at GET /media/… by
+// Axum). The browser only talks to :3000, so /media/** proxies to Axum exactly
+// like /api/** (same-origin proxy, ARCHITECTURE.md §3). Reviewed active photos
+// are public; otherwise the forwarded session cookie permits owner/admin reads
+// only. No CSRF header is needed for a safe read. Axum resolves the parent
+// listing and sets the public/private cache contract; this proxy preserves its
+// status and headers. Key-shape and traversal validation stay server-side.
+// Decoded media bytes remain untouched. PNG alone gets optional
 // streaming gzip transport: unlike JPEG/WebP it can still save meaningful bytes.
 export default defineEventHandler((event) => {
   const config = useRuntimeConfig(event)

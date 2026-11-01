@@ -146,7 +146,10 @@ async fn resolve_target(
     match input.target_type.as_str() {
         "listing" => {
             let row = sqlx::query(
-                "SELECT id, seller_id, status, deleted_at FROM listings WHERE slug = ?",
+                "SELECT l.id, l.seller_id, l.status, l.deleted_at, \
+                 l.image_reviewed_at IS NOT NULL AS image_reviewed, \
+                 EXISTS(SELECT 1 FROM listing_images i WHERE i.listing_id = l.id) AS has_images \
+                 FROM listings l WHERE l.slug = ?",
             )
             .bind(&input.target_id)
             .fetch_optional(pool)
@@ -157,6 +160,7 @@ async fn resolve_target(
             let deleted_at: Option<chrono::DateTime<Utc>> =
                 row.try_get("deleted_at").map_err(|_| ApiError::Internal)?;
             check_listing_visibility(&status, deleted_at.is_some())?;
+            crate::listings::check_public_image_review(&row)?;
             let seller_id: u64 = row.try_get("seller_id").map_err(|_| ApiError::Internal)?;
             if seller_id == reporter_id {
                 return Err(self_report());
@@ -167,7 +171,9 @@ async fn resolve_target(
             let row = sqlx::query(
                 "SELECT c.id, c.author_id, c.status AS comment_status, \
                  c.deleted_at AS comment_deleted_at, l.status AS listing_status, \
-                 l.deleted_at AS listing_deleted_at \
+                 l.deleted_at AS listing_deleted_at, \
+                 l.image_reviewed_at IS NOT NULL AS image_reviewed, \
+                 EXISTS(SELECT 1 FROM listing_images i WHERE i.listing_id = l.id) AS has_images \
                  FROM listing_comments c JOIN listings l ON l.id = c.listing_id \
                  WHERE c.public_id = ?",
             )
@@ -183,6 +189,7 @@ async fn resolve_target(
                 .try_get("listing_deleted_at")
                 .map_err(|_| ApiError::Internal)?;
             check_listing_visibility(&listing_status, listing_deleted_at.is_some())?;
+            crate::listings::check_public_image_review(&row)?;
             let comment_status: String = row
                 .try_get("comment_status")
                 .map_err(|_| ApiError::Internal)?;

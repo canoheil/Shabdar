@@ -1,12 +1,12 @@
-//! Phase 3 Task 5 (docs/PHASE3_PLAN.md): listing image uploads on local disk,
-//! reorder, and delete. Magic bytes + size + count only (no image decode —
-//! no `image` crate on Termux; the skip is pinned by magic_bytes_only below).
+//! Listing image uploads on local disk, full static-image validation,
+//! dimensions, media authorization, reorder, and delete (Phase 11).
 
 mod common;
 
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
 use http_body_util::BodyExt;
+use sqlx::Row;
 use tower::ServiceExt;
 
 /// All upload tests share one database; run them one at a time.
@@ -86,6 +86,21 @@ async fn register_user(
     (format!("{session}; shabdar_csrf={csrf}"), csrf)
 }
 
+async fn register_admin(
+    app: &axum::Router,
+    pool: &sqlx::MySqlPool,
+    cfg: &shabdar_api::config::Config,
+    phone: &str,
+) -> (String, String) {
+    let pair = register_user(app, pool, cfg, phone).await;
+    sqlx::query("UPDATE users SET is_admin = TRUE WHERE phone_e164 = ?")
+        .bind(phone)
+        .execute(pool)
+        .await
+        .expect("promote media admin");
+    pair
+}
+
 /// A draft listing owned by the cookie holder; returns its public_id.
 async fn create_draft(app: &axum::Router, cookie: &str, csrf: &str) -> String {
     let req = Request::builder()
@@ -110,18 +125,54 @@ async fn create_draft(app: &axum::Router, cookie: &str, csrf: &str) -> String {
     body["public_id"].as_str().unwrap().to_string()
 }
 
-/// Minimal magic-byte payloads (signatures only — the handler never decodes).
+/// Small real static images generated once for the checked-in test contract.
+/// The API must decode these bytes; filenames and multipart MIME are not proof.
 fn png_bytes() -> Vec<u8> {
-    vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00]
+    include_bytes!("fixtures/tiny.png").to_vec()
 }
 fn jpeg_bytes() -> Vec<u8> {
-    vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00]
+    include_bytes!("fixtures/tiny.jpg").to_vec()
 }
 fn webp_bytes() -> Vec<u8> {
-    b"RIFF\x01\x02\x03\x04WEBP".to_vec()
+    include_bytes!("fixtures/tiny.webp").to_vec()
 }
 
 /// POST one multipart file field; returns status + parsed JSON.
+async fn mark_current_images_reviewed(pool: &sqlx::MySqlPool, public_id: &str) {
+    sqlx::query(
+        "UPDATE listings l SET image_reviewed_by = l.seller_id, image_reviewed_at = NOW(3), \
+         image_reviewed_ids = (SELECT JSON_ARRAYAGG(i.id) FROM listing_images i \
+         WHERE i.listing_id = l.id) WHERE l.public_id = ?",
+    )
+    .bind(public_id)
+    .execute(pool)
+    .await
+    .expect("current image review fixture");
+}
+
+async fn review_state(
+    pool: &sqlx::MySqlPool,
+    public_id: &str,
+) -> (
+    Option<u64>,
+    Option<chrono::DateTime<chrono::Utc>>,
+    Option<String>,
+) {
+    let row = sqlx::query(
+        "SELECT image_reviewed_by, image_reviewed_at, CAST(image_reviewed_ids AS CHAR) AS ids \
+         FROM listings WHERE public_id = ?",
+    )
+    .bind(public_id)
+    .fetch_one(pool)
+    .await
+    .expect("review state");
+    (
+        row.try_get("image_reviewed_by").unwrap(),
+        row.try_get("image_reviewed_at").unwrap(),
+        row.try_get("ids").unwrap(),
+    )
+}
+
 async fn upload(
     app: axum::Router,
     public_id: &str,
@@ -174,25 +225,36 @@ fn media_cfg(dir: &std::path::Path) -> shabdar_api::config::Config {
     cfg
 }
 
-/// GET a path; return status + raw bytes + content-type.
-async fn get_raw(app: axum::Router, path: &str) -> (StatusCode, Vec<u8>, Option<String>) {
-    let req = Request::builder()
-        .method(Method::GET)
-        .uri(path)
-        .body(Body::empty())
+async fn get_media(
+    app: axum::Router,
+    path: &str,
+    cookie: Option<&str>,
+) -> (StatusCode, Vec<u8>, axum::http::HeaderMap) {
+    let mut builder = Request::builder().method(Method::GET).uri(path);
+    if let Some(cookie) = cookie {
+        builder = builder.header("cookie", cookie);
+    }
+    let resp = app
+        .oneshot(builder.body(Body::empty()).unwrap())
+        .await
         .unwrap();
-    let resp = app.oneshot(req).await.unwrap();
     let status = resp.status();
-    let content_type = resp
-        .headers()
-        .get("content-type")
-        .and_then(|v| v.to_str().ok())
-        .map(str::to_string);
+    let headers = resp.headers().clone();
     let bytes = BodyExt::collect(resp.into_body())
         .await
         .unwrap()
         .to_bytes()
         .to_vec();
+    (status, bytes, headers)
+}
+
+/// GET a path anonymously; return status + raw bytes + content-type.
+async fn get_raw(app: axum::Router, path: &str) -> (StatusCode, Vec<u8>, Option<String>) {
+    let (status, bytes, headers) = get_media(app, path, None).await;
+    let content_type = headers
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
     (status, bytes, content_type)
 }
 
@@ -226,6 +288,17 @@ async fn uploaded_file_is_served_back_with_bytes() {
         dir.join(key).is_file(),
         "file must exist under MEDIA_DIR: {key}"
     );
+    assert_eq!(
+        (body["width"].as_u64(), body["height"].as_u64()),
+        (Some(3), Some(2))
+    );
+    let stored: (u16, u16) =
+        sqlx::query_as("SELECT width, height FROM listing_images WHERE storage_key = ?")
+            .bind(key)
+            .fetch_one(&pool)
+            .await
+            .expect("decoded dimensions are persisted");
+    assert_eq!(stored, (3, 2));
     // WebP rides the same path (third accepted signature).
     let (status, body) = upload(
         app.clone(),
@@ -239,14 +312,17 @@ async fn uploaded_file_is_served_back_with_bytes() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert!(body["url"].as_str().unwrap().ends_with(".webp"));
+    assert_eq!(
+        (body["width"].as_u64(), body["height"].as_u64()),
+        (Some(5), Some(4))
+    );
 
-    // The minted URL serves the exact bytes back (no auth needed — reading a
-    // listing's photo is public, like the listing itself).
+    // A draft image is served to its owner through the same minted URL.
     let url = body["url"].as_str().unwrap().to_string();
-    let (status, bytes, content_type) = get_raw(app.clone(), &url).await;
+    let (status, bytes, headers) = get_media(app.clone(), &url, Some(&cookie)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(bytes, webp_bytes());
-    assert_eq!(content_type.as_deref(), Some("image/webp"));
+    assert_eq!(headers["content-type"], "image/webp");
 
     // Unknown keys, wrong extensions, and traversal shapes are all 404 —
     // never a file outside MEDIA_DIR, never a 500.
@@ -258,6 +334,99 @@ async fn uploaded_file_is_served_back_with_bytes() {
     ] {
         let (status, _, _) = get_raw(app.clone(), &path).await;
         assert_eq!(status, StatusCode::NOT_FOUND, "{path}");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn media_is_owner_or_admin_only_until_image_review_and_publication() {
+    let _lock = UPLOAD_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let dir = scratch_media_dir("media-authorization");
+    let cfg = media_cfg(&dir);
+    let app = common::spawn_app(cfg.clone()).await;
+    let (seller, seller_csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (other, _) = register_user(&app, &pool, &cfg, "+989009876543").await;
+    let (admin, _) = register_admin(&app, &pool, &cfg, "+989000000000").await;
+    let public_id = create_draft(&app, &seller, &seller_csrf).await;
+    let (status, body) = upload(
+        app.clone(),
+        &public_id,
+        &seller,
+        Some(&seller_csrf),
+        "private.png",
+        "image/png",
+        &png_bytes(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let url = body["url"].as_str().expect("media URL").to_string();
+
+    let anonymous = get_media(app.clone(), &url, None).await;
+    let other_user = get_media(app.clone(), &url, Some(&other)).await;
+    let owner = get_media(app.clone(), &url, Some(&seller)).await;
+    let administrator = get_media(app.clone(), &url, Some(&admin)).await;
+    assert_eq!(
+        [anonymous.0, other_user.0, owner.0, administrator.0],
+        [
+            StatusCode::NOT_FOUND,
+            StatusCode::NOT_FOUND,
+            StatusCode::OK,
+            StatusCode::OK,
+        ]
+    );
+    assert_eq!(owner.1, png_bytes());
+    for headers in [&owner.2, &administrator.2] {
+        assert_eq!(headers["cache-control"], "private, no-store");
+        assert_eq!(headers["vary"], "Cookie");
+        assert_eq!(headers["x-content-type-options"], "nosniff");
+        assert_eq!(headers["content-type"], "image/png");
+    }
+
+    for status in ["pending", "active"] {
+        sqlx::query("UPDATE listings SET status = ?, published_at = NOW(3) WHERE public_id = ?")
+            .bind(status)
+            .bind(&public_id)
+            .execute(&pool)
+            .await
+            .expect("non-public or legacy-active fixture");
+        let anonymous = get_media(app.clone(), &url, None).await;
+        let other_user = get_media(app.clone(), &url, Some(&other)).await;
+        assert_eq!(
+            (anonymous.0, other_user.0),
+            (StatusCode::NOT_FOUND, StatusCode::NOT_FOUND)
+        );
+    }
+
+    sqlx::query(
+        "UPDATE listings SET image_reviewed_by = seller_id, image_reviewed_at = NOW(3), \
+         image_reviewed_ids = JSON_ARRAY() WHERE public_id = ?",
+    )
+    .bind(&public_id)
+    .execute(&pool)
+    .await
+    .expect("direct reviewed fixture");
+    let public = get_media(app.clone(), &url, None).await;
+    assert_eq!(public.0, StatusCode::OK);
+    assert_eq!(public.1, png_bytes());
+    assert_eq!(public.2["cache-control"], "public, no-cache");
+    assert_eq!(public.2["vary"], "Cookie");
+    assert_eq!(public.2["x-content-type-options"], "nosniff");
+
+    for status in ["rejected", "removed"] {
+        sqlx::query("UPDATE listings SET status = ? WHERE public_id = ?")
+            .bind(status)
+            .bind(&public_id)
+            .execute(&pool)
+            .await
+            .expect("non-public reviewed fixture");
+        let anonymous = get_media(app.clone(), &url, None).await;
+        let owner = get_media(app.clone(), &url, Some(&seller)).await;
+        assert_eq!(anonymous.0, StatusCode::NOT_FOUND, "{status}");
+        assert_eq!(owner.0, StatusCode::OK, "owner can still inspect {status}");
     }
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -289,6 +458,7 @@ async fn upload_rejects_exe_bytes_and_wrong_owner_and_active_listing() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"]["code"], "validation_error");
+    assert_eq!(body["error"]["fields"]["images"], "invalid_type");
 
     // Another seller's listing → 403, no file written.
     let (status, body) = upload(
@@ -324,6 +494,155 @@ async fn upload_rejects_exe_bytes_and_wrong_owner_and_active_listing() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+async fn assert_image_rejections(
+    app: axum::Router,
+    pool: &sqlx::MySqlPool,
+    dir: &std::path::Path,
+    public_id: &str,
+    cookie: &str,
+    csrf: &str,
+    cases: &[(&str, &[u8], &str)],
+) {
+    let mut failures = Vec::new();
+    for (filename, bytes, expected) in cases.iter().copied() {
+        let content_type = match filename.rsplit('.').next() {
+            Some("jpg") => "image/jpeg",
+            Some("webp") => "image/webp",
+            _ => "image/png",
+        };
+        let (status, body) = upload(
+            app.clone(),
+            public_id,
+            cookie,
+            Some(csrf),
+            filename,
+            content_type,
+            bytes,
+        )
+        .await;
+        let actual = body["error"]["fields"]["images"].as_str();
+        if status != StatusCode::BAD_REQUEST || actual != Some(expected) {
+            failures.push(format!(
+                "{filename}: status={status}, reason={actual:?}, expected={expected}, body={body}"
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM listing_images")
+        .fetch_one(pool)
+        .await
+        .expect("image rows");
+    assert_eq!(rows, 0, "rejected input must not create an image row");
+    let top_level_files = std::fs::read_dir(dir)
+        .map(|entries| entries.count())
+        .unwrap_or(0);
+    assert_eq!(top_level_files, 0, "rejected input must not write media");
+}
+
+#[tokio::test]
+async fn upload_rejects_signature_garbage_and_truncated_real_images() {
+    let _lock = UPLOAD_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let dir = scratch_media_dir("media-corrupt");
+    let cfg = media_cfg(&dir);
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let public_id = create_draft(&app, &cookie, &csrf).await;
+    let garbage = vec![0xFF, 0xD8, 0xFF, b'!', b'!', b'!'];
+    let png = png_bytes();
+    let webp = webp_bytes();
+    assert_image_rejections(
+        app,
+        &pool,
+        &dir,
+        &public_id,
+        &cookie,
+        &csrf,
+        &[
+            ("garbage.jpg", &garbage, "invalid_image"),
+            ("truncated.png", &png[..png.len() / 2], "invalid_image"),
+            ("truncated.webp", &webp[..webp.len() - 8], "invalid_image"),
+        ],
+    )
+    .await;
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn upload_rejects_animated_png_and_webp() {
+    let _lock = UPLOAD_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let dir = scratch_media_dir("media-animated");
+    let cfg = media_cfg(&dir);
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let public_id = create_draft(&app, &cookie, &csrf).await;
+    assert_image_rejections(
+        app,
+        &pool,
+        &dir,
+        &public_id,
+        &cookie,
+        &csrf,
+        &[
+            (
+                "animated.png",
+                include_bytes!("fixtures/animated.png"),
+                "animated",
+            ),
+            (
+                "animated.webp",
+                include_bytes!("fixtures/animated.webp"),
+                "animated",
+            ),
+        ],
+    )
+    .await;
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn upload_rejects_excess_dimensions_and_decoded_pixels() {
+    let _lock = UPLOAD_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let dir = scratch_media_dir("media-dimensions");
+    let cfg = media_cfg(&dir);
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let public_id = create_draft(&app, &cookie, &csrf).await;
+    assert_image_rejections(
+        app,
+        &pool,
+        &dir,
+        &public_id,
+        &cookie,
+        &csrf,
+        &[
+            (
+                "dimensions.png",
+                include_bytes!("fixtures/dimensions.png"),
+                "too_large",
+            ),
+            (
+                "pixels.png",
+                include_bytes!("fixtures/pixels.png"),
+                "too_large",
+            ),
+        ],
+    )
+    .await;
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[tokio::test]
 async fn upload_enforces_size_and_count_limits() {
     let _lock = UPLOAD_LOCK.lock().await;
@@ -333,17 +652,16 @@ async fn upload_enforces_size_and_count_limits() {
     reset_db(&pool).await;
     let dir = scratch_media_dir("media-limits");
     let mut cfg = media_cfg(&dir);
-    cfg.max_image_bytes = 16;
+    cfg.max_image_bytes = 512;
     cfg.max_images_per_listing = 2;
     let app = common::spawn_app(cfg.clone()).await;
     let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
     let public_id = create_draft(&app, &cookie, &csrf).await;
 
-    // 17 bytes > 16-byte limit → 400.
-    let big = vec![
-        0x89, b'P', b'N', b'G', 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
-    ];
-    let (status, _) = upload(
+    // 513 bytes > 512-byte limit → 400 before decode or storage.
+    let mut big = png_bytes();
+    big.resize(513, 0);
+    let (status, body) = upload(
         app.clone(),
         &public_id,
         &cookie,
@@ -354,6 +672,7 @@ async fn upload_enforces_size_and_count_limits() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["fields"]["images"], "too_large");
 
     // Two small uploads fill the quota; the third → 400.
     for name in ["one.png", "two.png"] {
@@ -385,7 +704,7 @@ async fn upload_enforces_size_and_count_limits() {
 }
 
 #[tokio::test]
-async fn reorder_with_foreign_id_is_rejected_and_delete_removes_file() {
+async fn review_survives_reorder_and_resets_on_image_edits_and_submit() {
     let _lock = UPLOAD_LOCK.lock().await;
     let Some(pool) = common::test_pool().await else {
         return;
@@ -434,7 +753,8 @@ async fn reorder_with_foreign_id_is_rejected_and_delete_removes_file() {
     let resp = app.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
-    // Valid reorder → 200, then delete removes the row AND the file.
+    // Reorder changes presentation only, so the exact reviewed set survives.
+    mark_current_images_reviewed(&pool, &public_id).await;
     let key2 = second["storage_key"].as_str().unwrap().to_string();
     let req = Request::builder()
         .method(Method::PATCH)
@@ -448,7 +768,24 @@ async fn reorder_with_foreign_id_is_rejected_and_delete_removes_file() {
         .unwrap();
     let resp = app.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
+    let (_, reviewed_at, reviewed_ids) = review_state(&pool, &public_id).await;
+    assert!(reviewed_at.is_some());
+    assert!(reviewed_ids.is_some());
 
+    let (status, _) = upload(
+        app.clone(),
+        &public_id,
+        &cookie,
+        Some(&csrf),
+        "three.png",
+        "image/png",
+        &png_bytes(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(review_state(&pool, &public_id).await, (None, None, None));
+
+    mark_current_images_reviewed(&pool, &public_id).await;
     let req = Request::builder()
         .method(Method::DELETE)
         .uri(format!("/api/v1/listings/{public_id}/images/{id2}"))
@@ -456,8 +793,21 @@ async fn reorder_with_foreign_id_is_rejected_and_delete_removes_file() {
         .header("x-csrf-token", &csrf)
         .body(Body::empty())
         .unwrap();
-    let resp = app.oneshot(req).await.unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     assert!(!dir.join(&key2).exists(), "delete must remove the file too");
+    assert_eq!(review_state(&pool, &public_id).await, (None, None, None));
+
+    mark_current_images_reviewed(&pool, &public_id).await;
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/api/v1/listings/{public_id}/submit"))
+        .header("cookie", &cookie)
+        .header("x-csrf-token", &csrf)
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(review_state(&pool, &public_id).await, (None, None, None));
     let _ = std::fs::remove_dir_all(dir);
 }
