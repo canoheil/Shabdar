@@ -7,7 +7,7 @@ on:
       - arena/a5192fe1-shabdar
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   package:
@@ -24,25 +24,29 @@ jobs:
           cargo build --release --locked
           strip target/release/shabdar-api
 
-      - name: Upload Axum binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: shabdar-api-linux-x64
-          path: apps/api/target/release/shabdar-api
-          retention-days: 1
-          if-no-files-found: error
-
       - name: Export official MariaDB root filesystem
         run: |
           docker pull mariadb:10.11
           docker create --name shabdar-preview-mariadb mariadb:10.11
           docker export shabdar-preview-mariadb | gzip -1 > /tmp/mariadb-rootfs.tar.gz
 
-      - name: Upload MariaDB root filesystem
-        uses: actions/upload-artifact@v4
-        with:
-          name: mariadb-10.11-rootfs
-          path: /tmp/mariadb-rootfs.tar.gz
-          retention-days: 1
-          compression-level: 0
-          if-no-files-found: error
+      - name: Publish temporary Git blobs for the sandbox
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p /tmp/shabdar-preview-blobs
+          cp apps/api/target/release/shabdar-api /tmp/shabdar-preview-blobs/api.bin
+          split -b 40M -d -a 2 /tmp/mariadb-rootfs.tar.gz /tmp/shabdar-preview-blobs/mariadb-rootfs.tar.gz.part-
+          for file in /tmp/shabdar-preview-blobs/*; do
+            python3 - "$file" <<'PY'
+          import base64, json, pathlib, sys
+          source = pathlib.Path(sys.argv[1])
+          pathlib.Path('/tmp/shabdar-blob-payload.json').write_text(json.dumps({
+              'content': base64.b64encode(source.read_bytes()).decode(),
+              'encoding': 'base64',
+          }))
+          PY
+            sha=$(gh api -X POST "repos/${GH_REPO}/git/blobs" --input /tmp/shabdar-blob-payload.json --jq .sha)
+            echo "::notice::PREVIEW_BLOB $(basename "$file") $sha"
+          done
