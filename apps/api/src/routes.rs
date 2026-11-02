@@ -1106,8 +1106,9 @@ async fn images_order(
 }
 
 /// GET /api/v1/listings — public feed (Phase 3 Task 4, Phase 4 Tasks 1–3).
-/// Query: `category`, `city`, `province` (slugs), `q`, `sort`, `cursor`,
-/// `limit`. No auth: only `active` listings can ever appear (SQL filter).
+/// Query: `category`, `city`, `province` (slugs), `q`, inclusive
+/// `min_price`/`max_price`, `sort`, `cursor`, `limit`.
+/// No auth: only `active` listings can ever appear (SQL filter).
 async fn feed_listings(
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
@@ -1118,6 +1119,8 @@ async fn feed_listings(
         params.get("city").map(String::as_str),
         params.get("province").map(String::as_str),
         params.get("q").map(String::as_str),
+        params.get("min_price").map(String::as_str),
+        params.get("max_price").map(String::as_str),
         params.get("sort").map(String::as_str),
         params.get("cursor").map(String::as_str),
         params.get("limit").map(String::as_str),

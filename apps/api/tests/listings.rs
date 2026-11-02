@@ -1239,6 +1239,86 @@ async fn feed_price_sorts_put_null_prices_last() {
 }
 
 #[tokio::test]
+async fn feed_price_filters_are_inclusive_validated_and_exclude_null_prices() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    seed_price_fixtures(&app, &pool, &cookie, &csrf).await;
+
+    for (query, expected) in [
+        ("min_price=100000", vec!["ارزان", "گران"]),
+        ("max_price=100000", vec!["ارزان"]),
+        ("min_price=100000&max_price=200000", vec!["ارزان", "گران"]),
+        ("min_price=150000&max_price=100000", vec![]),
+    ] {
+        let (status, body) = send(
+            app.clone(),
+            Method::GET,
+            &format!("/api/v1/listings?sort=price_asc&{query}"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{query}: {body}");
+        assert_eq!(titles(&body), expected, "{query}: {body}");
+    }
+
+    for (field, value) in [("min_price", "-1"), ("max_price", "1.5"), ("min_price", "")] {
+        let (status, body) = send(
+            app.clone(),
+            Method::GET,
+            &format!("/api/v1/listings?{field}={value}"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{field}={value}: {body}");
+        assert_eq!(body["error"]["fields"][field], "invalid_price");
+    }
+}
+
+#[tokio::test]
+async fn feed_filtered_price_cursor_preserves_bounds_on_the_next_page() {
+    let _lock = WRITE_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config();
+    let app = common::spawn_app(cfg.clone()).await;
+    let (cookie, csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    seed_price_fixtures(&app, &pool, &cookie, &csrf).await;
+
+    let filters = "sort=price_asc&min_price=100000&max_price=200000&limit=1";
+    let (status, first) = send(
+        app.clone(),
+        Method::GET,
+        &format!("/api/v1/listings?{filters}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(titles(&first), vec!["ارزان"]);
+    assert_eq!(first["page"]["has_more"], true);
+    let cursor = first["page"]["next_cursor"].as_str().expect("cursor");
+
+    let (status, second) = send(
+        app,
+        Method::GET,
+        &format!("/api/v1/listings?{filters}&cursor={cursor}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(titles(&second), vec!["گران"]);
+    assert_eq!(second["page"]["has_more"], false);
+    assert!(second["page"]["next_cursor"].is_null());
+}
+
+#[tokio::test]
 async fn feed_price_cursor_walks_all_rows_once() {
     let _lock = WRITE_LOCK.lock().await;
     let Some(pool) = common::test_pool().await else {

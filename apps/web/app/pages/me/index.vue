@@ -40,17 +40,42 @@
       </ul>
 
       <section class="dashboard__listings" aria-labelledby="my-listings-title">
-        <h2 id="my-listings-title">آگهی‌های من</h2>
+        <div class="dashboard__listings-header">
+          <h2 id="my-listings-title">آگهی‌های من</h2>
+          <AppField id="listing-status-filter" label="فیلتر وضعیت">
+            <template #default="{ id, describedBy, ariaInvalid }">
+              <select
+                :id="id"
+                v-model="statusFilter"
+                class="field__input"
+                :aria-describedby="describedBy"
+                :aria-invalid="ariaInvalid"
+                @change="changeStatusFilter"
+              >
+                <option v-for="option in statusOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </template>
+          </AppField>
+        </div>
+        <AppAlert v-if="actionError" tone="error">{{ actionError }}</AppAlert>
+        <p v-if="actionNotice" ref="actionNoticeElement" class="dashboard__notice" role="status" tabindex="-1">
+          {{ actionNotice }}
+        </p>
         <AppSkeleton v-if="listingsPending" variant="text" :count="3" label="در حال بارگذاری آگهی‌ها…" />
         <AppAlert v-else-if="listingsError" tone="error">
           خطا در خواندن آگهی‌ها؛ دوباره تلاش کنید.
         </AppAlert>
         <AppEmptyState
           v-else-if="myListings.length === 0"
-          title="هنوز آگهی‌ای ثبت نکرده‌اید."
-          description="اولین آگهی را ذخیره کنید و برای بررسی ارسال نمایید."
+          :title="statusFilter === 'all' ? 'هنوز آگهی‌ای ثبت نکرده‌اید.' : 'آگهی‌ای با این وضعیت ندارید.'"
+          :description="statusFilter === 'all' ? 'اولین آگهی را ذخیره کنید و برای بررسی ارسال نمایید.' : 'وضعیت دیگری را انتخاب کنید یا همهٔ آگهی‌ها را ببینید.'"
         >
-          <NuxtLink to="/post" class="btn">ثبت آگهی</NuxtLink>
+          <AppButton v-if="statusFilter !== 'all'" variant="secondary" @click="clearStatusFilter">
+            نمایش همهٔ آگهی‌ها
+          </AppButton>
+          <NuxtLink v-else to="/post" class="btn">ثبت آگهی</NuxtLink>
         </AppEmptyState>
         <ul v-else class="mine">
           <li v-for="item in myListings" :key="item.public_id" class="mine__row">
@@ -69,6 +94,66 @@
               </p>
             </div>
             <span class="badge" :data-status="item.status">{{ statusLabel(item.status) }}</span>
+            <div v-if="confirmingDeleteId === item.public_id" class="mine__actions mine__actions--confirm">
+              <span>حذف «{{ item.title }}» قطعی است؟</span>
+              <AppButton
+                variant="danger"
+                :data-delete-confirm="item.public_id"
+                :loading="pendingAction === `${item.public_id}:delete`"
+                :disabled="pendingAction !== null"
+                @click="deleteListing(item)"
+              >
+                تأیید حذف
+              </AppButton>
+              <AppButton variant="secondary" :disabled="pendingAction !== null" @click="cancelDelete(item)">
+                انصراف
+              </AppButton>
+            </div>
+            <div v-else-if="hasOwnerActions(item)" class="mine__actions">
+              <NuxtLink
+                v-if="canEdit(item)"
+                :to="`/post?edit=${item.public_id}`"
+                class="btn btn--secondary"
+              >
+                ویرایش
+              </NuxtLink>
+              <AppButton
+                v-if="canSubmit(item)"
+                variant="secondary"
+                :loading="pendingAction === `${item.public_id}:submit`"
+                :disabled="pendingAction !== null"
+                @click="transitionListing(item, 'submit')"
+              >
+                ارسال برای بررسی
+              </AppButton>
+              <AppButton
+                v-if="item.status === 'active'"
+                variant="secondary"
+                :loading="pendingAction === `${item.public_id}:mark-sold`"
+                :disabled="pendingAction !== null"
+                @click="transitionListing(item, 'mark-sold')"
+              >
+                علامت‌گذاری به‌عنوان فروخته‌شده
+              </AppButton>
+              <AppButton
+                v-if="item.status === 'active'"
+                variant="secondary"
+                :loading="pendingAction === `${item.public_id}:archive`"
+                :disabled="pendingAction !== null"
+                @click="transitionListing(item, 'archive')"
+              >
+                بایگانی
+              </AppButton>
+              <AppButton
+                v-if="canDelete(item)"
+                variant="danger"
+                :data-delete-trigger="item.public_id"
+                :disabled="pendingAction !== null"
+                @click="askDelete(item)"
+              >
+                حذف آگهی
+              </AppButton>
+            </div>
           </li>
         </ul>
       </section>
@@ -77,7 +162,30 @@
 </template>
 
 <script setup lang="ts">
-import type { ApiDashboardSummary, ApiListingOut, ApiPage } from '~/types'
+import type { ApiDashboardSummary, ApiListingOut } from '~/types'
+
+type ListingStatus = 'all' | 'draft' | 'pending' | 'active' | 'rejected' | 'sold' | 'archived'
+type ListingAction = 'submit' | 'mark-sold' | 'archive'
+
+const STATUS_OPTIONS: Array<{ value: ListingStatus; label: string }> = [
+  { value: 'all', label: 'همهٔ وضعیت‌ها' },
+  { value: 'draft', label: 'پیش‌نویس' },
+  { value: 'pending', label: 'در انتظار تأیید' },
+  { value: 'active', label: 'فعال' },
+  { value: 'rejected', label: 'رد شده' },
+  { value: 'sold', label: 'فروخته‌شده' },
+  { value: 'archived', label: 'بایگانی' },
+]
+const statusOptions = STATUS_OPTIONS
+
+function queryStatus(value: unknown): ListingStatus {
+  return typeof value === 'string' && STATUS_OPTIONS.some((option) => option.value === value)
+    ? value as ListingStatus
+    : 'all'
+}
+
+const route = useRoute()
+const statusFilter = ref<ListingStatus>(queryStatus(route.query.status))
 
 const {
   user: me,
@@ -86,7 +194,7 @@ const {
 } = await useAuth()
 const authHeaders = useRequestHeaders(['cookie'])
 
-const { data: summary } = await useFetch<ApiDashboardSummary>('/api/v1/me/dashboard/summary', {
+const { data: summary, refresh: refreshSummary } = await useFetch<ApiDashboardSummary>('/api/v1/me/dashboard/summary', {
   headers: authHeaders,
 })
 
@@ -94,11 +202,124 @@ const {
   data: listings,
   pending: listingsPending,
   error: listingsError,
-} = await useFetch<ApiPage<ApiListingOut>>('/api/v1/me/listings', {
+} = await useFetch<{ data: ApiListingOut[] }>('/api/v1/me/listings', {
   headers: authHeaders,
+  query: computed(() => ({ status: queryStatus(route.query.status) })),
 })
 
 const myListings = computed(() => listings.value?.data ?? [])
+const pendingAction = ref<string | null>(null)
+const actionError = ref('')
+const actionNotice = ref('')
+const confirmingDeleteId = ref<string | null>(null)
+const actionNoticeElement = ref<HTMLElement | null>(null)
+
+function focusActionNotice(): void {
+  void nextTick(() => actionNoticeElement.value?.focus())
+}
+function askDelete(item: ApiListingOut): void {
+  confirmingDeleteId.value = item.public_id
+  void nextTick(() => {
+    document.querySelector<HTMLButtonElement>(`[data-delete-confirm="${item.public_id}"]`)?.focus()
+  })
+}
+function cancelDelete(item: ApiListingOut): void {
+  confirmingDeleteId.value = null
+  void nextTick(() => {
+    document.querySelector<HTMLButtonElement>(`[data-delete-trigger="${item.public_id}"]`)?.focus()
+  })
+}
+
+watch(() => route.query.status, (status) => {
+  statusFilter.value = queryStatus(status)
+  actionError.value = ''
+  actionNotice.value = ''
+  confirmingDeleteId.value = null
+})
+
+async function changeStatusFilter(): Promise<void> {
+  await navigateTo({
+    path: '/me',
+    query: statusFilter.value === 'all' ? {} : { status: statusFilter.value },
+  })
+}
+
+async function clearStatusFilter(): Promise<void> {
+  statusFilter.value = 'all'
+  await changeStatusFilter()
+}
+
+function canEdit(item: ApiListingOut): boolean {
+  return item.status === 'draft' || item.status === 'rejected'
+}
+function canSubmit(item: ApiListingOut): boolean {
+  return canEdit(item)
+}
+function canDelete(item: ApiListingOut): boolean {
+  return item.status === 'draft' || item.status === 'rejected' || item.status === 'archived'
+}
+function hasOwnerActions(item: ApiListingOut): boolean {
+  return canEdit(item) || canDelete(item) || item.status === 'active'
+}
+
+function replaceConfirmedListing(confirmed: ApiListingOut): void {
+  if (!listings.value) return
+  const status = queryStatus(route.query.status)
+  const data = listings.value.data
+    .map((item) => item.public_id === confirmed.public_id ? confirmed : item)
+    .filter((item) => status === 'all' || item.status === status)
+  listings.value = { ...listings.value, data }
+}
+
+async function transitionListing(item: ApiListingOut, action: ListingAction): Promise<void> {
+  if (pendingAction.value) return
+  pendingAction.value = `${item.public_id}:${action}`
+  actionError.value = ''
+  actionNotice.value = ''
+  try {
+    const confirmed = await $fetch<ApiListingOut>(`/api/v1/listings/${item.public_id}/${action}`, {
+      method: 'POST',
+    })
+    replaceConfirmedListing(confirmed)
+    actionNotice.value = {
+      submit: 'آگهی برای بررسی ارسال شد.',
+      'mark-sold': 'آگهی به‌عنوان فروخته‌شده علامت‌گذاری شد.',
+      archive: 'آگهی بایگانی شد.',
+    }[action]
+    // The transition is already confirmed; a summary refresh must never roll
+    // back that state or turn a successful mutation into a false failure.
+    void refreshSummary().catch(() => undefined)
+    focusActionNotice()
+  } catch {
+    actionError.value = 'تغییر وضعیت انجام نشد؛ آگهی در وضعیت قبلی باقی ماند. دوباره تلاش کنید.'
+  } finally {
+    pendingAction.value = null
+  }
+}
+
+async function deleteListing(item: ApiListingOut): Promise<void> {
+  if (pendingAction.value || !canDelete(item)) return
+  pendingAction.value = `${item.public_id}:delete`
+  actionError.value = ''
+  actionNotice.value = ''
+  try {
+    await $fetch<{ ok: true }>(`/api/v1/listings/${item.public_id}`, { method: 'DELETE' })
+    if (listings.value) {
+      listings.value = {
+        ...listings.value,
+        data: listings.value.data.filter((listing) => listing.public_id !== item.public_id),
+      }
+    }
+    confirmingDeleteId.value = null
+    actionNotice.value = 'آگهی حذف شد.'
+    void refreshSummary().catch(() => undefined)
+    focusActionNotice()
+  } catch {
+    actionError.value = 'حذف انجام نشد؛ آگهی حفظ شد. دوباره تلاش کنید.'
+  } finally {
+    pendingAction.value = null
+  }
+}
 
 const tiles = computed(() => [
   { label: 'فعال', value: formatNumber(summary.value?.active_count ?? 0) },
@@ -227,9 +448,27 @@ function statusLabel(status: string): string {
   gap: var(--space-4);
 }
 
+.dashboard__listings-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.dashboard__listings-header :deep(.field) {
+  min-inline-size: min(100%, 13rem);
+}
+
 .dashboard__listings h2 {
   margin: 0;
   font-size: 1.25rem;
+}
+
+.dashboard__notice {
+  margin: 0;
+  color: var(--color-primary);
+  font-size: 0.9375rem;
 }
 
 .mine {
@@ -278,6 +517,27 @@ function statusLabel(status: string): string {
 .mine__rejection {
   color: var(--color-error);
   line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+.mine__actions {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--color-border);
+}
+
+.mine__actions :deep(.btn) {
+  min-block-size: 44px;
+  font-size: 0.875rem;
+}
+
+.mine__actions--confirm > span {
+  flex: 1 1 15rem;
+  font-size: 0.9375rem;
   overflow-wrap: anywhere;
 }
 

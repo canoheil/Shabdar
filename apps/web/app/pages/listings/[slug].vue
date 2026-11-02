@@ -275,67 +275,72 @@ onMounted(() => {
   if (authStatus.value === 'authenticated' && me.value && listing.value) void loadFavoriteState()
 })
 
-useHead(() => ({
-  title: listing.value ? `${listing.value.title} | شبدر` : 'شبدر',
-  meta: listing.value
-    ? [
-        { name: 'description', content: listing.value.description.slice(0, 160) },
-        { property: 'og:title', content: listing.value.title },
-        { property: 'og:description', content: listing.value.description.slice(0, 160) },
-        { property: 'og:url', content: `/listings/${listing.value.slug}` },
-      ]
-    : [],
-  link: listing.value
-    ? [
-        { rel: 'canonical', href: `/listings/${listing.value.slug}` },
-        ...(listing.value.images[0]
-          ? [{
-              key: 'detail-lcp-image',
-              rel: 'preload' as const,
-              as: 'image' as const,
-              href: listing.value.images[0].url,
-              imagesrcset: listing.value.images[0].webp_srcset || listing.value.images[0].srcset || undefined,
-              imagesizes: (listing.value.images[0].webp_srcset || listing.value.images[0].srcset)
-                ? LISTING_GALLERY_IMAGE_SIZES
-                : undefined,
-              type: listing.value.images[0].webp_srcset ? 'image/webp' : undefined,
-              fetchpriority: 'high' as const,
-            }]
-          : []),
-      ]
-    : [],
-  script: listing.value
-    ? [
-        {
-          type: 'application/ld+json',
-          innerHTML: JSON.stringify({
-            '@context': 'https://schema.org',
-            '@type': 'Product',
-            name: listing.value.title,
-            description: listing.value.description,
-            category: listing.value.category,
-            offers: {
-              '@type': 'Offer',
-              price: listing.value.price_toman ?? undefined,
-              priceCurrency: 'IRT',
-              availability: 'https://schema.org/InStock',
-            },
-            ...(listing.value.rating_count >= 3
-              ? {
-                  aggregateRating: {
-                    '@type': 'AggregateRating',
-                    ratingValue: listing.value.rating_average,
-                    ratingCount: listing.value.rating_count,
-                    bestRating: 5,
-                    worstRating: 1,
-                  },
-                }
-              : {}),
-          }).replace(/</g, '\\u003c'),
-        },
-      ]
-    : [],
-}))
+useHead(() => {
+  const current = listing.value
+  const cover = current?.images[0]
+  const description = current?.description.slice(0, 160)
+  return {
+    title: current ? `${current.title} | شبدر` : 'شبدر',
+    meta: current
+      ? [
+          { name: 'description', content: description },
+          { property: 'og:title', content: current.title },
+          { property: 'og:description', content: description },
+          { property: 'og:url', content: `/listings/${current.slug}` },
+        ]
+      : [],
+    link: current
+      ? [
+          { rel: 'canonical', href: `/listings/${current.slug}` },
+          ...(cover
+            ? [{
+                key: 'detail-lcp-image',
+                rel: 'preload' as const,
+                as: 'image' as const,
+                href: cover.url,
+                imagesrcset: cover.webp_srcset || cover.srcset || undefined,
+                imagesizes: (cover.webp_srcset || cover.srcset)
+                  ? LISTING_GALLERY_IMAGE_SIZES
+                  : undefined,
+                type: cover.webp_srcset ? 'image/webp' : undefined,
+                fetchpriority: 'high' as const,
+              }]
+            : []),
+        ]
+      : [],
+    script: current
+      ? [
+          {
+            type: 'application/ld+json',
+            innerHTML: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'Product',
+              name: current.title,
+              description: current.description,
+              category: current.category,
+              offers: {
+                '@type': 'Offer',
+                price: current.price_toman ?? undefined,
+                priceCurrency: 'IRT',
+                availability: 'https://schema.org/InStock',
+              },
+              ...(current.rating_count >= 3
+                ? {
+                    aggregateRating: {
+                      '@type': 'AggregateRating',
+                      ratingValue: current.rating_average,
+                      ratingCount: current.rating_count,
+                      bestRating: 5,
+                      worstRating: 1,
+                    },
+                  }
+                : {}),
+            }).replace(/</g, '\\u003c'),
+          },
+        ]
+      : [],
+  }
+})
 </script>
 
 <style scoped>

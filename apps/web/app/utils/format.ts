@@ -12,6 +12,15 @@ export function formatCommentDate(value: string): string {
   return commentDateFormatter.format(new Date(value))
 }
 
+const listingDateFormatter = new Intl.DateTimeFormat('fa-IR', {
+  dateStyle: 'medium',
+  timeZone: 'UTC',
+})
+
+export function formatListingDate(value: string): string {
+  return listingDateFormatter.format(new Date(value))
+}
+
 // Price display policy, frontend only (ARCHITECTURE.md §8 — stored values
 // stay numeric). fa-IR digits with تومان, or the price_type label.
 export function formatPrice(

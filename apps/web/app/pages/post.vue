@@ -2,7 +2,7 @@
   <section class="post">
     <header class="post__header">
       <div>
-        <h1>{{ editingId ? 'ویرایش آگهی' : 'ثبت آگهی' }}</h1>
+        <h1>{{ savedId ? 'ویرایش آگهی' : 'ثبت آگهی' }}</h1>
         <p>اطلاعات را ذخیره کنید، سپس آگهی را برای بررسی ارسال کنید.</p>
       </div>
       <p
@@ -19,7 +19,7 @@
       <AppAlert v-if="errorMessage" ref="errorBanner" tone="error">{{ errorMessage }}</AppAlert>
 
       <form class="post__form" @submit.prevent="save">
-        <fieldset class="post__section">
+        <fieldset class="post__section" :disabled="submitted">
           <legend><span class="post__step" aria-hidden="true">۱</span>مشخصات آگهی</legend>
           <div class="post__fields">
             <AppField id="post-category" label="دسته" :error="fieldErrors.category_id">
@@ -96,7 +96,7 @@
           </div>
         </fieldset>
 
-        <fieldset class="post__section">
+        <fieldset class="post__section" :disabled="submitted">
           <legend><span class="post__step" aria-hidden="true">۲</span>قیمت</legend>
           <div class="post__price-options">
             <label class="post__price-option">
@@ -134,7 +134,7 @@
           </AppField>
         </fieldset>
 
-        <fieldset class="post__section">
+        <fieldset class="post__section" :disabled="submitted">
           <legend><span class="post__step" aria-hidden="true">۳</span>تصاویر</legend>
           <div class="post__upload-guide">
             <div>
@@ -185,18 +185,22 @@
           </ul>
         </fieldset>
 
-        <div class="post__actions">
+        <div v-if="!submitted" class="post__actions">
           <AppButton type="submit" :loading="saving">
-            {{ editingId ? 'ذخیرهٔ تغییرات' : 'ایجاد پیش‌نویس' }}
+            {{ savedId ? 'ذخیرهٔ تغییرات' : 'ایجاد پیش‌نویس' }}
           </AppButton>
           <AppButton
-            v-if="savedId && !submitted"
+            v-if="savedId"
             variant="secondary"
             :loading="saving"
             @click="submitForReview"
           >
             ارسال برای بررسی
           </AppButton>
+        </div>
+        <div v-else class="post__actions">
+          <NuxtLink to="/me" class="btn">مشاهده در آگهی‌های من</NuxtLink>
+          <NuxtLink to="/" class="btn btn--secondary">بازگشت به آگهی‌ها</NuxtLink>
         </div>
       </form>
     </template>
@@ -210,6 +214,7 @@ interface ImagePreview {
   id: string
   file: File
   url: string
+  uploaded: boolean
 }
 
 const route = useRoute()
@@ -286,6 +291,7 @@ function replacePreviews(event: Event): void {
       id: `${file.name}-${file.lastModified}-${previewSequence}`,
       file,
       url: URL.createObjectURL(file),
+      uploaded: false,
     }
   })
 }
@@ -337,21 +343,25 @@ function buildBody() {
 
 async function uploadPhotos(publicId: string): Promise<void> {
   for (const preview of previews.value) {
+    if (preview.uploaded) continue
     const data = new FormData()
     data.append('file', preview.file)
     await $fetch(`/api/v1/listings/${publicId}/images`, { method: 'POST', body: data })
+    preview.uploaded = true
   }
 }
 
 async function save(): Promise<void> {
+  if (saving.value || submitted.value) return
   saving.value = true
   errorMessage.value = null
   doneMessage.value = null
   fieldErrors.value = {}
   try {
-    if (editingId) {
-      await $fetch(`/api/v1/listings/${editingId}`, { method: 'PATCH', body: buildBody() })
-      await uploadPhotos(editingId)
+    if (savedId.value) {
+      const publicId = savedId.value
+      await $fetch(`/api/v1/listings/${publicId}`, { method: 'PATCH', body: buildBody() })
+      await uploadPhotos(publicId)
       doneMessage.value = 'تغییرات ذخیره شد.'
     } else {
       const created = await $fetch<ApiListingOut>('/api/v1/listings', {
@@ -370,7 +380,7 @@ async function save(): Promise<void> {
 }
 
 async function submitForReview(): Promise<void> {
-  if (!savedId.value) return
+  if (!savedId.value || saving.value || submitted.value) return
   saving.value = true
   errorMessage.value = null
   fieldErrors.value = {}

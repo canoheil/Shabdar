@@ -90,13 +90,29 @@ test('@post server validation and failure preserve fields and previews without f
       await route.continue()
       return
     }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 500))
     await route.fulfill({
       status: 400,
       contentType: 'application/json',
       body: JSON.stringify({ error: { code: 'validation', message: 'fixture', fields: { title: 'عنوان معتبر نیست.' } } }),
     })
   })
-  await page.getByRole('button', { name: 'ایجاد پیش‌نویس', exact: true }).click()
+  const save = page.getByRole('button', { name: 'ایجاد پیش‌نویس', exact: true })
+  await save.click()
+  await expect(save).toHaveAttribute('aria-busy', 'true')
+  const spinner = await save.evaluate((button) => {
+    const style = getComputedStyle(button, '::before')
+    return {
+      display: style.display,
+      width: Number.parseFloat(style.width),
+      height: Number.parseFloat(style.height),
+      animation: style.animationName,
+    }
+  })
+  expect(spinner.display).not.toBe('none')
+  expect(spinner.width).toBeGreaterThan(0)
+  expect(spinner.height).toBeGreaterThan(0)
+  expect(spinner.animation).toBe('app-button-spin')
   await expect(page.getByRole('alert').filter({ hasText: 'خطا در title: عنوان معتبر نیست.' })).toBeFocused()
   await expect(page.locator('#post-title-error')).toHaveText('عنوان معتبر نیست.')
   await expect(page.getByLabel('عنوان', { exact: true })).toHaveValue('عنوان حفظ‌شده')
@@ -134,6 +150,12 @@ test('@post invalid real images receive Persian feedback without clearing form o
 test('@post real create upload submit exposes distinct draft and review states', async ({ page }) => {
   await applyStorage(page, readFixtures().sellerStorage)
   await page.goto('/post')
+  const imageUploads: string[] = []
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && /^\/api\/v1\/listings\/[^/]+\/images$/.test(new URL(request.url()).pathname)) {
+      imageUploads.push(request.url())
+    }
+  })
   const title = 'آگهی واقعی فرم شبدر'
   await page.getByLabel('دسته', { exact: true }).selectOption({ index: 1 })
   await page.getByLabel('شهر', { exact: true }).selectOption({ index: 1 })
@@ -144,14 +166,21 @@ test('@post real create upload submit exposes distinct draft and review states',
   await page.getByRole('button', { name: 'ایجاد پیش‌نویس', exact: true }).click()
   await expect(page.getByText('پیش‌نویس ساخته شد؛ برای انتشار، ارسال برای بررسی را بزنید.', { exact: true })).toBeVisible()
   await expect(page.locator('.post__state')).toHaveText('پیش‌نویس ذخیره شده')
+  await page.getByRole('button', { name: 'ذخیرهٔ تغییرات', exact: true }).click()
+  await expect(page.getByText('تغییرات ذخیره شد.', { exact: true })).toBeVisible()
+  expect(imageUploads).toHaveLength(1)
   await page.getByRole('button', { name: 'ارسال برای بررسی', exact: true }).click()
   await expect(page.getByText('آگهی برای بررسی ارسال شد؛ پس از تأیید نمایش داده می‌شود.', { exact: true })).toBeVisible()
   await expect(page.locator('.post__state')).toHaveText('در انتظار بررسی')
+  await expect(page.getByRole('link', { name: 'مشاهده در آگهی‌های من', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'ارسال برای بررسی', exact: true })).toHaveCount(0)
 
   const seller = await apiAs('seller')
   const response = await seller.get('/api/v1/me/listings?status=all')
   expect(response.ok()).toBe(true)
   const body = await response.json() as { data: Array<{ title: string; status: string }> }
-  expect(body.data.find((listing) => listing.title === title)?.status).toBe('pending')
+  const matchingListings = body.data.filter((listing) => listing.title === title)
+  expect(matchingListings).toHaveLength(1)
+  expect(matchingListings[0]?.status).toBe('pending')
   await seller.dispose()
 })

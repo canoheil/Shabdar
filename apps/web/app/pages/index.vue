@@ -82,6 +82,44 @@
             </select>
           </template>
         </AppField>
+        <AppField id="min-price-filter" label="کمترین قیمت (تومان)">
+          <template #default="{ id, describedBy, ariaInvalid }">
+            <input
+              :id="id"
+              v-model="minPrice"
+              class="field__input home__price-input"
+              type="number"
+              min="0"
+              step="1"
+              inputmode="numeric"
+              dir="ltr"
+              placeholder="بدون حداقل"
+              :aria-describedby="describedBy"
+              :aria-invalid="ariaInvalid"
+              @change="applyNow"
+              @keydown.enter.prevent="applyNow"
+            >
+          </template>
+        </AppField>
+        <AppField id="max-price-filter" label="بیشترین قیمت (تومان)">
+          <template #default="{ id, describedBy, ariaInvalid }">
+            <input
+              :id="id"
+              v-model="maxPrice"
+              class="field__input home__price-input"
+              type="number"
+              min="0"
+              step="1"
+              inputmode="numeric"
+              dir="ltr"
+              placeholder="بدون سقف"
+              :aria-describedby="describedBy"
+              :aria-invalid="ariaInvalid"
+              @change="applyNow"
+              @keydown.enter.prevent="applyNow"
+            >
+          </template>
+        </AppField>
         <AppField id="sort-filter" label="مرتب‌سازی">
           <template #default="{ id, describedBy, ariaInvalid }">
             <select
@@ -167,6 +205,40 @@
             </select>
           </template>
         </AppField>
+        <AppField id="mobile-min-price-filter" label="کمترین قیمت (تومان)">
+          <template #default="{ id, describedBy, ariaInvalid }">
+            <input
+              :id="id"
+              v-model="draftMinPrice"
+              class="field__input home__price-input"
+              type="number"
+              min="0"
+              step="1"
+              inputmode="numeric"
+              dir="ltr"
+              placeholder="بدون حداقل"
+              :aria-describedby="describedBy"
+              :aria-invalid="ariaInvalid"
+            >
+          </template>
+        </AppField>
+        <AppField id="mobile-max-price-filter" label="بیشترین قیمت (تومان)">
+          <template #default="{ id, describedBy, ariaInvalid }">
+            <input
+              :id="id"
+              v-model="draftMaxPrice"
+              class="field__input home__price-input"
+              type="number"
+              min="0"
+              step="1"
+              inputmode="numeric"
+              dir="ltr"
+              placeholder="بدون سقف"
+              :aria-describedby="describedBy"
+              :aria-invalid="ariaInvalid"
+            >
+          </template>
+        </AppField>
         <AppField id="mobile-sort-filter" label="مرتب‌سازی">
           <template #default="{ id, describedBy, ariaInvalid }">
             <select
@@ -196,7 +268,7 @@
           <h2 id="home-results-title">آگهی‌های تازه</h2>
         </div>
         <p v-if="!feedPending && !feedError" class="home__result-count meta">
-          {{ (feed?.data.length ?? 0).toLocaleString('fa-IR') }} نتیجه در این صفحه
+          {{ items.length.toLocaleString('fa-IR') }} نتیجهٔ نمایش‌داده‌شده
         </p>
       </div>
       <AppSkeleton
@@ -212,7 +284,7 @@
         </div>
       </AppAlert>
       <AppEmptyState
-        v-else-if="(feed?.data ?? []).length === 0"
+        v-else-if="items.length === 0"
         :title="hasFilters ? 'آگهی‌ای با این مشخصات پیدا نشد.' : 'هنوز آگهی‌ای ثبت نشده است.'"
         :description="hasFilters ? 'عبارت جستجو یا فیلترها را تغییر دهید.' : 'اولین آگهیٔ محلی را خودتان ثبت کنید.'"
         :mascot="hasFilters ? 'search' : 'full'"
@@ -222,11 +294,25 @@
         </AppButton>
         <NuxtLink v-else to="/post" class="btn">ثبت اولین آگهی</NuxtLink>
       </AppEmptyState>
-      <ul v-else class="home__cards">
-        <li v-for="item in feed?.data ?? []" :key="item.public_id">
-          <ListingCard :listing="item" :image-priority="item.public_id === priorityImageId" />
-        </li>
-      </ul>
+      <template v-else>
+        <ul class="home__cards">
+          <li v-for="item in items" :key="item.public_id">
+            <ListingCard :listing="item" :image-priority="item.public_id === priorityImageId" />
+          </li>
+        </ul>
+        <div v-if="hasMore || loadMoreError" class="home__pagination">
+          <AppAlert v-if="loadMoreError" tone="error">{{ loadMoreError }}</AppAlert>
+          <AppButton
+            v-if="hasMore"
+            variant="secondary"
+            :loading="loadingMore"
+            @click="loadMore"
+          >
+            {{ loadMoreError ? 'تلاش دوباره برای آگهی‌های بیشتر' : 'نمایش آگهی‌های بیشتر' }}
+          </AppButton>
+        </div>
+        <p v-if="paginationNotice" class="sr-only" role="status">{{ paginationNotice }}</p>
+      </template>
     </section>
 
     <aside class="home__account" aria-label="حساب کاربری">
@@ -273,18 +359,31 @@ const route = useRoute()
 const q = ref(queryString(route.query.q))
 const category = ref(queryString(route.query.category))
 const city = ref(queryString(route.query.city))
+const minPrice = ref(queryString(route.query.min_price))
+const maxPrice = ref(queryString(route.query.max_price))
 const sort = ref(queryString(route.query.sort) || 'newest')
 
 const hasFilters = computed(
-  () => Boolean(q.value.trim() || category.value || city.value || sort.value !== 'newest'),
+  () => Boolean(
+    q.value.trim()
+    || category.value
+    || city.value
+    || String(minPrice.value).trim()
+    || String(maxPrice.value).trim()
+    || sort.value !== 'newest',
+  ),
 )
 
 function feedQuery() {
   const query: Record<string, string> = {}
   const term = q.value.trim()
+  const minimumPrice = String(minPrice.value).trim()
+  const maximumPrice = String(maxPrice.value).trim()
   if (term) query.q = term
   if (category.value) query.category = category.value
   if (city.value) query.city = city.value
+  if (minimumPrice) query.min_price = minimumPrice
+  if (maximumPrice) query.max_price = maximumPrice
   if (sort.value !== 'newest') query.sort = sort.value
   return query
 }
@@ -296,10 +395,14 @@ function requestedFeedQuery() {
   const term = queryString(route.query.q).trim()
   const selectedCategory = queryString(route.query.category)
   const selectedCity = queryString(route.query.city)
+  const selectedMinPrice = queryString(route.query.min_price)
+  const selectedMaxPrice = queryString(route.query.max_price)
   const selectedSort = queryString(route.query.sort) || 'newest'
   if (term) query.q = term
   if (selectedCategory) query.category = selectedCategory
   if (selectedCity) query.city = selectedCity
+  if (selectedMinPrice) query.min_price = selectedMinPrice
+  if (selectedMaxPrice) query.max_price = selectedMaxPrice
   if (selectedSort !== 'newest') query.sort = selectedSort
   return query
 }
@@ -322,6 +425,8 @@ function clearFilters(): void {
   q.value = ''
   category.value = ''
   city.value = ''
+  minPrice.value = ''
+  maxPrice.value = ''
   sort.value = 'newest'
   applyNow()
 }
@@ -332,6 +437,8 @@ watch(
     q.value = queryString(query.q)
     category.value = queryString(query.category)
     city.value = queryString(query.city)
+    minPrice.value = queryString(query.min_price)
+    maxPrice.value = queryString(query.max_price)
     sort.value = queryString(query.sort) || 'newest'
   },
 )
@@ -353,10 +460,14 @@ const filterButton = ref<HTMLButtonElement | null>(null)
 const filterDialogReady = ref(false)
 const draftCategory = ref('')
 const draftCity = ref('')
+const draftMinPrice = ref('')
+const draftMaxPrice = ref('')
 const draftSort = ref('newest')
 async function openMobileFilters(): Promise<void> {
   draftCategory.value = category.value
   draftCity.value = city.value
+  draftMinPrice.value = minPrice.value
+  draftMaxPrice.value = maxPrice.value
   draftSort.value = sort.value
   // A closed dialog is not interactive or visible, so do not duplicate and
   // hydrate its complete option lists in the initial mobile document.
@@ -374,6 +485,8 @@ function returnFilterFocus(): void {
 function applyMobileFilters(): void {
   category.value = draftCategory.value
   city.value = draftCity.value
+  minPrice.value = String(draftMinPrice.value).trim()
+  maxPrice.value = String(draftMaxPrice.value).trim()
   sort.value = draftSort.value
   filterDialog.value?.close()
   applyNow()
@@ -392,6 +505,55 @@ const {
 } = await useFetch<ApiPage<ApiListingCard>>('/api/v1/listings', {
   query: computed(() => requestedFeedQuery()),
 })
+
+const items = ref<ApiListingCard[]>(feed.value?.data ?? [])
+const nextCursor = ref(feed.value?.page.next_cursor ?? null)
+const hasMore = ref(feed.value?.page.has_more ?? false)
+const loadingMore = ref(false)
+const loadMoreError = ref('')
+const paginationNotice = ref('')
+
+watch(feed, (page) => {
+  items.value = page?.data ?? []
+  nextCursor.value = page?.page.next_cursor ?? null
+  hasMore.value = page?.page.has_more ?? false
+  loadMoreError.value = ''
+  paginationNotice.value = ''
+})
+
+async function loadMore(): Promise<void> {
+  if (loadingMore.value || feedPending.value || !nextCursor.value) return
+  loadingMore.value = true
+  loadMoreError.value = ''
+  paginationNotice.value = ''
+  const cursor = nextCursor.value
+  const requestKey = JSON.stringify(requestedFeedQuery())
+  try {
+    const page = await $fetch<ApiPage<ApiListingCard>>('/api/v1/listings', {
+      query: { ...requestedFeedQuery(), cursor },
+      cache: 'no-store',
+    })
+    // A filter/navigation may have completed while this page was in flight.
+    if (JSON.stringify(requestedFeedQuery()) !== requestKey) return
+    const knownIds = new Set(items.value.map((item) => item.public_id))
+    const additions: ApiListingCard[] = []
+    for (const item of page.data) {
+      if (knownIds.has(item.public_id)) continue
+      knownIds.add(item.public_id)
+      additions.push(item)
+    }
+    items.value = [...items.value, ...additions]
+    nextCursor.value = page.page.next_cursor
+    hasMore.value = page.page.has_more
+    paginationNotice.value = additions.length > 0
+      ? `${additions.length.toLocaleString('fa-IR')} آگهی تازه نمایش داده شد.`
+      : 'آگهی تازه‌ای در این صفحه نبود.'
+  } catch {
+    loadMoreError.value = 'آگهی‌های بیشتر بارگذاری نشد؛ آگهی‌های فعلی حفظ شدند. دوباره تلاش کنید.'
+  } finally {
+    loadingMore.value = false
+  }
+}
 
 const priorityListing = computed(() => (
   feed.value?.data.find((item) => Boolean(item.cover_image)) ?? null
@@ -448,7 +610,7 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  padding: var(--space-6) var(--space-5);
+  padding: var(--space-5);
   color: var(--color-hero-text);
   background:
     radial-gradient(circle at 10% 0%, rgb(110 231 183 / 0.17), transparent 34%),
@@ -526,9 +688,9 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
 
 .home__intro h1 {
   max-inline-size: 16ch;
-  font-size: clamp(1.9rem, 5.6vw, 3.5rem);
+  font-size: clamp(1.85rem, 5.2vw, 3.1rem);
   font-weight: 780;
-  line-height: 1.38;
+  line-height: 1.34;
   text-wrap: balance;
 }
 
@@ -584,7 +746,7 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: var(--space-3);
-  margin-block-start: var(--space-6);
+  margin-block-start: var(--space-5);
   padding: var(--space-3);
   color: var(--color-text);
   background: var(--color-surface);
@@ -735,6 +897,18 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
   min-inline-size: 0;
 }
 
+.home__pagination {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-block-start: var(--space-5);
+}
+
+.home__pagination :deep(.btn) {
+  align-self: center;
+  min-inline-size: min(100%, 15rem);
+}
+
 .home__error {
   align-items: center;
   justify-content: space-between;
@@ -809,7 +983,7 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
 
 @media (min-width: 768px) {
   .home__hero {
-    padding: var(--space-8);
+    padding: var(--space-6);
   }
 
   .home__filter-open {
@@ -833,9 +1007,15 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
   }
 }
 
+@media (min-width: 1024px) {
+  .home__desktop-filters {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
 @media (min-width: 1200px) {
   .home__hero {
-    padding: var(--space-10);
+    padding: var(--space-8);
   }
 
   .home__hero-layout {

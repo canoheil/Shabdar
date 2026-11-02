@@ -58,6 +58,10 @@
       <span aria-hidden="true">·</span>
       <span>{{ listing.category }}</span>
     </p>
+    <p class="listing-card__context">
+      <time :datetime="listing.published_at">{{ formatListingDate(listing.published_at) }}</time>
+      <span>بررسی‌شده برای انتشار</span>
+    </p>
     <div v-if="$slots.actions" class="listing-card__actions">
       <slot name="actions" />
     </div>

@@ -1,8 +1,13 @@
 <template>
   <section ref="root" class="listing-gallery" aria-label="تصاویر آگهی">
-    <div class="listing-gallery__main">
+    <div
+      class="listing-gallery__main"
+      @pointerdown="startSwipe"
+      @pointerup="finishSwipe"
+      @pointercancel="cancelSwipe"
+    >
       <picture
-        v-if="selectedImage && !mainImageFailed && selectedImage.webp_srcset"
+        v-if="selectedImage && !failedImages.has(selectedIndex)"
         :key="selectedImage.url"
         class="listing-gallery__main-picture"
       >
@@ -16,7 +21,7 @@
           class="listing-gallery__main-image"
           :src="selectedImage.url"
           v-bind="selectedJpegSrcsetAttributes"
-          :alt="mainImageAlt"
+          :alt="selectedImage.alt_text ?? `${listingTitle} — تصویر ${selectedIndex + 1}`"
           width="1200"
           height="900"
           loading="eager"
@@ -26,28 +31,37 @@
           @error="markImageFailed(selectedIndex)"
         >
       </picture>
-      <img
-        v-else-if="selectedImage && !mainImageFailed"
-        class="listing-gallery__main-image"
-        :src="selectedImage.url"
-        v-bind="selectedJpegSrcsetAttributes"
-        :alt="mainImageAlt"
-        width="1200"
-        height="900"
-        loading="eager"
-        fetchpriority="high"
-        decoding="async"
-        :data-index="selectedIndex"
-        @error="markImageFailed(selectedIndex)"
-      >
       <div v-else class="listing-gallery__main-placeholder">
         <span class="listing-gallery__placeholder-mark" aria-hidden="true" />
         <span>{{ selectedImage ? 'تصویر در دسترس نیست' : 'تصویری برای این آگهی ثبت نشده است.' }}</span>
       </div>
+      <button
+        v-if="images.length > 1"
+        type="button"
+        class="listing-gallery__nav listing-gallery__nav--previous"
+        aria-label="تصویر قبلی"
+        :disabled="selectedIndex === 0"
+        @click="moveImage(-1)"
+      >
+        قبلی
+      </button>
+      <button
+        v-if="images.length > 1"
+        type="button"
+        class="listing-gallery__nav listing-gallery__nav--next"
+        aria-label="تصویر بعدی"
+        :disabled="selectedIndex === images.length - 1"
+        @click="moveImage(1)"
+      >
+        بعدی
+      </button>
       <span v-if="images.length" class="listing-gallery__counter" aria-hidden="true">
         {{ formatNumber(selectedIndex + 1) }} / {{ formatNumber(images.length) }}
       </span>
     </div>
+    <p v-if="images.length" class="sr-only" role="status">
+      تصویر {{ formatNumber(selectedIndex + 1) }} از {{ formatNumber(images.length) }}
+    </p>
     <div v-if="images.length" class="listing-gallery__thumbnails" role="group" aria-label="انتخاب تصویر">
       <button
         v-for="(image, index) in images"
@@ -98,20 +112,44 @@ const failedImages = ref<Set<number>>(new Set())
 const root = ref<HTMLElement | null>(null)
 
 const selectedImage = computed(() => props.images[selectedIndex.value])
-const mainImageFailed = computed(() => failedImages.value.has(selectedIndex.value))
-const mainImageAlt = computed(() => (
-  selectedImage.value?.alt_text ?? `${props.listingTitle} — تصویر ${selectedIndex.value + 1}`
-))
 const selectedJpegSrcsetAttributes = computed(() => (
   selectedImage.value?.srcset
     ? { srcset: selectedImage.value.srcset, sizes: LISTING_GALLERY_IMAGE_SIZES }
     : {}
 ))
 
+function moveImage(offset: number): void {
+  selectedIndex.value = Math.max(0, Math.min(
+    props.images.length - 1,
+    selectedIndex.value + offset,
+  ))
+}
+
+let swipeStart: { x: number; y: number } | null = null
+function startSwipe(event: PointerEvent): void {
+  if (
+    props.images.length < 2
+    || !event.isPrimary
+    || event.pointerType === 'mouse'
+    || (event.target as Element | null)?.closest?.('button')
+  ) return
+  swipeStart = { x: event.clientX, y: event.clientY }
+}
+function cancelSwipe(): void {
+  swipeStart = null
+}
+function finishSwipe(event: PointerEvent): void {
+  if (!swipeStart || !event.isPrimary) return
+  const deltaX = event.clientX - swipeStart.x
+  const deltaY = event.clientY - swipeStart.y
+  swipeStart = null
+  if (Math.abs(deltaX) < Math.max(48, Math.abs(deltaY) * 1.2)) return
+  // In the RTL gallery, a rightward swipe advances and a leftward swipe goes back.
+  moveImage(deltaX > 0 ? 1 : -1)
+}
+
 function markImageFailed(index: number): void {
-  const next = new Set(failedImages.value)
-  next.add(index)
-  failedImages.value = next
+  failedImages.value = new Set(failedImages.value).add(index)
 }
 
 function checkHydratedImages(): void {
@@ -127,8 +165,6 @@ watch(() => props.images, (images) => {
   failedImages.value = new Set()
   void nextTick(checkHydratedImages)
 })
-watch(selectedIndex, () => {
-  void nextTick(checkHydratedImages)
-})
+watch(selectedIndex, () => nextTick(checkHydratedImages))
 onMounted(checkHydratedImages)
 </script>

@@ -19,7 +19,5 @@ withDefaults(defineProps<{
 }>(), {
   variant: 'primary',
   type: 'button',
-  loading: false,
-  disabled: false,
 })
 </script>
