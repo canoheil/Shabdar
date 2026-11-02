@@ -204,6 +204,10 @@ test('@home load more preserves confirmed cards and cursor through failure and d
   await expect(page.getByText('آگهی‌های بیشتر بارگذاری نشد؛ آگهی‌های فعلی حفظ شدند. دوباره تلاش کنید.', { exact: true })).toBeVisible()
   await expect(cards).toHaveCount(20)
   await more.click()
+  // Let the second failed attempt, including the client's GET retry, settle
+  // before starting the successful retry. Clicking while it is still disabled
+  // races the error renderer instead of exercising a deliberate user retry.
+  await expect(more).toBeEnabled()
   await expect(cards).toHaveCount(20)
   expect(cursors.length).toBeGreaterThanOrEqual(2)
   expect(cursors[0]).toBeTruthy()
