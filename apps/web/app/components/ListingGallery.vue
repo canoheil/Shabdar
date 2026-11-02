@@ -7,7 +7,7 @@
       @pointercancel="cancelSwipe"
     >
       <picture
-        v-if="selectedImage && !mainImageFailed"
+        v-if="selectedImage && !failedImages.has(selectedIndex)"
         :key="selectedImage.url"
         class="listing-gallery__main-picture"
       >
@@ -21,7 +21,7 @@
           class="listing-gallery__main-image"
           :src="selectedImage.url"
           v-bind="selectedJpegSrcsetAttributes"
-          :alt="mainImageAlt"
+          :alt="selectedImage.alt_text ?? `${listingTitle} — تصویر ${selectedIndex + 1}`"
           width="1200"
           height="900"
           loading="eager"
@@ -112,10 +112,6 @@ const failedImages = ref<Set<number>>(new Set())
 const root = ref<HTMLElement | null>(null)
 
 const selectedImage = computed(() => props.images[selectedIndex.value])
-const mainImageFailed = computed(() => failedImages.value.has(selectedIndex.value))
-const mainImageAlt = computed(() => (
-  selectedImage.value?.alt_text ?? `${props.listingTitle} — تصویر ${selectedIndex.value + 1}`
-))
 const selectedJpegSrcsetAttributes = computed(() => (
   selectedImage.value?.srcset
     ? { srcset: selectedImage.value.srcset, sizes: LISTING_GALLERY_IMAGE_SIZES }
@@ -131,8 +127,12 @@ function moveImage(offset: number): void {
 
 let swipeStart: { x: number; y: number } | null = null
 function startSwipe(event: PointerEvent): void {
-  if (props.images.length < 2 || !event.isPrimary || event.pointerType === 'mouse') return
-  if ((event.target as Element | null)?.closest?.('button')) return
+  if (
+    props.images.length < 2
+    || !event.isPrimary
+    || event.pointerType === 'mouse'
+    || (event.target as Element | null)?.closest?.('button')
+  ) return
   swipeStart = { x: event.clientX, y: event.clientY }
 }
 function cancelSwipe(): void {
@@ -165,8 +165,6 @@ watch(() => props.images, (images) => {
   failedImages.value = new Set()
   void nextTick(checkHydratedImages)
 })
-watch(selectedIndex, () => {
-  void nextTick(checkHydratedImages)
-})
+watch(selectedIndex, () => nextTick(checkHydratedImages))
 onMounted(checkHydratedImages)
 </script>

@@ -100,7 +100,19 @@ test('@post server validation and failure preserve fields and previews without f
   const save = page.getByRole('button', { name: 'ایجاد پیش‌نویس', exact: true })
   await save.click()
   await expect(save).toHaveAttribute('aria-busy', 'true')
-  await expect(save.locator('.app-button__spinner')).toBeVisible()
+  const spinner = await save.evaluate((button) => {
+    const style = getComputedStyle(button, '::before')
+    return {
+      display: style.display,
+      width: Number.parseFloat(style.width),
+      height: Number.parseFloat(style.height),
+      animation: style.animationName,
+    }
+  })
+  expect(spinner.display).not.toBe('none')
+  expect(spinner.width).toBeGreaterThan(0)
+  expect(spinner.height).toBeGreaterThan(0)
+  expect(spinner.animation).toBe('app-button-spin')
   await expect(page.getByRole('alert').filter({ hasText: 'خطا در title: عنوان معتبر نیست.' })).toBeFocused()
   await expect(page.locator('#post-title-error')).toHaveText('عنوان معتبر نیست.')
   await expect(page.getByLabel('عنوان', { exact: true })).toHaveValue('عنوان حفظ‌شده')
