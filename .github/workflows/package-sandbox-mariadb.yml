@@ -1,6 +1,11 @@
 name: Package sandbox MariaDB
 
 on:
+  push:
+    branches:
+      - arena/6b0cfc68-shabdar
+    paths:
+      - .github/workflows/package-sandbox-mariadb.yml
   workflow_dispatch:
 
 permissions:
