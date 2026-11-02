@@ -474,6 +474,16 @@ async fn responsive_derivatives_preserve_authorization_lazy_generation_and_clean
         .and_then(|candidate| candidate.split(' ').next())
         .expect("480 WebP candidate")
         .to_string();
+    let large_webp_url = body["webp_srcset"]
+        .as_str()
+        .unwrap()
+        .split(", ")
+        .find(|candidate| candidate.contains("--w960.webp"))
+        .and_then(|candidate| candidate.split(' ').next())
+        .expect("960 WebP candidate")
+        .to_string();
+    let large_webp_path = dir.join(format!("{key}--w960.webp"));
+    assert!(!large_webp_path.exists());
     let jpeg_url = body["srcset"]
         .as_str()
         .unwrap()
@@ -530,6 +540,16 @@ async fn responsive_derivatives_preserve_authorization_lazy_generation_and_clean
     let public = get_media(app.clone(), &webp_url, None).await;
     assert_eq!(public.0, StatusCode::OK);
     assert_eq!(public.2["cache-control"], "public, no-cache");
+
+    // The expensive large WebP is intentionally cold after upload. Its first
+    // anonymous public request must create a real, decodable 960px derivative.
+    assert!(!large_webp_path.exists());
+    let large_public = get_media(app.clone(), &large_webp_url, None).await;
+    assert_eq!(large_public.0, StatusCode::OK);
+    assert_eq!(large_public.2["cache-control"], "public, no-cache");
+    let decoded = image::load_from_memory(&large_public.1).expect("lazy 960 WebP");
+    assert_eq!((decoded.width(), decoded.height()), (960, 720));
+    assert!(large_webp_path.is_file());
 
     sqlx::query("UPDATE listings SET status = 'draft' WHERE public_id = ?")
         .bind(&public_id)

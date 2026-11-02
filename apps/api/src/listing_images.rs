@@ -21,6 +21,10 @@ const MAX_IMAGE_DIMENSION: u32 = 8_000;
 const MAX_IMAGE_PIXELS: u64 = 16_000_000;
 const MAX_DECODER_ALLOCATION: u64 = 80 * 1024 * 1024;
 const DERIVATIVE_WIDTHS: [u32; 3] = [240, 480, 960];
+// Warm the card/gallery-mobile path without making every upload pay for the
+// expensive 960px WebP encode. The larger candidate uses the same lazy path as
+// legacy media on its first authorized request.
+const PREWARM_DERIVATIVE_WIDTHS: [u32; 2] = [240, 480];
 
 /// What the API returns per image (`url` is served from `MEDIA_DIR`).
 #[derive(Serialize)]
@@ -332,7 +336,7 @@ fn generate_derivatives(
     validated: &ValidatedImage,
 ) -> image::ImageResult<Vec<GeneratedDerivative>> {
     let mut generated = Vec::new();
-    for width in DERIVATIVE_WIDTHS {
+    for width in PREWARM_DERIVATIVE_WIDTHS {
         if width >= u32::from(validated.width) {
             continue;
         }
@@ -935,12 +939,12 @@ mod tests {
             decoded: DynamicImage::new_rgba8(1200, 600),
         };
         let generated = generate_derivatives(&validated).expect("encode derivatives");
-        assert_eq!(generated.len(), 6);
+        assert_eq!(generated.len(), 4);
         for derivative in generated {
             let decoded = image::load_from_memory(&derivative.bytes).expect("decodable derivative");
             assert_eq!(decoded.width(), derivative.width);
             assert_eq!(decoded.height(), derivative.width / 2);
-            assert!(DERIVATIVE_WIDTHS.contains(&decoded.width()));
+            assert!(PREWARM_DERIVATIVE_WIDTHS.contains(&decoded.width()));
         }
     }
 
