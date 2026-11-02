@@ -521,14 +521,12 @@ async fn responsive_derivatives_preserve_authorization_lazy_generation_and_clean
         StatusCode::NOT_FOUND
     );
 
-    sqlx::query(concat!(
-        "UPDATE listings SET status = 'active', published_at = NOW(3), ",
-        "image_reviewed_by = seller_id, image_reviewed_at = NOW(3) WHERE public_id = ?",
-    ))
-    .bind(&public_id)
-    .execute(&pool)
-    .await
-    .expect("public derivative fixture");
+    mark_current_images_reviewed(&pool, &public_id).await;
+    sqlx::query("UPDATE listings SET status = 'active', published_at = NOW(3) WHERE public_id = ?")
+        .bind(&public_id)
+        .execute(&pool)
+        .await
+        .expect("public derivative fixture");
     let public = get_media(app.clone(), &webp_url, None).await;
     assert_eq!(public.0, StatusCode::OK);
     assert_eq!(public.2["cache-control"], "public, no-cache");
