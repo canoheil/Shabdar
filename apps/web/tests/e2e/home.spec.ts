@@ -74,6 +74,8 @@ test('@home mobile filter dialog applies once, discards Cancel/Escape and return
   await expect(dialog).toBeVisible()
   await dialog.getByLabel('دسته', { exact: true }).selectOption({ index: 1 })
   await dialog.getByLabel('شهر', { exact: true }).selectOption({ index: 1 })
+  await dialog.getByLabel('کمترین قیمت (تومان)', { exact: true }).fill('1000000')
+  await dialog.getByLabel('بیشترین قیمت (تومان)', { exact: true }).fill('2000000')
   await dialog.getByLabel('مرتب‌سازی', { exact: true }).selectOption('price_asc')
   await dialog.getByRole('button', { name: 'انصراف', exact: true }).click()
   await expect(dialog).not.toBeVisible()
@@ -82,7 +84,10 @@ test('@home mobile filter dialog applies once, discards Cancel/Escape and return
 
   await filterButton.click()
   await expect(dialog.getByLabel('دسته', { exact: true })).toHaveValue('')
+  await expect(dialog.getByLabel('کمترین قیمت (تومان)', { exact: true })).toHaveValue('')
+  await expect(dialog.getByLabel('بیشترین قیمت (تومان)', { exact: true })).toHaveValue('')
   await expect(dialog.getByLabel('مرتب‌سازی', { exact: true })).toHaveValue('newest')
+  await dialog.getByLabel('کمترین قیمت (تومان)', { exact: true }).fill('3000000')
   await dialog.getByLabel('مرتب‌سازی', { exact: true }).selectOption('price_desc')
   await page.keyboard.press('Escape')
   await expect(dialog).not.toBeVisible()
@@ -93,6 +98,8 @@ test('@home mobile filter dialog applies once, discards Cancel/Escape and return
   await filterButton.click()
   await dialog.getByLabel('دسته', { exact: true }).selectOption({ index: 1 })
   await dialog.getByLabel('شهر', { exact: true }).selectOption({ index: 1 })
+  await dialog.getByLabel('کمترین قیمت (تومان)', { exact: true }).fill('1000000')
+  await dialog.getByLabel('بیشترین قیمت (تومان)', { exact: true }).fill('2000000')
   await dialog.getByLabel('مرتب‌سازی', { exact: true }).selectOption('price_asc')
   await dialog.getByRole('button', { name: 'اعمال فیلترها', exact: true }).click()
   await expect(dialog).not.toBeVisible()
@@ -101,7 +108,112 @@ test('@home mobile filter dialog applies once, discards Cancel/Escape and return
   const query = new URL(page.url()).searchParams
   expect(query.get('category')).toBeTruthy()
   expect(query.get('city')).toBeTruthy()
+  expect(query.get('min_price')).toBe('1000000')
+  expect(query.get('max_price')).toBe('2000000')
   expect(query.get('sort')).toBe('price_asc')
+})
+
+test('@home desktop price filters update results and Back restores values', async ({ page }) => {
+  const term = 'آگهی محدوده قیمت خانه'
+  await createListing({ title: `${term} ارزان`, priceToman: 1_000_000, imageCount: 0, state: 'active' })
+  await createListing({ title: `${term} میانی`, priceToman: 2_000_000, imageCount: 0, state: 'active' })
+  await createListing({ title: `${term} گران`, priceToman: 3_000_000, imageCount: 0, state: 'active' })
+  await page.setViewportSize({ width: 1024, height: 900 })
+  await page.goto(`/?q=${encodeURIComponent(term)}`)
+  const cards = page.locator('.listing-card')
+  await expect(cards).toHaveCount(3)
+  const min = page.getByLabel('کمترین قیمت (تومان)', { exact: true })
+  const max = page.getByLabel('بیشترین قیمت (تومان)', { exact: true })
+
+  await min.fill('1500000')
+  await min.press('Enter')
+  await expect(page).toHaveURL(/[?&]min_price=1500000(?:&|$)/)
+  await expect(cards).toHaveCount(2)
+  await max.fill('2500000')
+  await max.press('Enter')
+  await expect(page).toHaveURL(/[?&]max_price=2500000(?:&|$)/)
+  await expect(cards).toHaveCount(1)
+  await expect(cards.first()).toContainText(`${term} میانی`)
+
+  await page.goBack()
+  await expect(cards).toHaveCount(2)
+  await expect(min).toHaveValue('1500000')
+  await expect(max).toHaveValue('')
+  await page.goBack()
+  await expect(cards).toHaveCount(3)
+  await expect(min).toHaveValue('')
+  await expect(max).toHaveValue('')
+})
+
+test('@home load more preserves confirmed cards and cursor through failure and deduplicates overlap', async ({ page }) => {
+  test.setTimeout(180_000)
+  const term = 'آگهی صفحه‌بندی خانه'
+  for (let index = 1; index <= 21; index += 1) {
+    await createListing({
+      title: `${term} ${String(index).padStart(2, '0')}`,
+      imageCount: 0,
+      state: 'active',
+    })
+  }
+  const firstPageResponse = await page.request.get(`/?q=${encodeURIComponent(term)}`)
+  expect(firstPageResponse.ok()).toBe(true)
+  const apiFirstPage = await page.request.get(`/api/v1/listings?q=${encodeURIComponent(term)}`)
+  expect(apiFirstPage.ok()).toBe(true)
+  const firstPageBody = await apiFirstPage.json() as {
+    data: Array<Record<string, unknown>>
+  }
+  const overlappingCard = firstPageBody.data[0]
+  expect(overlappingCard).toBeTruthy()
+
+  await page.goto(`/?q=${encodeURIComponent(term)}`)
+  const cards = page.locator('.listing-card')
+  await expect(cards).toHaveCount(20)
+  const confirmedTitles = await cards.locator('h3').allTextContents()
+  expect(new Set(confirmedTitles).size).toBe(20)
+  const more = page.locator('.home__pagination').getByRole('button')
+  await expect(more).toBeVisible()
+
+  let failLoads = true
+  const cursors: string[] = []
+  await page.route('**/api/v1/listings**', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    if (request.method() !== 'GET' || url.pathname !== '/api/v1/listings' || !url.searchParams.has('cursor')) {
+      await route.continue()
+      return
+    }
+    cursors.push(url.searchParams.get('cursor') ?? '')
+    if (failLoads) {
+      await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":{"code":"internal","message":"fixture"}}' })
+      return
+    }
+    const response = await route.fetch()
+    const body = await response.json() as { data: Array<Record<string, unknown>> }
+    // Simulate a legal overlap and a repeated row without replacing the real
+    // second-page cursor metadata or its confirmed API response.
+    body.data = [overlappingCard!, ...body.data, ...(body.data[0] ? [body.data[0]] : [])]
+    await route.fulfill({ response, json: body })
+  })
+
+  await more.click()
+  await expect(page.getByText('آگهی‌های بیشتر بارگذاری نشد؛ آگهی‌های فعلی حفظ شدند. دوباره تلاش کنید.', { exact: true })).toBeVisible()
+  await expect(cards).toHaveCount(20)
+  await more.click()
+  await expect(cards).toHaveCount(20)
+  expect(cursors.length).toBeGreaterThanOrEqual(2)
+  expect(cursors[0]).toBeTruthy()
+  expect(new Set(cursors).size).toBe(1)
+  const failedAttempts = cursors.length
+
+  failLoads = false
+  await more.click()
+  await expect(cards).toHaveCount(21)
+  await expect(more).toHaveCount(0)
+  expect(cursors.length).toBeGreaterThan(failedAttempts)
+  expect(new Set(cursors).size).toBe(1)
+  const finalTitles = await cards.locator('h3').allTextContents()
+  expect(finalTitles.slice(0, 20)).toEqual(confirmedTitles)
+  expect(new Set(finalTitles).size).toBe(21)
 })
 
 test('@home delayed feed exposes skeleton then filtered search empty state', async ({ page }) => {
