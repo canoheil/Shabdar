@@ -9,7 +9,7 @@
           <source
             type="image/webp"
             :srcset="listing.cover_webp_srcset"
-            :sizes="imageSizes"
+            sizes="(min-width: 1440px) 280px, (min-width: 1024px) 25vw, (min-width: 600px) 33vw, calc(100vw - 64px)"
           >
           <img
             ref="imageElement"

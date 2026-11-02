@@ -10,7 +10,7 @@
           v-if="selectedImage.webp_srcset"
           type="image/webp"
           :srcset="selectedImage.webp_srcset"
-          :sizes="LISTING_GALLERY_IMAGE_SIZES"
+          sizes="(min-width: 1440px) 720px, (min-width: 1024px) 58vw, (min-width: 900px) 60vw, calc(100vw - 32px)"
         >
         <img
           class="listing-gallery__main-image"
