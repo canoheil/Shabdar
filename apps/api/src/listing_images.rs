@@ -232,7 +232,7 @@ fn derivative_key(original_key: &str, width: u32, format: DerivativeFormat) -> S
 /// photographic JPEGs larger. Keep the modern source where it has a credible
 /// byte-saving path and always retain a high-quality JPEG fallback.
 fn webp_is_justified(extension: &str, width: u16) -> bool {
-    extension == "png" && width > DERIVATIVE_WIDTHS[DERIVATIVE_WIDTHS.len() - 1]
+    extension == "png" && u32::from(width) > DERIVATIVE_WIDTHS[DERIVATIVE_WIDTHS.len() - 1]
 }
 
 /// Additive API metadata. No derivative is ever wider than its source; the
