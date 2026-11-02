@@ -11,8 +11,14 @@
     </AppAlert>
     <article v-else-if="listing" class="detail__article">
       <header class="detail__header">
-        <p class="meta">{{ listing.category }}</p>
-        <h1>{{ listing.title }}</h1>
+        <NuxtLink to="/" class="detail__back">
+          <span aria-hidden="true">→</span>
+          بازگشت به جستجو
+        </NuxtLink>
+        <div>
+          <p class="detail__category">{{ listing.category }} <span aria-hidden="true">/</span> {{ listing.city }}</p>
+          <h1>{{ listing.title }}</h1>
+        </div>
       </header>
       <div class="detail__layout">
         <ListingGallery
@@ -21,22 +27,30 @@
           :listing-title="listing.title"
         />
         <aside class="detail__summary" aria-label="خلاصه و اقدامات آگهی">
-          <p class="detail__price">{{ formatPrice(listing.price_toman, listing.price_type) }}</p>
-          <p class="meta">{{ listing.city }}، {{ listing.province }} · {{ listing.category }}</p>
-          <p class="meta">فروشنده: {{ listing.seller.display_name ?? 'کاربر شبدر' }}</p>
+          <div class="detail__price-block">
+            <span class="detail__price-label">قیمت</span>
+            <p class="detail__price">{{ formatPrice(listing.price_toman, listing.price_type) }}</p>
+          </div>
+          <p class="detail__location meta">{{ listing.city }}، {{ listing.province }} <span aria-hidden="true">·</span> {{ listing.category }}</p>
+          <div class="detail__seller">
+            <span class="detail__seller-avatar" aria-hidden="true">{{ (listing.seller.display_name ?? 'ش').slice(0, 1) }}</span>
+            <div>
+              <span class="detail__seller-label">فروشنده</span>
+              <strong>{{ listing.seller.display_name ?? 'کاربر شبدر' }}</strong>
+            </div>
+          </div>
 
           <div v-if="!mePending" class="detail__favorite">
             <NuxtLink
               v-if="authStatus === 'anonymous' || favoriteAuthExpired"
               to="/login"
-              class="btn btn--secondary"
+              class="btn"
             >
               ورود برای ذخیره
             </NuxtLink>
             <template v-else-if="authStatus === 'authenticated' && me">
               <AppButton
                 v-if="favorited !== undefined"
-                variant="secondary"
                 :disabled="favoritePending"
                 :aria-pressed="favorited"
                 @click="toggleFavorite"
@@ -57,22 +71,32 @@
             <p class="meta" role="status" aria-live="polite" aria-atomic="true">{{ favoriteNotice }}</p>
           </div>
 
-          <ReportControl
+          <div
             v-if="hydrated && !mePending && authStatus !== 'unavailable' && me?.public_id !== listing.seller.public_id"
-            target-type="listing"
-            :target-id="listing.slug"
-            control-key="listing"
-            button-label="گزارش آگهی"
-            :anonymous="authStatus !== 'authenticated'"
-          />
-          <ReportControl
-            v-if="hydrated && !mePending && authStatus !== 'unavailable' && me?.public_id !== listing.seller.public_id"
-            target-type="user"
-            :target-id="listing.seller.public_id"
-            control-key="seller"
-            button-label="گزارش فروشنده"
-            :anonymous="authStatus !== 'authenticated'"
-          />
+            class="detail__reports"
+          >
+            <p class="detail__reports-title">گزارش و ایمنی</p>
+            <div class="detail__report-row">
+              <span>محتوای آگهی</span>
+              <ReportControl
+                target-type="listing"
+                :target-id="listing.slug"
+                control-key="listing"
+                button-label="گزارش آگهی"
+                :anonymous="authStatus !== 'authenticated'"
+              />
+            </div>
+            <div class="detail__report-row">
+              <span>رفتار فروشنده</span>
+              <ReportControl
+                target-type="user"
+                :target-id="listing.seller.public_id"
+                control-key="seller"
+                button-label="گزارش فروشنده"
+                :anonymous="authStatus !== 'authenticated'"
+              />
+            </div>
+          </div>
         </aside>
       </div>
       <section class="detail__body" aria-labelledby="detail-description-title">
@@ -270,6 +294,11 @@ useHead(() => ({
               rel: 'preload' as const,
               as: 'image' as const,
               href: listing.value.images[0].url,
+              imagesrcset: listing.value.images[0].webp_srcset || listing.value.images[0].srcset || undefined,
+              imagesizes: (listing.value.images[0].webp_srcset || listing.value.images[0].srcset)
+                ? LISTING_GALLERY_IMAGE_SIZES
+                : undefined,
+              type: listing.value.images[0].webp_srcset ? 'image/webp' : undefined,
               fetchpriority: 'high' as const,
             }]
           : []),
@@ -314,14 +343,35 @@ useHead(() => ({
 .detail__article {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-8);
   min-inline-size: 0;
 }
 
 .detail__header {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.detail__back {
+  display: inline-flex;
+  align-items: center;
   gap: var(--space-2);
+  min-block-size: 44px;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  font-weight: 550;
+  text-decoration: none;
+}
+
+.detail__back:hover {
+  color: var(--color-primary);
+}
+
+.detail__back > span {
+  font-size: 1.25rem;
+  line-height: 1;
 }
 
 .detail__header h1,
@@ -333,9 +383,24 @@ useHead(() => ({
   margin: 0;
 }
 
+.detail__category {
+  margin-block-end: var(--space-2) !important;
+  color: var(--color-accent);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.detail__category > span {
+  margin-inline: var(--space-2);
+  color: var(--color-text-muted);
+}
+
 .detail__header h1 {
-  font-size: clamp(1.55rem, 4vw, 2.2rem);
+  max-inline-size: 30ch;
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+  font-weight: 740;
   line-height: 1.45;
+  text-wrap: balance;
   overflow-wrap: anywhere;
 }
 
@@ -350,18 +415,71 @@ useHead(() => ({
   contain: layout style;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-4);
   min-inline-size: 0;
-  padding: var(--space-4);
+  padding: var(--space-5);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-card);
+}
+
+.detail__price-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
   border-radius: var(--radius-card);
 }
 
+.detail__price-label,
+.detail__seller-label {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
 .detail__price {
-  font-size: 1.4rem;
-  font-weight: 700;
+  font-size: clamp(1.4rem, 3vw, 1.8rem);
+  font-weight: 780;
+  line-height: 1.6;
   color: var(--color-primary);
+}
+
+.detail__location {
+  line-height: 1.8;
+}
+
+.detail__seller {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-block: var(--space-4);
+  border-block: 1px solid var(--color-border);
+}
+
+.detail__seller-avatar {
+  display: grid;
+  flex: 0 0 48px;
+  place-items: center;
+  inline-size: 48px;
+  block-size: 48px;
+  color: var(--color-on-primary);
+  font-size: 1.125rem;
+  font-weight: 700;
+  background: linear-gradient(145deg, var(--color-primary), var(--color-hero));
+  border-radius: 16px;
+}
+
+.detail__seller > div {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.detail__seller strong {
+  overflow-wrap: anywhere;
 }
 
 .detail__favorite {
@@ -369,13 +487,38 @@ useHead(() => ({
   flex-direction: column;
   align-items: stretch;
   gap: var(--space-3);
-  padding-block-start: var(--space-3);
+}
+
+.detail__reports {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-block-start: var(--space-4);
   border-block-start: 1px solid var(--color-border);
+}
+
+.detail__reports-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.detail__report-row {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.detail__report-row > span {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
 }
 
 .detail__body {
   contain: layout style;
-  max-inline-size: 70ch;
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-xs);
 }
 
 .detail__body h2 {
@@ -384,7 +527,9 @@ useHead(() => ({
 }
 
 .detail__description {
-  line-height: 1.9;
+  max-inline-size: 70ch;
+  color: var(--color-text);
+  line-height: 2.05;
   white-space: pre-line;
   overflow-wrap: anywhere;
 }
@@ -395,6 +540,21 @@ useHead(() => ({
     grid-template-columns: minmax(0, 1.6fr) minmax(18rem, 1fr);
     align-items: start;
     gap: var(--space-6);
+  }
+
+  .detail__summary {
+    position: sticky;
+    inset-block-start: var(--space-6);
+  }
+}
+
+@media (min-width: 1200px) {
+  .detail__layout {
+    gap: var(--space-8);
+  }
+
+  .detail__summary {
+    padding: var(--space-6);
   }
 }
 </style>

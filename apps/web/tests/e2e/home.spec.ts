@@ -149,6 +149,26 @@ test('@home long titles, neutral no-cover media and one real high-priority cover
   await expectNoOverflow(page)
 })
 
+test('@home mobile cover transfers a real responsive WebP derivative, not the original', async ({ page }) => {
+  const title = 'کاور واکنش‌گرای واقعی شبدر'
+  await createListing({ title, state: 'active' })
+  await page.setViewportSize({ width: 375, height: 812 })
+  const mediaRequests: string[] = []
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/media/')) mediaRequests.push(request.url())
+  })
+  await page.goto(`/?q=${encodeURIComponent(title)}`)
+  const image = page.locator('.listing-card').filter({ hasText: title }).locator('img')
+  await expect(image).toBeVisible()
+  await expect(image).toHaveAttribute('srcset', /--w240\.jpg 240w/)
+  await expect(image).toHaveAttribute('srcset', /--w960\.jpg 960w/)
+  const source = page.locator('.listing-card').filter({ hasText: title }).locator('source[type="image/webp"]')
+  await expect(source).toHaveAttribute('srcset', /--w480\.webp 480w/)
+  await expect.poll(() => image.evaluate((element) => element.currentSrc)).toContain('--w480.webp')
+  expect(mediaRequests.some((url) => new URL(url).pathname.endsWith('.png'))).toBe(false)
+  await expectNoOverflow(page)
+})
+
 test('@home broken covers use a neutral failure placeholder without retry loops', async ({ page }) => {
   const title = 'آگهی با تصویر شکسته در Home'
   await createListing({ title, state: 'active' })

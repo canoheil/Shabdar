@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "phase": 12,
+  "measuredHead": "2b1e3ff843cf6fe3cc414dcf870d5fed5bb575d6",
+  "chrome": "@sparticuz/chromium 153.0.0 (local verification); CI uses Playwright Chromium 156",
+  "settings": {
+    "formFactor": "mobile",
+    "throttlingMethod": "simulate",
+    "screenEmulation": {
+      "mobile": true,
+      "width": 412,
+      "height": 823,
+      "deviceScaleFactor": 1.75,
+      "disabled": false
+    },
+    "onlyCategories": [
+      "performance",
+      "accessibility"
+    ]
+  },
+  "budgets": {
+    "lcpMs": 2500,
+    "cls": 0.1,
+    "tbtMs": 200,
+    "accessibility": 0.95
+  },
+  "home": {
+    "runs": [
+      {
+        "requestedUrl": "http://127.0.0.1:3000/",
+        "fetchTime": "2026-11-02T17:00:29.919Z",
+        "lighthouseVersion": "12.6.1",
+        "performance": 0.96,
+        "accessibility": 1,
+        "fcpMs": 737.445,
+        "lcpMs": 2256.89,
+        "cls": 0.0405033910540126,
+        "tbtMs": 149.49999999999977
+      },
+      {
+        "requestedUrl": "http://127.0.0.1:3000/",
+        "fetchTime": "2026-11-02T17:00:43.769Z",
+        "lighthouseVersion": "12.6.1",
+        "performance": 0.98,
+        "accessibility": 1,
+        "fcpMs": 714.373,
+        "lcpMs": 2268.746,
+        "cls": 0.04052964351536898,
+        "tbtMs": 77
+      },
+      {
+        "requestedUrl": "http://127.0.0.1:3000/",
+        "fetchTime": "2026-11-02T17:00:55.346Z",
+        "lighthouseVersion": "12.6.1",
+        "performance": 0.97,
+        "accessibility": 1,
+        "fcpMs": 1071.383,
+        "lcpMs": 2254.8830000000003,
+        "cls": 0.0405033910540126,
+        "tbtMs": 120.00000000000023
+      }
+    ],
+    "median": {
+      "performance": 0.97,
+      "accessibility": 1,
+      "fcpMs": 737.445,
+      "lcpMs": 2256.89,
+      "cls": 0.0405033910540126,
+      "tbtMs": 120.00000000000023
+    }
+  },
+  "detail": {
+    "runs": [
+      {
+        "requestedUrl": "http://127.0.0.1:3000/listings/%D8%A2%DA%AF%D9%87%DB%8C-%D8%A2%D8%B2%D9%85%D9%88%D9%86-%D8%B4%D8%A8%D8%AF%D8%B1",
+        "fetchTime": "2026-11-02T17:01:07.140Z",
+        "lighthouseVersion": "12.6.1",
+        "performance": 0.98,
+        "accessibility": 1,
+        "fcpMs": 734.817,
+        "lcpMs": 2261.634,
+        "cls": 0.005212060957684916,
+        "tbtMs": 77.5
+      },
+      {
+        "requestedUrl": "http://127.0.0.1:3000/listings/%D8%A2%DA%AF%D9%87%DB%8C-%D8%A2%D8%B2%D9%85%D9%88%D9%86-%D8%B4%D8%A8%D8%AF%D8%B1",
+        "fetchTime": "2026-11-02T17:01:19.048Z",
+        "lighthouseVersion": "12.6.1",
+        "performance": 0.98,
+        "accessibility": 1,
+        "fcpMs": 1036.672,
+        "lcpMs": 2255.672,
+        "cls": 0.005212060957684916,
+        "tbtMs": 121.99999999999977
+      },
+      {
+        "requestedUrl": "http://127.0.0.1:3000/listings/%D8%A2%DA%AF%D9%87%DB%8C-%D8%A2%D8%B2%D9%85%D9%88%D9%86-%D8%B4%D8%A8%D8%AF%D8%B1",
+        "fetchTime": "2026-11-02T17:01:30.978Z",
+        "lighthouseVersion": "12.6.1",
+        "performance": 0.98,
+        "accessibility": 1,
+        "fcpMs": 743.071,
+        "lcpMs": 2333.142,
+        "cls": 0.005212060957684916,
+        "tbtMs": 85.5
+      }
+    ],
+    "median": {
+      "performance": 0.98,
+      "accessibility": 1,
+      "fcpMs": 743.071,
+      "lcpMs": 2261.634,
+      "cls": 0.005212060957684916,
+      "tbtMs": 85.5
+    }
+  }
+}

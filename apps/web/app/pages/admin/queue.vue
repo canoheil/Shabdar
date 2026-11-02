@@ -186,6 +186,14 @@ async function reject(publicId: string) {
   gap: var(--space-4);
 }
 
+.queue__header {
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-xs);
+}
+
 .queue__section-header {
   gap: var(--space-2);
 }
@@ -224,6 +232,7 @@ async function reject(publicId: string) {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
+  box-shadow: var(--shadow-xs);
 }
 
 .card__cover {

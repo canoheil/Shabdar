@@ -49,6 +49,9 @@ export interface ApiListingCard {
   province: string
   category: string
   cover_image: string | null
+  // Responsive derivatives are additive; older API responses still render the original.
+  cover_srcset?: string
+  cover_webp_srcset?: string
   rating_average: number
   rating_count: number
   published_at: string
@@ -57,6 +60,10 @@ export interface ApiListingCard {
 export interface ApiListingImage {
   url: string
   alt_text: string | null
+  width?: number | null
+  height?: number | null
+  srcset?: string
+  webp_srcset?: string
 }
 
 export interface ApiListingDetail {

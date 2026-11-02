@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-11-02T17:00:15.753Z",
+  "measuredHead": "2b1e3ff843cf6fe3cc414dcf870d5fed5bb575d6",
+  "productBaseline": "c07cdd9ef7df304acf665008a57e79c6c2597224",
+  "baseURL": "http://127.0.0.1:3000",
+  "node": "v22.22.3",
+  "nuxt": "4.6.2",
+  "playwright": "1.64.1",
+  "gzipLevel": 9,
+  "home": {
+    "totalGzip": 94982,
+    "scripts": [
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/CnlxN1Ey.js",
+        "rawBytes": 25267,
+        "gzipBytes": 9713
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/D6X0Tx7n.js",
+        "rawBytes": 228485,
+        "gzipBytes": 81228
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/DJU4doM4.js",
+        "rawBytes": 11597,
+        "gzipBytes": 4041
+      }
+    ]
+  },
+  "detail": {
+    "totalGzip": 99437,
+    "scripts": [
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/CnlxN1Ey.js",
+        "rawBytes": 25267,
+        "gzipBytes": 9713
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/D6X0Tx7n.js",
+        "rawBytes": 228485,
+        "gzipBytes": 81228
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/DXeaZ9-O.js",
+        "rawBytes": 28691,
+        "gzipBytes": 8496
+      }
+    ]
+  },
+  "fonts": {
+    "totalBytes": 80832,
+    "files": [
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/vazirmatn-arabic-wght-normal.Cafbb7Zc.woff2",
+        "bytes": 46308
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/vazirmatn-latin-wght-normal.BFexNX-K.woff2",
+        "bytes": 34524
+      }
+    ]
+  }
+}
