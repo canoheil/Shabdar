@@ -695,9 +695,7 @@ pub(crate) fn card_from_row(row: &sqlx::mysql::MySqlRow) -> Result<serde_json::V
         serde_json::json!(sum as f64 / count as f64)
     };
     let cover: Option<String> = row.try_get("cover").map_err(|_| ApiError::Internal)?;
-    let cover_width: Option<u16> = row
-        .try_get("cover_width")
-        .map_err(|_| ApiError::Internal)?;
+    let cover_width: Option<u16> = row.try_get("cover_width").map_err(|_| ApiError::Internal)?;
     let (cover_srcset, cover_webp_srcset) = match (cover.as_deref(), cover_width) {
         (Some(key), Some(width)) => crate::listing_images::responsive_srcsets(key, width),
         _ => (String::new(), String::new()),

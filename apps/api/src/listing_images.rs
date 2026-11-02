@@ -638,10 +638,8 @@ pub async fn remove_image(
     let _ = tokio::fs::remove_file(media_dir.join(&key)).await;
     for width in DERIVATIVE_WIDTHS {
         for format in [DerivativeFormat::Jpeg, DerivativeFormat::Webp] {
-            let _ = tokio::fs::remove_file(
-                media_dir.join(derivative_key(&key, width, format)),
-            )
-            .await;
+            let _ =
+                tokio::fs::remove_file(media_dir.join(derivative_key(&key, width, format))).await;
         }
     }
     Ok(())
@@ -817,12 +815,7 @@ pub async fn read_media(
 
     let source_width: Option<u16> = row.try_get("width").map_err(|_| ApiError::Internal)?;
     if let (Some(width), Some((derivative_width, format))) = (source_width, request.derivative) {
-        if !derivative_is_allowed(
-            request.source_extension,
-            width,
-            derivative_width,
-            format,
-        ) {
+        if !derivative_is_allowed(request.source_extension, width, derivative_width, format) {
             return Err(ApiError::NotFound);
         }
     }
@@ -835,20 +828,14 @@ pub async fn read_media(
     }
 
     let (derivative_width, format) = request.derivative.ok_or(ApiError::NotFound)?;
-    let original_bytes = tokio::fs::read(
-        std::path::Path::new(&cfg.media_dir).join(&request.original_key),
-    )
-    .await
-    .map_err(|_| ApiError::NotFound)?;
+    let original_bytes =
+        tokio::fs::read(std::path::Path::new(&cfg.media_dir).join(&request.original_key))
+            .await
+            .map_err(|_| ApiError::NotFound)?;
     let source_extension = request.source_extension;
     let bytes = tokio::task::spawn_blocking(move || {
         let validated = decode_image(&original_bytes).map_err(|_| ApiError::NotFound)?;
-        if !derivative_is_allowed(
-            source_extension,
-            validated.width,
-            derivative_width,
-            format,
-        ) {
+        if !derivative_is_allowed(source_extension, validated.width, derivative_width, format) {
             return Err(ApiError::NotFound);
         }
         generate_derivative(&validated.decoded, derivative_width, format)

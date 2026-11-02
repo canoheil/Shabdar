@@ -501,14 +501,23 @@ async fn responsive_derivatives_preserve_authorization_lazy_generation_and_clean
     // callers cannot regenerate it; the authorized owner can, on first hit.
     let derivative_path = dir.join(format!("{key}--w480.webp"));
     std::fs::remove_file(&derivative_path).expect("remove derived cache");
-    assert_eq!(get_media(app.clone(), &webp_url, None).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(
+        get_media(app.clone(), &webp_url, None).await.0,
+        StatusCode::NOT_FOUND
+    );
     assert!(!derivative_path.exists());
     let regenerated = get_media(app.clone(), &webp_url, Some(&seller)).await;
     assert_eq!(regenerated.0, StatusCode::OK);
     assert_eq!(regenerated.2["content-type"], "image/webp");
     assert!(derivative_path.is_file());
     assert_eq!(
-        get_media(app.clone(), &format!("/media/{key}--w481.jpg"), Some(&seller)).await.0,
+        get_media(
+            app.clone(),
+            &format!("/media/{key}--w481.jpg"),
+            Some(&seller)
+        )
+        .await
+        .0,
         StatusCode::NOT_FOUND
     );
 
@@ -536,7 +545,10 @@ async fn responsive_derivatives_preserve_authorization_lazy_generation_and_clean
         .header("x-csrf-token", &seller_csrf)
         .body(Body::empty())
         .unwrap();
-    assert_eq!(app.clone().oneshot(request).await.unwrap().status(), StatusCode::OK);
+    assert_eq!(
+        app.clone().oneshot(request).await.unwrap().status(),
+        StatusCode::OK
+    );
     assert!(!dir.join(key).exists());
     for width in [240, 480, 960] {
         for extension in ["jpg", "webp"] {
