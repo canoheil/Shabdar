@@ -27,6 +27,7 @@ jobs:
         run: split -b 20m -d -a 2 mariadb.tar.gz mariadb-part-
       - name: Publish temporary Git blobs for the sandbox
         run: |
+          : > /tmp/mariadb-manifest.txt
           for source in mariadb-part-*; do
             SOURCE="$source" python3 - <<'PY'
           import base64, json, os, pathlib
@@ -37,5 +38,15 @@ jobs:
           }))
           PY
             sha=$(gh api -X POST "repos/${GH_REPO}/git/blobs" --input /tmp/shabdar-blob-payload.json --jq .sha)
-            echo "::notice::MARIADB_BLOB $source $sha"
+            echo "$source $sha" >> /tmp/mariadb-manifest.txt
           done
+          SOURCE=/tmp/mariadb-manifest.txt python3 - <<'PY'
+          import base64, json, os, pathlib
+          source = pathlib.Path(os.environ['SOURCE'])
+          pathlib.Path('/tmp/shabdar-blob-payload.json').write_text(json.dumps({
+              'content': base64.b64encode(source.read_bytes()).decode(),
+              'encoding': 'base64',
+          }))
+          PY
+          manifest=$(gh api -X POST "repos/${GH_REPO}/git/blobs" --input /tmp/shabdar-blob-payload.json --jq .sha)
+          echo "::warning::MARIADB_MANIFEST $manifest"
