@@ -2,7 +2,7 @@
   <section ref="root" class="listing-gallery" aria-label="تصاویر آگهی">
     <div class="listing-gallery__main">
       <picture
-        v-if="selectedImage && !mainImageFailed"
+        v-if="selectedImage && !mainImageFailed && selectedImage.webp_srcset"
         :key="selectedImage.url"
         class="listing-gallery__main-picture"
       >
@@ -15,8 +15,7 @@
         <img
           class="listing-gallery__main-image"
           :src="selectedImage.url"
-          :srcset="selectedImage.srcset || undefined"
-          :sizes="LISTING_GALLERY_IMAGE_SIZES"
+          v-bind="selectedJpegSrcsetAttributes"
           :alt="mainImageAlt"
           width="1200"
           height="900"
@@ -27,6 +26,20 @@
           @error="markImageFailed(selectedIndex)"
         >
       </picture>
+      <img
+        v-else-if="selectedImage && !mainImageFailed"
+        class="listing-gallery__main-image"
+        :src="selectedImage.url"
+        v-bind="selectedJpegSrcsetAttributes"
+        :alt="mainImageAlt"
+        width="1200"
+        height="900"
+        loading="eager"
+        fetchpriority="high"
+        decoding="async"
+        :data-index="selectedIndex"
+        @error="markImageFailed(selectedIndex)"
+      >
       <div v-else class="listing-gallery__main-placeholder">
         <span class="listing-gallery__placeholder-mark" aria-hidden="true" />
         <span>{{ selectedImage ? 'تصویر در دسترس نیست' : 'تصویری برای این آگهی ثبت نشده است.' }}</span>
@@ -50,14 +63,12 @@
           <source
             v-if="image.webp_srcset"
             type="image/webp"
-            :srcset="image.webp_srcset"
-            :sizes="LISTING_THUMBNAIL_IMAGE_SIZES"
+            v-bind="listingThumbnailAttributes(image.webp_srcset)"
           >
           <img
             class="listing-gallery__thumbnail-image"
             :src="image.url"
-            :srcset="image.srcset || undefined"
-            :sizes="LISTING_THUMBNAIL_IMAGE_SIZES"
+            v-bind="listingThumbnailAttributes(image.srcset ?? '')"
             alt=""
             width="160"
             height="120"
@@ -90,6 +101,11 @@ const selectedImage = computed(() => props.images[selectedIndex.value])
 const mainImageFailed = computed(() => failedImages.value.has(selectedIndex.value))
 const mainImageAlt = computed(() => (
   selectedImage.value?.alt_text ?? `${props.listingTitle} — تصویر ${selectedIndex.value + 1}`
+))
+const selectedJpegSrcsetAttributes = computed(() => (
+  selectedImage.value?.srcset
+    ? { srcset: selectedImage.value.srcset, sizes: LISTING_GALLERY_IMAGE_SIZES }
+    : {}
 ))
 
 function markImageFailed(index: number): void {

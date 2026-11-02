@@ -470,7 +470,7 @@ async fn responsive_derivatives_preserve_authorization_lazy_generation_and_clean
         .as_str()
         .unwrap()
         .split(", ")
-        .find_map(|candidate| candidate.contains("--w480.webp").then_some(candidate))
+        .find(|candidate| candidate.contains("--w480.webp"))
         .and_then(|candidate| candidate.split(' ').next())
         .expect("480 WebP candidate")
         .to_string();
@@ -478,7 +478,7 @@ async fn responsive_derivatives_preserve_authorization_lazy_generation_and_clean
         .as_str()
         .unwrap()
         .split(", ")
-        .find_map(|candidate| candidate.contains("--w480.jpg").then_some(candidate))
+        .find(|candidate| candidate.contains("--w480.jpg"))
         .and_then(|candidate| candidate.split(' ').next())
         .expect("480 JPEG candidate")
         .to_string();

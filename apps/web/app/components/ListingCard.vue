@@ -2,9 +2,11 @@
   <article class="listing-card">
     <NuxtLink :to="`/listings/${listing.slug}`" class="listing-card__link">
       <span class="listing-card__media">
-        <picture v-if="listing.cover_image && !imageFailed" class="listing-card__picture">
+        <picture
+          v-if="listing.cover_image && !imageFailed && listing.cover_webp_srcset"
+          class="listing-card__picture"
+        >
           <source
-            v-if="listing.cover_webp_srcset"
             type="image/webp"
             :srcset="listing.cover_webp_srcset"
             :sizes="imageSizes"
@@ -13,17 +15,28 @@
             ref="imageElement"
             class="listing-card__image"
             :src="listing.cover_image ?? undefined"
-            :srcset="listing.cover_srcset || undefined"
-            :sizes="imageSizes"
+            v-bind="jpegSrcsetAttributes"
             alt=""
             width="480"
             height="360"
             :loading="imagePriority ? 'eager' : 'lazy'"
             :fetchpriority="imagePriority ? 'high' : 'low'"
-            decoding="async"
             @error="markImageFailed"
           >
         </picture>
+        <img
+          v-else-if="listing.cover_image && !imageFailed"
+          ref="imageElement"
+          class="listing-card__image"
+          :src="listing.cover_image"
+          v-bind="jpegSrcsetAttributes"
+          alt=""
+          width="480"
+          height="360"
+          :loading="imagePriority ? 'eager' : 'lazy'"
+          :fetchpriority="imagePriority ? 'high' : 'low'"
+          @error="markImageFailed"
+        >
         <span v-else class="listing-card__placeholder" aria-hidden="true">
           <span class="listing-card__placeholder-mark" />
           <span>{{ imageFailed ? 'تصویر در دسترس نیست' : 'بدون تصویر' }}</span>
@@ -62,6 +75,11 @@ const props = withDefaults(defineProps<{
 })
 
 const imageSizes = LISTING_CARD_IMAGE_SIZES
+const jpegSrcsetAttributes = computed(() => (
+  props.listing.cover_srcset
+    ? { srcset: props.listing.cover_srcset, sizes: imageSizes }
+    : {}
+))
 const imageFailed = ref(false)
 const imageElement = ref<HTMLImageElement | null>(null)
 watch(() => props.listing.public_id, () => {
