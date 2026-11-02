@@ -24,12 +24,7 @@ jobs:
           --output mariadb.tar.gz
       - name: Split the tarball for temporary authenticated download
         run: split -b 40m -d -a 2 mariadb.tar.gz mariadb-part-
-      - name: Publish a temporary draft release
+      - name: Publish the temporary draft release assets
         run: |
-          gh release delete sandbox-mariadb-runtime --yes 2>/dev/null || true
-          gh release create sandbox-mariadb-runtime \
-            --draft \
-            --target "$GITHUB_SHA" \
-            --title "Temporary sandbox MariaDB runtime" \
-            --notes "Temporary verification artifact; removed after download."
+          gh release view sandbox-mariadb-runtime
           gh release upload sandbox-mariadb-runtime mariadb-part-* --clobber
