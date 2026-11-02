@@ -41,11 +41,11 @@ This is independent from visual styling and has its own measurements.
 
 ## Recorded measurements
 
-The committed evidence is tied to implementation commit `69435d1cd40bce4f5953e8a39c4ba1588bf18607` and the pre-Phase-12 production baseline:
+The committed evidence is tied to implementation commit `5491f8d6e84827b2c24513fb2a39cb6692357220` and the pre-Phase-12 production baseline:
 
 - `docs/performance/phase12-image-comparison.json` records the same eight-listing fixture, selected URLs, intrinsic dimensions, response formats, and both payload and browser-encoded bytes. Mobile Home falls from 1,580,536 to 282,512 response-body bytes (**82.13% lower**; **80.95%** by encoded bytes). Every measured Home card selects a real 480px WebP derivative, not its original PNG.
-- `docs/performance/phase12-client-js.json` records **95,017 bytes gzip on Home** and **99,474 on Detail**, each across three same-origin scripts and below the 100KB route ceiling.
-- `docs/performance/phase12-lighthouse.json` contains all six mobile reports. Median Home/Detail LCP is **2261.054/2337.034ms**, CLS **0.04039/0.00521**, TBT **75.5/71.5ms**, and accessibility **1.0/1.0**.
+- `docs/performance/phase12-client-js.json` records **94,983 bytes gzip on Home** and **99,439 on Detail**, each across three same-origin scripts and below the 100KB route ceiling.
+- `docs/performance/phase12-lighthouse.json` contains all six mobile reports. Median Home/Detail LCP is **2258.541/2257.776ms**, CLS **0.04039/0.00521**, TBT **87.0/86.0ms**, and accessibility **1.0/1.0**.
 
 These measurements are evidence, not a substitute for the independent full CI run; the phase remains open until that run passes on the final code.
 

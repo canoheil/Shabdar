@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "phase": 12,
   "baselineCommit": "dc1dff33da204c2b2b30d84899a3676ac0632d19",
-  "implementationCommit": "69435d1cd40bce4f5953e8a39c4ba1588bf18607",
+  "implementationCommit": "5491f8d6e84827b2c24513fb2a39cb6692357220",
   "method": {
     "seed": "Eight active listings with nine uploads of the same fixture; the original fixture Detail remains the comparison route.",
     "fixture": "apps/web/tests/e2e/fixtures/listing-cover.png",
@@ -163,56 +163,56 @@
         "cards": 8,
         "images": [
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH5WMMJ1BM0D5KGJAP8KZA/01M6EH5WMM4F0M6MR6D1WWAXX9.png--w480.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJP8J1EAKX0S0D93SVP8AB/01M6EJP8J1EYCGP4JAMZ9ZPYY2.png--w480.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 35314,
             "encodedBytes": 35606
           },
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH58ZZ37DBMTW1W1WKMDD0/01M6EH58ZZAGYVQ7FH1QPZH5CP.png--w480.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJNYAFZ6FKWBMMXD0PMY1M/01M6EJNYAF0X1JKSBZ3MKTS5WE.png--w480.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 35314,
             "encodedBytes": 35606
           },
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH52H25A3ZQV58MHVZ4XTE/01M6EH52H2YZ3NJ552FK72P4Z2.png--w480.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJNTWM0TTCZ4B45MN21RRX/01M6EJNTWMV63VY0AFC6FJQD1G.png--w480.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 35314,
             "encodedBytes": 35606
           },
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH5FH1FFKWS9DD22X1XRC3/01M6EH5FH1RPKXJE3CFF6YC2PP.png--w480.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJNQFEP3B6NZPYF2EZ41MG/01M6EJNQFEJF71M5QCXNDWKDJN.png--w480.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 35314,
             "encodedBytes": 35606
           },
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH5P37GFNS1QRFA6WFJN5R/01M6EH5P37MM6RCAH4GHTS3WXW.png--w480.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJP1RR05K8M4EZATTQESE8/01M6EJP1RRFP2SXM5GG1CCHDJA.png--w480.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 35314,
             "encodedBytes": 35606
           },
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH4VWVAQGP846VCDXDTCSP/01M6EH4VWVHCR6C8KK04JH9MA3.png--w480.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJP56TSQRPHN2BQ5GMQGBQ/01M6EJP56TQBKTWJT2W9VW1D2T.png--w480.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 35314,
             "encodedBytes": 35606
           },
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH4EZBET1K7ZYHWFWK8EHN/01M6EH4EZBAVRPM379YKT981AQ.png--w480.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJNM1SJQYKVS2CYSP9JZ58/01M6EJNM1S4RWE8KSEXCCPQ8E6.png--w480.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 35314,
             "encodedBytes": 35606
           },
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w480.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJNG0WZGMBY3RBQ5V1MJWW/01M6EJNG0W3ZJ25CC827JV2B2D.png--w480.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 35314,
@@ -223,56 +223,56 @@
         "totalImageEncodedBytes": 284848,
         "domImages": [
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH5WMMJ1BM0D5KGJAP8KZA/01M6EH5WMM4F0M6MR6D1WWAXX9.png--w480.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJP8J1EAKX0S0D93SVP8AB/01M6EJP8J1EYCGP4JAMZ9ZPYY2.png--w480.webp",
             "naturalWidth": 311,
             "naturalHeight": 233,
             "clientWidth": 325,
             "clientHeight": 244
           },
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH5P37GFNS1QRFA6WFJN5R/01M6EH5P37MM6RCAH4GHTS3WXW.png--w480.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJP56TSQRPHN2BQ5GMQGBQ/01M6EJP56TQBKTWJT2W9VW1D2T.png--w480.webp",
             "naturalWidth": 311,
             "naturalHeight": 233,
             "clientWidth": 325,
             "clientHeight": 244
           },
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH5FH1FFKWS9DD22X1XRC3/01M6EH5FH1RPKXJE3CFF6YC2PP.png--w480.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJP1RR05K8M4EZATTQESE8/01M6EJP1RRFP2SXM5GG1CCHDJA.png--w480.webp",
             "naturalWidth": 311,
             "naturalHeight": 233,
             "clientWidth": 325,
             "clientHeight": 244
           },
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH58ZZ37DBMTW1W1WKMDD0/01M6EH58ZZAGYVQ7FH1QPZH5CP.png--w480.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJNYAFZ6FKWBMMXD0PMY1M/01M6EJNYAF0X1JKSBZ3MKTS5WE.png--w480.webp",
             "naturalWidth": 311,
             "naturalHeight": 233,
             "clientWidth": 325,
             "clientHeight": 244
           },
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH52H25A3ZQV58MHVZ4XTE/01M6EH52H2YZ3NJ552FK72P4Z2.png--w480.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJNTWM0TTCZ4B45MN21RRX/01M6EJNTWMV63VY0AFC6FJQD1G.png--w480.webp",
             "naturalWidth": 311,
             "naturalHeight": 233,
             "clientWidth": 325,
             "clientHeight": 244
           },
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH4VWVAQGP846VCDXDTCSP/01M6EH4VWVHCR6C8KK04JH9MA3.png--w480.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJNQFEP3B6NZPYF2EZ41MG/01M6EJNQFEJF71M5QCXNDWKDJN.png--w480.webp",
             "naturalWidth": 311,
             "naturalHeight": 233,
             "clientWidth": 325,
             "clientHeight": 244
           },
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH4EZBET1K7ZYHWFWK8EHN/01M6EH4EZBAVRPM379YKT981AQ.png--w480.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJNM1SJQYKVS2CYSP9JZ58/01M6EJNM1S4RWE8KSEXCCPQ8E6.png--w480.webp",
             "naturalWidth": 311,
             "naturalHeight": 233,
             "clientWidth": 325,
             "clientHeight": 244
           },
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w480.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJNG0WZGMBY3RBQ5V1MJWW/01M6EJNG0W3ZJ25CC827JV2B2D.png--w480.webp",
             "naturalWidth": 311,
             "naturalHeight": 233,
             "clientWidth": 325,
@@ -423,56 +423,56 @@
         "cards": 8,
         "images": [
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH5WMMJ1BM0D5KGJAP8KZA/01M6EH5WMM4F0M6MR6D1WWAXX9.png--w480.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJP8J1EAKX0S0D93SVP8AB/01M6EJP8J1EYCGP4JAMZ9ZPYY2.png--w480.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 35314,
             "encodedBytes": 35606
           },
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH5P37GFNS1QRFA6WFJN5R/01M6EH5P37MM6RCAH4GHTS3WXW.png--w480.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJP56TSQRPHN2BQ5GMQGBQ/01M6EJP56TQBKTWJT2W9VW1D2T.png--w480.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 35314,
             "encodedBytes": 35606
           },
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH5FH1FFKWS9DD22X1XRC3/01M6EH5FH1RPKXJE3CFF6YC2PP.png--w480.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJP1RR05K8M4EZATTQESE8/01M6EJP1RRFP2SXM5GG1CCHDJA.png--w480.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 35314,
             "encodedBytes": 35606
           },
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH52H25A3ZQV58MHVZ4XTE/01M6EH52H2YZ3NJ552FK72P4Z2.png--w480.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJNYAFZ6FKWBMMXD0PMY1M/01M6EJNYAF0X1JKSBZ3MKTS5WE.png--w480.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 35314,
             "encodedBytes": 35606
           },
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH4EZBET1K7ZYHWFWK8EHN/01M6EH4EZBAVRPM379YKT981AQ.png--w480.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJNTWM0TTCZ4B45MN21RRX/01M6EJNTWMV63VY0AFC6FJQD1G.png--w480.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 35314,
             "encodedBytes": 35606
           },
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH4VWVAQGP846VCDXDTCSP/01M6EH4VWVHCR6C8KK04JH9MA3.png--w480.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJNQFEP3B6NZPYF2EZ41MG/01M6EJNQFEJF71M5QCXNDWKDJN.png--w480.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 35314,
             "encodedBytes": 35606
           },
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH58ZZ37DBMTW1W1WKMDD0/01M6EH58ZZAGYVQ7FH1QPZH5CP.png--w480.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJNM1SJQYKVS2CYSP9JZ58/01M6EJNM1S4RWE8KSEXCCPQ8E6.png--w480.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 35314,
             "encodedBytes": 35606
           },
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w480.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJNG0WZGMBY3RBQ5V1MJWW/01M6EJNG0W3ZJ25CC827JV2B2D.png--w480.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 35314,
@@ -483,56 +483,56 @@
         "totalImageEncodedBytes": 284848,
         "domImages": [
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH5WMMJ1BM0D5KGJAP8KZA/01M6EH5WMM4F0M6MR6D1WWAXX9.png--w480.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJP8J1EAKX0S0D93SVP8AB/01M6EJP8J1EYCGP4JAMZ9ZPYY2.png--w480.webp",
             "naturalWidth": 280,
             "naturalHeight": 210,
             "clientWidth": 251,
             "clientHeight": 188
           },
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH5P37GFNS1QRFA6WFJN5R/01M6EH5P37MM6RCAH4GHTS3WXW.png--w480.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJP56TSQRPHN2BQ5GMQGBQ/01M6EJP56TQBKTWJT2W9VW1D2T.png--w480.webp",
             "naturalWidth": 280,
             "naturalHeight": 210,
             "clientWidth": 251,
             "clientHeight": 188
           },
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH5FH1FFKWS9DD22X1XRC3/01M6EH5FH1RPKXJE3CFF6YC2PP.png--w480.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJP1RR05K8M4EZATTQESE8/01M6EJP1RRFP2SXM5GG1CCHDJA.png--w480.webp",
             "naturalWidth": 280,
             "naturalHeight": 210,
             "clientWidth": 251,
             "clientHeight": 188
           },
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH58ZZ37DBMTW1W1WKMDD0/01M6EH58ZZAGYVQ7FH1QPZH5CP.png--w480.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJNYAFZ6FKWBMMXD0PMY1M/01M6EJNYAF0X1JKSBZ3MKTS5WE.png--w480.webp",
             "naturalWidth": 280,
             "naturalHeight": 210,
             "clientWidth": 251,
             "clientHeight": 188
           },
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH52H25A3ZQV58MHVZ4XTE/01M6EH52H2YZ3NJ552FK72P4Z2.png--w480.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJNTWM0TTCZ4B45MN21RRX/01M6EJNTWMV63VY0AFC6FJQD1G.png--w480.webp",
             "naturalWidth": 280,
             "naturalHeight": 210,
             "clientWidth": 251,
             "clientHeight": 188
           },
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH4VWVAQGP846VCDXDTCSP/01M6EH4VWVHCR6C8KK04JH9MA3.png--w480.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJNQFEP3B6NZPYF2EZ41MG/01M6EJNQFEJF71M5QCXNDWKDJN.png--w480.webp",
             "naturalWidth": 280,
             "naturalHeight": 210,
             "clientWidth": 251,
             "clientHeight": 188
           },
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH4EZBET1K7ZYHWFWK8EHN/01M6EH4EZBAVRPM379YKT981AQ.png--w480.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJNM1SJQYKVS2CYSP9JZ58/01M6EJNM1S4RWE8KSEXCCPQ8E6.png--w480.webp",
             "naturalWidth": 280,
             "naturalHeight": 210,
             "clientWidth": 251,
             "clientHeight": 188
           },
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w480.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJNG0WZGMBY3RBQ5V1MJWW/01M6EJNG0W3ZJ25CC827JV2B2D.png--w480.webp",
             "naturalWidth": 280,
             "naturalHeight": 210,
             "clientWidth": 251,
@@ -592,14 +592,14 @@
         "cards": 0,
         "images": [
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w480.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJNG0WZGMBY3RBQ5V1MJWW/01M6EJNG0W3ZJ25CC827JV2B2D.png--w480.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 35314,
             "encodedBytes": 35606
           },
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w240.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJNG0WZGMBY3RBQ5V1MJWW/01M6EJNG0W3ZJ25CC827JV2B2D.png--w240.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 10370,
@@ -610,14 +610,14 @@
         "totalImageEncodedBytes": 46268,
         "domImages": [
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w480.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJNG0WZGMBY3RBQ5V1MJWW/01M6EJNG0W3ZJ25CC827JV2B2D.png--w480.webp",
             "naturalWidth": 343,
             "naturalHeight": 257,
             "clientWidth": 341,
             "clientHeight": 255
           },
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w240.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJNG0WZGMBY3RBQ5V1MJWW/01M6EJNG0W3ZJ25CC827JV2B2D.png--w240.webp",
             "naturalWidth": 240,
             "naturalHeight": 180,
             "clientWidth": 70,
@@ -677,32 +677,32 @@
         "cards": 0,
         "images": [
           {
-            "url": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w960.webp",
-            "status": 200,
-            "contentType": "image/webp",
-            "bodyBytes": 139622,
-            "encodedBytes": 139931
-          },
-          {
-            "url": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w240.webp",
+            "url": "http://127.0.0.1:3000/media/01M6EJNG0WZGMBY3RBQ5V1MJWW/01M6EJNG0W3ZJ25CC827JV2B2D.png--w240.webp",
             "status": 200,
             "contentType": "image/webp",
             "bodyBytes": 10370,
             "encodedBytes": 10662
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EJNG0WZGMBY3RBQ5V1MJWW/01M6EJNG0W3ZJ25CC827JV2B2D.png--w960.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 139622,
+            "encodedBytes": 139931
           }
         ],
         "totalImageBodyBytes": 149992,
         "totalImageEncodedBytes": 150593,
         "domImages": [
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w960.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJNG0WZGMBY3RBQ5V1MJWW/01M6EJNG0W3ZJ25CC827JV2B2D.png--w960.webp",
             "naturalWidth": 720,
             "naturalHeight": 540,
             "clientWidth": 677,
             "clientHeight": 508
           },
           {
-            "currentSrc": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w240.webp",
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EJNG0WZGMBY3RBQ5V1MJWW/01M6EJNG0W3ZJ25CC827JV2B2D.png--w240.webp",
             "naturalWidth": 240,
             "naturalHeight": 180,
             "clientWidth": 154,

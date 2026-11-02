@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "measuredAt": "2026-11-02T16:25:28.421Z",
-  "measuredHead": "69435d1cd40bce4f5953e8a39c4ba1588bf18607",
+  "measuredAt": "2026-11-02T16:43:47.150Z",
+  "measuredHead": "5491f8d6e84827b2c24513fb2a39cb6692357220",
   "productBaseline": "c07cdd9ef7df304acf665008a57e79c6c2597224",
   "baseURL": "http://127.0.0.1:3000",
   "node": "v22.22.3",
@@ -9,42 +9,42 @@
   "playwright": "1.64.1",
   "gzipLevel": 9,
   "home": {
-    "totalGzip": 95017,
+    "totalGzip": 94983,
     "scripts": [
       {
-        "url": "http://127.0.0.1:3000/_nuxt/C2nx9NCg.js",
-        "rawBytes": 11597,
-        "gzipBytes": 4039
+        "url": "http://127.0.0.1:3000/_nuxt/D6X0Tx7n.js",
+        "rawBytes": 228485,
+        "gzipBytes": 81228
       },
       {
-        "url": "http://127.0.0.1:3000/_nuxt/DAoa7Rfg.js",
-        "rawBytes": 228560,
-        "gzipBytes": 81265
-      },
-      {
-        "url": "http://127.0.0.1:3000/_nuxt/DbVweeTV.js",
+        "url": "http://127.0.0.1:3000/_nuxt/FUeUHX1p.js",
         "rawBytes": 25267,
-        "gzipBytes": 9713
+        "gzipBytes": 9715
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/OkNo8qvn.js",
+        "rawBytes": 11597,
+        "gzipBytes": 4040
       }
     ]
   },
   "detail": {
-    "totalGzip": 99474,
+    "totalGzip": 99439,
     "scripts": [
       {
-        "url": "http://127.0.0.1:3000/_nuxt/BebEMjzU.js",
+        "url": "http://127.0.0.1:3000/_nuxt/D6X0Tx7n.js",
+        "rawBytes": 228485,
+        "gzipBytes": 81228
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/DXeaZ9-O.js",
         "rawBytes": 28691,
         "gzipBytes": 8496
       },
       {
-        "url": "http://127.0.0.1:3000/_nuxt/DAoa7Rfg.js",
-        "rawBytes": 228560,
-        "gzipBytes": 81265
-      },
-      {
-        "url": "http://127.0.0.1:3000/_nuxt/DbVweeTV.js",
+        "url": "http://127.0.0.1:3000/_nuxt/FUeUHX1p.js",
         "rawBytes": 25267,
-        "gzipBytes": 9713
+        "gzipBytes": 9715
       }
     ]
   },
