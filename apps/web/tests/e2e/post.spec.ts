@@ -90,13 +90,17 @@ test('@post server validation and failure preserve fields and previews without f
       await route.continue()
       return
     }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 500))
     await route.fulfill({
       status: 400,
       contentType: 'application/json',
       body: JSON.stringify({ error: { code: 'validation', message: 'fixture', fields: { title: 'عنوان معتبر نیست.' } } }),
     })
   })
-  await page.getByRole('button', { name: 'ایجاد پیش‌نویس', exact: true }).click()
+  const save = page.getByRole('button', { name: 'ایجاد پیش‌نویس', exact: true })
+  await save.click()
+  await expect(save).toHaveAttribute('aria-busy', 'true')
+  await expect(save.locator('.app-button__spinner')).toBeVisible()
   await expect(page.getByRole('alert').filter({ hasText: 'خطا در title: عنوان معتبر نیست.' })).toBeFocused()
   await expect(page.locator('#post-title-error')).toHaveText('عنوان معتبر نیست.')
   await expect(page.getByLabel('عنوان', { exact: true })).toHaveValue('عنوان حفظ‌شده')
@@ -134,6 +138,12 @@ test('@post invalid real images receive Persian feedback without clearing form o
 test('@post real create upload submit exposes distinct draft and review states', async ({ page }) => {
   await applyStorage(page, readFixtures().sellerStorage)
   await page.goto('/post')
+  const imageUploads: string[] = []
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && /^\/api\/v1\/listings\/[^/]+\/images$/.test(new URL(request.url()).pathname)) {
+      imageUploads.push(request.url())
+    }
+  })
   const title = 'آگهی واقعی فرم شبدر'
   await page.getByLabel('دسته', { exact: true }).selectOption({ index: 1 })
   await page.getByLabel('شهر', { exact: true }).selectOption({ index: 1 })
@@ -146,6 +156,7 @@ test('@post real create upload submit exposes distinct draft and review states',
   await expect(page.locator('.post__state')).toHaveText('پیش‌نویس ذخیره شده')
   await page.getByRole('button', { name: 'ذخیرهٔ تغییرات', exact: true }).click()
   await expect(page.getByText('تغییرات ذخیره شد.', { exact: true })).toBeVisible()
+  expect(imageUploads).toHaveLength(1)
   await page.getByRole('button', { name: 'ارسال برای بررسی', exact: true }).click()
   await expect(page.getByText('آگهی برای بررسی ارسال شد؛ پس از تأیید نمایش داده می‌شود.', { exact: true })).toBeVisible()
   await expect(page.locator('.post__state')).toHaveText('در انتظار بررسی')

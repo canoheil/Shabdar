@@ -143,6 +143,11 @@ test('@home desktop price filters update results and Back restores values', asyn
   await expect(cards).toHaveCount(3)
   await expect(min).toHaveValue('')
   await expect(max).toHaveValue('')
+
+  await max.fill('0')
+  await max.press('Enter')
+  await expect(page).toHaveURL(/[?&]max_price=0(?:&|$)/)
+  await expect(page.getByText('آگهی‌ای با این مشخصات پیدا نشد.', { exact: true })).toBeVisible()
 })
 
 test('@home load more preserves confirmed cards and cursor through failure and deduplicates overlap', async ({ page }) => {
@@ -247,6 +252,8 @@ test('@home long titles, neutral no-cover media and one real high-priority cover
   const noCover = page.locator('.listing-card').filter({ hasText: longTitle })
   await expect(noCover).toBeVisible()
   await expect(noCover.getByText('بدون تصویر', { exact: true })).toBeVisible()
+  await expect(noCover.getByText('بررسی‌شده برای انتشار', { exact: true })).toBeVisible()
+  await expect(noCover.locator('time')).toHaveAttribute('datetime', /.+/)
   await expect(noCover.locator('img')).toHaveCount(0)
   const highPriority = page.locator('.listing-card img[fetchpriority="high"]')
   await expect(highPriority).toHaveCount(1)

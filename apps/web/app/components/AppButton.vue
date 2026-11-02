@@ -6,6 +6,7 @@
     :disabled="disabled || loading"
     :aria-busy="loading ? 'true' : undefined"
   >
+    <span v-if="loading" class="app-button__spinner" aria-hidden="true" />
     <slot />
   </button>
 </template>

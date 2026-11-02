@@ -1,4 +1,4 @@
-name: Package sandbox MariaDB
+name: Package sandbox API
 
 on:
   push:
@@ -13,40 +13,28 @@ permissions:
 
 jobs:
   package:
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_REPO: ${{ github.repository }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
     steps:
-      - name: Download the official MariaDB 11.4 binary tarball
-        run: >-
-          curl --fail --location --retry 3
-          https://archive.mariadb.org/mariadb-11.4.13/bintar-linux-systemd-x86_64/mariadb-11.4.13-linux-systemd-x86_64.tar.gz
-          --output mariadb.tar.gz
-      - name: Split the tarball for temporary authenticated download
-        run: split -b 20m -d -a 2 mariadb.tar.gz mariadb-part-
-      - name: Publish temporary Git blobs for the sandbox
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build the updated real Axum API with development OTP support
+        working-directory: apps/api
         run: |
-          : > /tmp/mariadb-manifest.txt
-          for source in mariadb-part-*; do
-            SOURCE="$source" python3 - <<'PY'
-          import base64, json, os, pathlib
-          source = pathlib.Path(os.environ['SOURCE'])
+          cargo build --locked
+          strip target/debug/shabdar-api
+      - name: Publish a temporary Git blob for the sandbox
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, pathlib
+          source = pathlib.Path('apps/api/target/debug/shabdar-api')
           pathlib.Path('/tmp/shabdar-blob-payload.json').write_text(json.dumps({
               'content': base64.b64encode(source.read_bytes()).decode(),
               'encoding': 'base64',
           }))
           PY
-            sha=$(gh api -X POST "repos/${GH_REPO}/git/blobs" --input /tmp/shabdar-blob-payload.json --jq .sha)
-            echo "$source $sha" >> /tmp/mariadb-manifest.txt
-          done
-          SOURCE=/tmp/mariadb-manifest.txt python3 - <<'PY'
-          import base64, json, os, pathlib
-          source = pathlib.Path(os.environ['SOURCE'])
-          pathlib.Path('/tmp/shabdar-blob-payload.json').write_text(json.dumps({
-              'content': base64.b64encode(source.read_bytes()).decode(),
-              'encoding': 'base64',
-          }))
-          PY
-          manifest=$(gh api -X POST "repos/${GH_REPO}/git/blobs" --input /tmp/shabdar-blob-payload.json --jq .sha)
-          echo "::warning::MARIADB_MANIFEST $manifest"
+          sha=$(gh api -X POST "repos/${GH_REPO}/git/blobs" --input /tmp/shabdar-blob-payload.json --jq .sha)
+          echo "::warning::SANDBOX_API_BLOB $sha"

@@ -1,6 +1,11 @@
 <template>
   <section ref="root" class="listing-gallery" aria-label="تصاویر آگهی">
-    <div class="listing-gallery__main">
+    <div
+      class="listing-gallery__main"
+      @pointerdown="startSwipe"
+      @pointerup="finishSwipe"
+      @pointercancel="cancelSwipe"
+    >
       <picture
         v-if="selectedImage && !mainImageFailed && selectedImage.webp_srcset"
         :key="selectedImage.url"
@@ -44,10 +49,33 @@
         <span class="listing-gallery__placeholder-mark" aria-hidden="true" />
         <span>{{ selectedImage ? 'تصویر در دسترس نیست' : 'تصویری برای این آگهی ثبت نشده است.' }}</span>
       </div>
+      <button
+        v-if="images.length > 1"
+        type="button"
+        class="listing-gallery__nav listing-gallery__nav--previous"
+        aria-label="تصویر قبلی"
+        :disabled="selectedIndex === 0"
+        @click="showPrevious"
+      >
+        قبلی
+      </button>
+      <button
+        v-if="images.length > 1"
+        type="button"
+        class="listing-gallery__nav listing-gallery__nav--next"
+        aria-label="تصویر بعدی"
+        :disabled="selectedIndex === images.length - 1"
+        @click="showNext"
+      >
+        بعدی
+      </button>
       <span v-if="images.length" class="listing-gallery__counter" aria-hidden="true">
         {{ formatNumber(selectedIndex + 1) }} / {{ formatNumber(images.length) }}
       </span>
     </div>
+    <p v-if="images.length" class="sr-only" role="status">
+      تصویر {{ formatNumber(selectedIndex + 1) }} از {{ formatNumber(images.length) }}
+    </p>
     <div v-if="images.length" class="listing-gallery__thumbnails" role="group" aria-label="انتخاب تصویر">
       <button
         v-for="(image, index) in images"
@@ -107,6 +135,34 @@ const selectedJpegSrcsetAttributes = computed(() => (
     ? { srcset: selectedImage.value.srcset, sizes: LISTING_GALLERY_IMAGE_SIZES }
     : {}
 ))
+
+function showPrevious(): void {
+  selectedIndex.value = Math.max(0, selectedIndex.value - 1)
+}
+
+function showNext(): void {
+  selectedIndex.value = Math.min(props.images.length - 1, selectedIndex.value + 1)
+}
+
+let swipeStart: { id: number; x: number; y: number } | null = null
+function startSwipe(event: PointerEvent): void {
+  if (props.images.length < 2 || !event.isPrimary || event.pointerType === 'mouse') return
+  if (event.target instanceof Element && event.target.closest('button')) return
+  swipeStart = { id: event.pointerId, x: event.clientX, y: event.clientY }
+}
+function cancelSwipe(): void {
+  swipeStart = null
+}
+function finishSwipe(event: PointerEvent): void {
+  if (!swipeStart || swipeStart.id !== event.pointerId) return
+  const deltaX = event.clientX - swipeStart.x
+  const deltaY = event.clientY - swipeStart.y
+  swipeStart = null
+  if (Math.abs(deltaX) < 48 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) return
+  // In the RTL gallery, a rightward swipe advances and a leftward swipe goes back.
+  if (deltaX > 0) showNext()
+  else showPrevious()
+}
 
 function markImageFailed(index: number): void {
   const next = new Set(failedImages.value)

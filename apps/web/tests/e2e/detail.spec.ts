@@ -27,7 +27,8 @@ test('@detail eight-image gallery is keyboard operable and responsively composed
   await expect(main).toHaveAttribute('height', '900')
   await expect(main).toHaveAttribute('loading', 'eager')
   await expect(main).toHaveAttribute('fetchpriority', 'high')
-  const thumbnails = gallery.getByRole('button')
+  await expect(main).toHaveCSS('object-fit', 'contain')
+  const thumbnails = gallery.locator('.listing-gallery__thumbnail')
   await expect(thumbnails).toHaveCount(8)
   await expect(main).toHaveAttribute('srcset', /--w960\.jpg 960w/)
   await expect(gallery.locator('.listing-gallery__main source[type="image/webp"]'))
@@ -48,6 +49,27 @@ test('@detail eight-image gallery is keyboard operable and responsively composed
   await third.focus()
   await page.keyboard.press('Space')
   await expect(third).toHaveAttribute('aria-pressed', 'true')
+
+  await gallery.getByRole('button', { name: 'تصویر بعدی', exact: true }).click()
+  await expect(main).toHaveAttribute('alt', `${title} — تصویر 4`)
+  const mainFrame = gallery.locator('.listing-gallery__main')
+  await mainFrame.dispatchEvent('pointerdown', {
+    pointerId: 7,
+    pointerType: 'touch',
+    isPrimary: true,
+    clientX: 80,
+    clientY: 180,
+  })
+  await mainFrame.dispatchEvent('pointerup', {
+    pointerId: 7,
+    pointerType: 'touch',
+    isPrimary: true,
+    clientX: 260,
+    clientY: 184,
+  })
+  await expect(main).toHaveAttribute('alt', `${title} — تصویر 5`)
+  await gallery.getByRole('button', { name: 'تصویر قبلی', exact: true }).click()
+  await expect(main).toHaveAttribute('alt', `${title} — تصویر 4`)
 
   const mobileGeometry = await page.evaluate(() => ({
     galleryBottom: document.querySelector('.detail__gallery')?.getBoundingClientRect().bottom,

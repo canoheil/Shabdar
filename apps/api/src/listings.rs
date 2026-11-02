@@ -764,6 +764,17 @@ pub fn parse_sort(raw: Option<&str>) -> Result<FeedSort, ApiError> {
     }
 }
 
+fn parse_price_filter(raw: Option<&str>, field: &str) -> Result<Option<u64>, ApiError> {
+    raw.map(|value| {
+        value.parse::<u64>().map_err(|_| {
+            let mut fields = BTreeMap::new();
+            fields.insert(field.to_string(), "invalid_price".to_string());
+            ApiError::Validation { fields }
+        })
+    })
+    .transpose()
+}
+
 /// The three keys, in ascending order. NULL prices sort last in both price
 /// directions via k1. `published_at` micros are negated for newest so
 /// "ascending keys" still means newest-first.
@@ -867,7 +878,7 @@ fn folded_column(column: &str) -> String {
 }
 
 /// GET /listings — `active` only, keyset on the sort's three keys.
-/// Filters: `category`, `city`, `province` (slugs), `q` (terms). Caps at 50.
+/// Filters: slugs, search terms, and inclusive numeric price bounds. Caps at 50.
 #[allow(clippy::too_many_arguments)]
 pub async fn feed(
     pool: &MySqlPool,
@@ -875,12 +886,16 @@ pub async fn feed(
     city: Option<&str>,
     province: Option<&str>,
     q: Option<&str>,
+    min_price: Option<&str>,
+    max_price: Option<&str>,
     sort: Option<&str>,
     cursor: Option<&str>,
     limit_raw: Option<&str>,
 ) -> Result<serde_json::Value, ApiError> {
     let limit = page_limit(limit_raw);
     let sort = parse_sort(sort)?;
+    let min_price = parse_price_filter(min_price, "min_price")?;
+    let max_price = parse_price_filter(max_price, "max_price")?;
     let keys = sort_keys(sort);
     let terms: Vec<String> = match q {
         None => Vec::new(),
@@ -922,6 +937,12 @@ pub async fn feed(
         filter_id(pool, "provinces", slug, "province", "unknown_province").await?;
         sql.push_str(" AND p.slug = ?");
     }
+    if min_price.is_some() {
+        sql.push_str(" AND l.price_toman >= ?");
+    }
+    if max_price.is_some() {
+        sql.push_str(" AND l.price_toman <= ?");
+    }
     // One AND clause per term: each term may hit title or description.
     let patterns: Vec<String> = terms.iter().map(|t| like_pattern(t)).collect();
     let (title_folded, description_folded) =
@@ -932,7 +953,8 @@ pub async fn feed(
         ));
     }
     feed_query(
-        pool, &sql, &keys, category, city, province, &patterns, sort, cursor, limit,
+        pool, &sql, &keys, category, city, province, min_price, max_price, &patterns, sort, cursor,
+        limit,
     )
     .await
 }
@@ -945,6 +967,8 @@ async fn feed_query(
     category: Option<&str>,
     city: Option<&str>,
     province: Option<&str>,
+    min_price: Option<u64>,
+    max_price: Option<u64>,
     patterns: &[String],
     sort: FeedSort,
     cursor: Option<&str>,
@@ -970,6 +994,12 @@ async fn feed_query(
     }
     if let Some(slug) = province {
         q = q.bind(slug);
+    }
+    if let Some(price) = min_price {
+        q = q.bind(price);
+    }
+    if let Some(price) = max_price {
+        q = q.bind(price);
     }
     for pattern in patterns {
         q = q.bind(pattern).bind(pattern);
