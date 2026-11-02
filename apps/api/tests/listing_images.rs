@@ -521,10 +521,10 @@ async fn responsive_derivatives_preserve_authorization_lazy_generation_and_clean
         StatusCode::NOT_FOUND
     );
 
-    sqlx::query(
-        "UPDATE listings SET status = 'active', published_at = NOW(3), \\
-         image_reviewed_by = seller_id, image_reviewed_at = NOW(3) WHERE public_id = ?",
-    )
+    sqlx::query(concat!(
+        "UPDATE listings SET status = 'active', published_at = NOW(3), ",
+        "image_reviewed_by = seller_id, image_reviewed_at = NOW(3) WHERE public_id = ?",
+    ))
     .bind(&public_id)
     .execute(&pool)
     .await
