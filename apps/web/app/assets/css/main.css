@@ -455,7 +455,8 @@ a {
   border-color: var(--color-text);
 }
 
-.app-button__spinner {
+.app-button[aria-busy="true"]::before {
+  content: '';
   inline-size: 1em;
   block-size: 1em;
   flex: none;
