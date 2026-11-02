@@ -1,0 +1,30 @@
+name: Package sandbox MariaDB
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download the official MariaDB 11.4 binary tarball
+        run: >-
+          curl --fail --location --retry 3
+          https://archive.mariadb.org/mariadb-11.4.13/bintar-linux-systemd-x86_64/mariadb-11.4.13-linux-systemd-x86_64.tar.gz
+          --output mariadb.tar.gz
+      - name: Split the tarball for temporary authenticated download
+        run: split -b 40m -d -a 2 mariadb.tar.gz mariadb-part-
+      - name: Publish a temporary draft release
+        run: |
+          gh release delete sandbox-mariadb-runtime --yes 2>/dev/null || true
+          gh release create sandbox-mariadb-runtime \
+            --draft \
+            --target "$GITHUB_SHA" \
+            --title "Temporary sandbox MariaDB runtime" \
+            --notes "Temporary verification artifact; removed after download."
+          gh release upload sandbox-mariadb-runtime mariadb-part-* --clobber
