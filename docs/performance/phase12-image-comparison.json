@@ -1,0 +1,721 @@
+{
+  "schemaVersion": 1,
+  "phase": 12,
+  "baselineCommit": "dc1dff33da204c2b2b30d84899a3676ac0632d19",
+  "implementationCommit": "69435d1cd40bce4f5953e8a39c4ba1588bf18607",
+  "method": {
+    "seed": "Eight active listings with nine uploads of the same fixture; the original fixture Detail remains the comparison route.",
+    "fixture": "apps/web/tests/e2e/fixtures/listing-cover.png",
+    "fixtureSha256": "2e515847b88b398da1c00193bba43850145323f2fcb7356aa7fdd001fed1d14c",
+    "fixtureDimensions": {
+      "width": 1200,
+      "height": 900
+    },
+    "mobileViewport": {
+      "width": 375,
+      "height": 812,
+      "deviceScaleFactor": 1
+    },
+    "desktopViewport": {
+      "width": 1440,
+      "height": 1000,
+      "deviceScaleFactor": 1
+    },
+    "navigationWait": "networkidle plus document.fonts.ready",
+    "bodyBytes": "Playwright response.body().byteLength",
+    "encodedBytes": "Chromium CDP Network.loadingFinished.encodedDataLength, with response-body fallback",
+    "note": "Encoded bytes include transport overhead and compression effects; response-body bytes are the primary comparable image payload metric."
+  },
+  "routes": {
+    "home-mobile": {
+      "baseline": {
+        "viewport": {
+          "width": 375,
+          "height": 812
+        },
+        "cards": 8,
+        "images": [
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ4TVYTYR7VKM583CYSFR/01M6EEQ4TVQP7K2MVWXN5CX4B9.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ4J3YY9A5VPAFNC12CVD/01M6EEQ4J3QP3RNR7WVT5Q25QJ.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ4PP36EDTHXFK69DKJCX/01M6EEQ4PPDS448DMC1Q8835WF.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ4D5KN77620MWZRMSZGQ/01M6EEQ4D524AMAJDDMJ8WBZCA.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ48SV04PZB1DVRPZQ0J8/01M6EEQ48SST2PBHWCN54W8KXS.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ449Y6JQA3VHDPR6ADWF/01M6EEQ449SC7EH9B1K04QWG84.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ3VMQQAPZ9PQ7VBB5NGW/01M6EEQ3VM63DQ9QW9JW18TXBF.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ32MKBHC84T3JCK1BG2Y/01M6EEQ32MPT4DVGR66NSJTCK3.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          }
+        ],
+        "totalImageBodyBytes": 1580536,
+        "totalImageEncodedBytes": 1495488,
+        "domImages": [
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ4TVYTYR7VKM583CYSFR/01M6EEQ4TVQP7K2MVWXN5CX4B9.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 317,
+            "clientHeight": 238
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ4PP36EDTHXFK69DKJCX/01M6EEQ4PPDS448DMC1Q8835WF.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 317,
+            "clientHeight": 238
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ4J3YY9A5VPAFNC12CVD/01M6EEQ4J3QP3RNR7WVT5Q25QJ.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 317,
+            "clientHeight": 238
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ4D5KN77620MWZRMSZGQ/01M6EEQ4D524AMAJDDMJ8WBZCA.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 317,
+            "clientHeight": 238
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ48SV04PZB1DVRPZQ0J8/01M6EEQ48SST2PBHWCN54W8KXS.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 317,
+            "clientHeight": 238
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ449Y6JQA3VHDPR6ADWF/01M6EEQ449SC7EH9B1K04QWG84.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 317,
+            "clientHeight": 238
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ3VMQQAPZ9PQ7VBB5NGW/01M6EEQ3VM63DQ9QW9JW18TXBF.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 317,
+            "clientHeight": 238
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ32MKBHC84T3JCK1BG2Y/01M6EEQ32MPT4DVGR66NSJTCK3.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 317,
+            "clientHeight": 238
+          }
+        ],
+        "runtimeErrors": [],
+        "overflow": 0
+      },
+      "final": {
+        "viewport": {
+          "width": 375,
+          "height": 812
+        },
+        "cards": 8,
+        "images": [
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH5WMMJ1BM0D5KGJAP8KZA/01M6EH5WMM4F0M6MR6D1WWAXX9.png--w480.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 35314,
+            "encodedBytes": 35606
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH58ZZ37DBMTW1W1WKMDD0/01M6EH58ZZAGYVQ7FH1QPZH5CP.png--w480.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 35314,
+            "encodedBytes": 35606
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH52H25A3ZQV58MHVZ4XTE/01M6EH52H2YZ3NJ552FK72P4Z2.png--w480.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 35314,
+            "encodedBytes": 35606
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH5FH1FFKWS9DD22X1XRC3/01M6EH5FH1RPKXJE3CFF6YC2PP.png--w480.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 35314,
+            "encodedBytes": 35606
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH5P37GFNS1QRFA6WFJN5R/01M6EH5P37MM6RCAH4GHTS3WXW.png--w480.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 35314,
+            "encodedBytes": 35606
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH4VWVAQGP846VCDXDTCSP/01M6EH4VWVHCR6C8KK04JH9MA3.png--w480.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 35314,
+            "encodedBytes": 35606
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH4EZBET1K7ZYHWFWK8EHN/01M6EH4EZBAVRPM379YKT981AQ.png--w480.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 35314,
+            "encodedBytes": 35606
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w480.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 35314,
+            "encodedBytes": 35606
+          }
+        ],
+        "totalImageBodyBytes": 282512,
+        "totalImageEncodedBytes": 284848,
+        "domImages": [
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH5WMMJ1BM0D5KGJAP8KZA/01M6EH5WMM4F0M6MR6D1WWAXX9.png--w480.webp",
+            "naturalWidth": 311,
+            "naturalHeight": 233,
+            "clientWidth": 325,
+            "clientHeight": 244
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH5P37GFNS1QRFA6WFJN5R/01M6EH5P37MM6RCAH4GHTS3WXW.png--w480.webp",
+            "naturalWidth": 311,
+            "naturalHeight": 233,
+            "clientWidth": 325,
+            "clientHeight": 244
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH5FH1FFKWS9DD22X1XRC3/01M6EH5FH1RPKXJE3CFF6YC2PP.png--w480.webp",
+            "naturalWidth": 311,
+            "naturalHeight": 233,
+            "clientWidth": 325,
+            "clientHeight": 244
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH58ZZ37DBMTW1W1WKMDD0/01M6EH58ZZAGYVQ7FH1QPZH5CP.png--w480.webp",
+            "naturalWidth": 311,
+            "naturalHeight": 233,
+            "clientWidth": 325,
+            "clientHeight": 244
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH52H25A3ZQV58MHVZ4XTE/01M6EH52H2YZ3NJ552FK72P4Z2.png--w480.webp",
+            "naturalWidth": 311,
+            "naturalHeight": 233,
+            "clientWidth": 325,
+            "clientHeight": 244
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH4VWVAQGP846VCDXDTCSP/01M6EH4VWVHCR6C8KK04JH9MA3.png--w480.webp",
+            "naturalWidth": 311,
+            "naturalHeight": 233,
+            "clientWidth": 325,
+            "clientHeight": 244
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH4EZBET1K7ZYHWFWK8EHN/01M6EH4EZBAVRPM379YKT981AQ.png--w480.webp",
+            "naturalWidth": 311,
+            "naturalHeight": 233,
+            "clientWidth": 325,
+            "clientHeight": 244
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w480.webp",
+            "naturalWidth": 311,
+            "naturalHeight": 233,
+            "clientWidth": 325,
+            "clientHeight": 244
+          }
+        ],
+        "runtimeErrors": [],
+        "overflow": 0
+      },
+      "reductionPercent": {
+        "responseBodyBytes": 82.13,
+        "browserEncodedBytes": 80.95
+      }
+    },
+    "home-desktop": {
+      "baseline": {
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "cards": 8,
+        "images": [
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ4TVYTYR7VKM583CYSFR/01M6EEQ4TVQP7K2MVWXN5CX4B9.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ4PP36EDTHXFK69DKJCX/01M6EEQ4PPDS448DMC1Q8835WF.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ4J3YY9A5VPAFNC12CVD/01M6EEQ4J3QP3RNR7WVT5Q25QJ.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ4D5KN77620MWZRMSZGQ/01M6EEQ4D524AMAJDDMJ8WBZCA.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ48SV04PZB1DVRPZQ0J8/01M6EEQ48SST2PBHWCN54W8KXS.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ449Y6JQA3VHDPR6ADWF/01M6EEQ449SC7EH9B1K04QWG84.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ3VMQQAPZ9PQ7VBB5NGW/01M6EEQ3VM63DQ9QW9JW18TXBF.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ32MKBHC84T3JCK1BG2Y/01M6EEQ32MPT4DVGR66NSJTCK3.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          }
+        ],
+        "totalImageBodyBytes": 1580536,
+        "totalImageEncodedBytes": 1495488,
+        "domImages": [
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ4TVYTYR7VKM583CYSFR/01M6EEQ4TVQP7K2MVWXN5CX4B9.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 246,
+            "clientHeight": 185
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ4PP36EDTHXFK69DKJCX/01M6EEQ4PPDS448DMC1Q8835WF.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 246,
+            "clientHeight": 185
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ4J3YY9A5VPAFNC12CVD/01M6EEQ4J3QP3RNR7WVT5Q25QJ.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 246,
+            "clientHeight": 185
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ4D5KN77620MWZRMSZGQ/01M6EEQ4D524AMAJDDMJ8WBZCA.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 246,
+            "clientHeight": 185
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ48SV04PZB1DVRPZQ0J8/01M6EEQ48SST2PBHWCN54W8KXS.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 246,
+            "clientHeight": 185
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ449Y6JQA3VHDPR6ADWF/01M6EEQ449SC7EH9B1K04QWG84.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 246,
+            "clientHeight": 185
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ3VMQQAPZ9PQ7VBB5NGW/01M6EEQ3VM63DQ9QW9JW18TXBF.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 246,
+            "clientHeight": 185
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ32MKBHC84T3JCK1BG2Y/01M6EEQ32MPT4DVGR66NSJTCK3.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 246,
+            "clientHeight": 185
+          }
+        ],
+        "runtimeErrors": [],
+        "overflow": 0
+      },
+      "final": {
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "cards": 8,
+        "images": [
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH5WMMJ1BM0D5KGJAP8KZA/01M6EH5WMM4F0M6MR6D1WWAXX9.png--w480.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 35314,
+            "encodedBytes": 35606
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH5P37GFNS1QRFA6WFJN5R/01M6EH5P37MM6RCAH4GHTS3WXW.png--w480.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 35314,
+            "encodedBytes": 35606
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH5FH1FFKWS9DD22X1XRC3/01M6EH5FH1RPKXJE3CFF6YC2PP.png--w480.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 35314,
+            "encodedBytes": 35606
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH52H25A3ZQV58MHVZ4XTE/01M6EH52H2YZ3NJ552FK72P4Z2.png--w480.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 35314,
+            "encodedBytes": 35606
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH4EZBET1K7ZYHWFWK8EHN/01M6EH4EZBAVRPM379YKT981AQ.png--w480.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 35314,
+            "encodedBytes": 35606
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH4VWVAQGP846VCDXDTCSP/01M6EH4VWVHCR6C8KK04JH9MA3.png--w480.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 35314,
+            "encodedBytes": 35606
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH58ZZ37DBMTW1W1WKMDD0/01M6EH58ZZAGYVQ7FH1QPZH5CP.png--w480.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 35314,
+            "encodedBytes": 35606
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w480.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 35314,
+            "encodedBytes": 35606
+          }
+        ],
+        "totalImageBodyBytes": 282512,
+        "totalImageEncodedBytes": 284848,
+        "domImages": [
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH5WMMJ1BM0D5KGJAP8KZA/01M6EH5WMM4F0M6MR6D1WWAXX9.png--w480.webp",
+            "naturalWidth": 280,
+            "naturalHeight": 210,
+            "clientWidth": 251,
+            "clientHeight": 188
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH5P37GFNS1QRFA6WFJN5R/01M6EH5P37MM6RCAH4GHTS3WXW.png--w480.webp",
+            "naturalWidth": 280,
+            "naturalHeight": 210,
+            "clientWidth": 251,
+            "clientHeight": 188
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH5FH1FFKWS9DD22X1XRC3/01M6EH5FH1RPKXJE3CFF6YC2PP.png--w480.webp",
+            "naturalWidth": 280,
+            "naturalHeight": 210,
+            "clientWidth": 251,
+            "clientHeight": 188
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH58ZZ37DBMTW1W1WKMDD0/01M6EH58ZZAGYVQ7FH1QPZH5CP.png--w480.webp",
+            "naturalWidth": 280,
+            "naturalHeight": 210,
+            "clientWidth": 251,
+            "clientHeight": 188
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH52H25A3ZQV58MHVZ4XTE/01M6EH52H2YZ3NJ552FK72P4Z2.png--w480.webp",
+            "naturalWidth": 280,
+            "naturalHeight": 210,
+            "clientWidth": 251,
+            "clientHeight": 188
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH4VWVAQGP846VCDXDTCSP/01M6EH4VWVHCR6C8KK04JH9MA3.png--w480.webp",
+            "naturalWidth": 280,
+            "naturalHeight": 210,
+            "clientWidth": 251,
+            "clientHeight": 188
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH4EZBET1K7ZYHWFWK8EHN/01M6EH4EZBAVRPM379YKT981AQ.png--w480.webp",
+            "naturalWidth": 280,
+            "naturalHeight": 210,
+            "clientWidth": 251,
+            "clientHeight": 188
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w480.webp",
+            "naturalWidth": 280,
+            "naturalHeight": 210,
+            "clientWidth": 251,
+            "clientHeight": 188
+          }
+        ],
+        "runtimeErrors": [],
+        "overflow": 0
+      },
+      "reductionPercent": {
+        "responseBodyBytes": 82.13,
+        "browserEncodedBytes": 80.95
+      }
+    },
+    "detail-mobile": {
+      "baseline": {
+        "viewport": {
+          "width": 375,
+          "height": 812
+        },
+        "cards": 0,
+        "images": [
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ32MKBHC84T3JCK1BG2Y/01M6EEQ32MPT4DVGR66NSJTCK3.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          }
+        ],
+        "totalImageBodyBytes": 197567,
+        "totalImageEncodedBytes": 186936,
+        "domImages": [
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ32MKBHC84T3JCK1BG2Y/01M6EEQ32MPT4DVGR66NSJTCK3.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 343,
+            "clientHeight": 257
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ32MKBHC84T3JCK1BG2Y/01M6EEQ32MPT4DVGR66NSJTCK3.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 72,
+            "clientHeight": 52
+          }
+        ],
+        "runtimeErrors": [],
+        "overflow": 0
+      },
+      "final": {
+        "viewport": {
+          "width": 375,
+          "height": 812
+        },
+        "cards": 0,
+        "images": [
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w480.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 35314,
+            "encodedBytes": 35606
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w240.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 10370,
+            "encodedBytes": 10662
+          }
+        ],
+        "totalImageBodyBytes": 45684,
+        "totalImageEncodedBytes": 46268,
+        "domImages": [
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w480.webp",
+            "naturalWidth": 343,
+            "naturalHeight": 257,
+            "clientWidth": 341,
+            "clientHeight": 255
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w240.webp",
+            "naturalWidth": 240,
+            "naturalHeight": 180,
+            "clientWidth": 70,
+            "clientHeight": 50
+          }
+        ],
+        "runtimeErrors": [],
+        "overflow": 0
+      },
+      "reductionPercent": {
+        "responseBodyBytes": 76.88,
+        "browserEncodedBytes": 75.25
+      }
+    },
+    "detail-desktop": {
+      "baseline": {
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "cards": 0,
+        "images": [
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EEQ32MKBHC84T3JCK1BG2Y/01M6EEQ32MPT4DVGR66NSJTCK3.png",
+            "status": 200,
+            "contentType": "image/png",
+            "bodyBytes": 197567,
+            "encodedBytes": 186936
+          }
+        ],
+        "totalImageBodyBytes": 197567,
+        "totalImageEncodedBytes": 186936,
+        "domImages": [
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ32MKBHC84T3JCK1BG2Y/01M6EEQ32MPT4DVGR66NSJTCK3.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 684,
+            "clientHeight": 513
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EEQ32MKBHC84T3JCK1BG2Y/01M6EEQ32MPT4DVGR66NSJTCK3.png",
+            "naturalWidth": 1200,
+            "naturalHeight": 900,
+            "clientWidth": 157,
+            "clientHeight": 116
+          }
+        ],
+        "runtimeErrors": [],
+        "overflow": 0
+      },
+      "final": {
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "cards": 0,
+        "images": [
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w960.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 139622,
+            "encodedBytes": 139931
+          },
+          {
+            "url": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w240.webp",
+            "status": 200,
+            "contentType": "image/webp",
+            "bodyBytes": 10370,
+            "encodedBytes": 10662
+          }
+        ],
+        "totalImageBodyBytes": 149992,
+        "totalImageEncodedBytes": 150593,
+        "domImages": [
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w960.webp",
+            "naturalWidth": 720,
+            "naturalHeight": 540,
+            "clientWidth": 677,
+            "clientHeight": 508
+          },
+          {
+            "currentSrc": "http://127.0.0.1:3000/media/01M6EH47XS2WF96C4J4WQ23CF6/01M6EH47XSJ2CYZ0NKJ1GM799N.png--w240.webp",
+            "naturalWidth": 240,
+            "naturalHeight": 180,
+            "clientWidth": 154,
+            "clientHeight": 113
+          }
+        ],
+        "runtimeErrors": [],
+        "overflow": 0
+      },
+      "reductionPercent": {
+        "responseBodyBytes": 24.08,
+        "browserEncodedBytes": 19.44
+      }
+    }
+  }
+}

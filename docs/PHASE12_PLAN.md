@@ -1,6 +1,6 @@
 # Phase 12 — Design System, UX Polish & Image Performance
 
-Status: approved; implementation in progress (2026-11-02).
+Status: implemented; final full-stack CI verification in progress (2026-11-02).
 
 ## Product goal
 
@@ -38,6 +38,16 @@ This is independent from visual styling and has its own measurements.
 - **Images:** on the same seeded routes/viewports, count actual transferred image bytes and intrinsic response dimensions. Card requests must select a derivative rather than the original when a derivative exists; gallery thumbnails must not fetch gallery originals. Report before/after bytes, selected URLs, and formats. Target at least 50% fewer Home image bytes at mobile DPR1 and no regression in broken-image handling.
 - **Lighthouse:** median mobile LCP ≤2.5s, CLS ≤0.1, TBT ≤200ms, accessibility ≥0.95 under the existing configuration. Preserve the established budget; do not relax thresholds to make the redesign pass.
 - **API/security:** image unit/integration tests cover derivative parsing, no upscaling, authorization, traversal rejection, fallback, and cleanup. Existing upload/body-limit/moderation suites stay intact.
+
+## Recorded measurements
+
+The committed evidence is tied to implementation commit `69435d1cd40bce4f5953e8a39c4ba1588bf18607` and the pre-Phase-12 production baseline:
+
+- `docs/performance/phase12-image-comparison.json` records the same eight-listing fixture, selected URLs, intrinsic dimensions, response formats, and both payload and browser-encoded bytes. Mobile Home falls from 1,580,536 to 282,512 response-body bytes (**82.13% lower**; **80.95%** by encoded bytes). Every measured Home card selects a real 480px WebP derivative, not its original PNG.
+- `docs/performance/phase12-client-js.json` records **95,017 bytes gzip on Home** and **99,474 on Detail**, each across three same-origin scripts and below the 100KB route ceiling.
+- `docs/performance/phase12-lighthouse.json` contains all six mobile reports. Median Home/Detail LCP is **2261.054/2337.034ms**, CLS **0.04039/0.00521**, TBT **75.5/71.5ms**, and accessibility **1.0/1.0**.
+
+These measurements are evidence, not a substitute for the independent full CI run; the phase remains open until that run passes on the final code.
 
 ## Verification and delivery order
 

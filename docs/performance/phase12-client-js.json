@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-11-02T16:25:28.421Z",
+  "measuredHead": "69435d1cd40bce4f5953e8a39c4ba1588bf18607",
+  "productBaseline": "c07cdd9ef7df304acf665008a57e79c6c2597224",
+  "baseURL": "http://127.0.0.1:3000",
+  "node": "v22.22.3",
+  "nuxt": "4.6.2",
+  "playwright": "1.64.1",
+  "gzipLevel": 9,
+  "home": {
+    "totalGzip": 95017,
+    "scripts": [
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/C2nx9NCg.js",
+        "rawBytes": 11597,
+        "gzipBytes": 4039
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/DAoa7Rfg.js",
+        "rawBytes": 228560,
+        "gzipBytes": 81265
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/DbVweeTV.js",
+        "rawBytes": 25267,
+        "gzipBytes": 9713
+      }
+    ]
+  },
+  "detail": {
+    "totalGzip": 99474,
+    "scripts": [
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/BebEMjzU.js",
+        "rawBytes": 28691,
+        "gzipBytes": 8496
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/DAoa7Rfg.js",
+        "rawBytes": 228560,
+        "gzipBytes": 81265
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/DbVweeTV.js",
+        "rawBytes": 25267,
+        "gzipBytes": 9713
+      }
+    ]
+  },
+  "fonts": {
+    "totalBytes": 80832,
+    "files": [
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/vazirmatn-arabic-wght-normal.Cafbb7Zc.woff2",
+        "bytes": 46308
+      },
+      {
+        "url": "http://127.0.0.1:3000/_nuxt/vazirmatn-latin-wght-normal.BFexNX-K.woff2",
+        "bytes": 34524
+      }
+    ]
+  }
+}
