@@ -620,7 +620,8 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
 
 .home__category-button {
   flex: none;
-  min-block-size: 44px;
+  /* Keep the measured target above 44px after subpixel browser rounding. */
+  min-block-size: 45px;
   padding-inline: var(--space-5);
   font: inherit;
   font-size: 0.875rem;
