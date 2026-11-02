@@ -2,26 +2,49 @@
   <article class="listing-card">
     <NuxtLink :to="`/listings/${listing.slug}`" class="listing-card__link">
       <span class="listing-card__media">
-        <img
-          v-if="listing.cover_image && !imageFailed"
-          ref="imageElement"
-          class="listing-card__image"
-          :src="listing.cover_image ?? undefined"
-          alt=""
-          width="480"
-          height="360"
-          :loading="imagePriority ? 'eager' : 'lazy'"
-          :fetchpriority="imagePriority ? 'high' : 'low'"
-          @error="markImageFailed"
-        >
+        <picture v-if="listing.cover_image && !imageFailed" class="listing-card__picture">
+          <source
+            v-if="listing.cover_webp_srcset"
+            type="image/webp"
+            :srcset="listing.cover_webp_srcset"
+            :sizes="imageSizes"
+          >
+          <img
+            ref="imageElement"
+            class="listing-card__image"
+            :src="listing.cover_image ?? undefined"
+            :srcset="listing.cover_srcset || undefined"
+            :sizes="imageSizes"
+            alt=""
+            width="480"
+            height="360"
+            :loading="imagePriority ? 'eager' : 'lazy'"
+            :fetchpriority="imagePriority ? 'high' : 'low'"
+            decoding="async"
+            @error="markImageFailed"
+          >
+        </picture>
         <span v-else class="listing-card__placeholder" aria-hidden="true">
-          {{ imageFailed ? 'تصویر در دسترس نیست' : 'بدون تصویر' }}
+          <span class="listing-card__placeholder-mark" />
+          <span>{{ imageFailed ? 'تصویر در دسترس نیست' : 'بدون تصویر' }}</span>
+        </span>
+        <span
+          v-if="listing.rating_count > 0"
+          class="listing-card__rating"
+          aria-hidden="true"
+        >
+          <span class="listing-card__rating-star">★</span>
+          {{ formatNumber(Math.round(listing.rating_average * 10) / 10) }}
         </span>
       </span>
       <h3 class="listing-card__title">{{ listing.title }}</h3>
     </NuxtLink>
     <p class="listing-card__price">{{ formatPrice(listing.price_toman, listing.price_type) }}</p>
-    <p class="listing-card__meta">{{ listing.city }} · {{ listing.category }}</p>
+    <p class="listing-card__meta">
+      <span>{{ listing.city }}</span>
+      <span aria-hidden="true">·</span>
+      <span>{{ listing.category }}</span>
+    </p>
     <div v-if="$slots.actions" class="listing-card__actions">
       <slot name="actions" />
     </div>
@@ -38,6 +61,7 @@ const props = withDefaults(defineProps<{
   imagePriority: false,
 })
 
+const imageSizes = LISTING_CARD_IMAGE_SIZES
 const imageFailed = ref(false)
 const imageElement = ref<HTMLImageElement | null>(null)
 watch(() => props.listing.public_id, () => {

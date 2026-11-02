@@ -439,10 +439,12 @@ async function loadMore(): Promise<void> {
   flex-direction: column;
   align-items: stretch;
   gap: var(--space-4);
-  max-inline-size: 70ch;
   min-inline-size: 0;
-  padding-block-start: var(--space-6);
-  border-block-start: 1px solid var(--color-border);
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-xs);
 }
 
 .listing-comments__heading,
@@ -471,7 +473,10 @@ async function loadMore(): Promise<void> {
 .listing-comments__form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-card);
 }
 
 .listing-comments__form label {
@@ -514,7 +519,7 @@ async function loadMore(): Promise<void> {
   gap: var(--space-3);
   min-inline-size: 0;
   padding: var(--space-4);
-  background: var(--color-surface);
+  background: var(--color-surface-muted);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
 }

@@ -3,8 +3,14 @@
     <header class="shell__header">
       <NuxtLink to="/" class="shell__brand">
         <BrandMascot />
-        <span>شبدر</span>
+        <span class="shell__brand-copy">
+          <span>شبدر</span>
+          <small class="shell__brand-tagline" aria-hidden="true">بازارچهٔ نزدیک شما</small>
+        </span>
       </NuxtLink>
+      <p class="shell__sidebar-note">
+        از دل محله، برای آدم‌های خودمان؛ کشف کنید، گفت‌وگو کنید و آگهی بگذارید.
+      </p>
       <div class="shell__theme">
         <AppThemeToggle />
       </div>

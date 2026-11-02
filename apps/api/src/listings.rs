@@ -695,6 +695,13 @@ pub(crate) fn card_from_row(row: &sqlx::mysql::MySqlRow) -> Result<serde_json::V
         serde_json::json!(sum as f64 / count as f64)
     };
     let cover: Option<String> = row.try_get("cover").map_err(|_| ApiError::Internal)?;
+    let cover_width: Option<u16> = row
+        .try_get("cover_width")
+        .map_err(|_| ApiError::Internal)?;
+    let (cover_srcset, cover_webp_srcset) = match (cover.as_deref(), cover_width) {
+        (Some(key), Some(width)) => crate::listing_images::responsive_srcsets(key, width),
+        _ => (String::new(), String::new()),
+    };
     let published_at: chrono::DateTime<Utc> = row
         .try_get("published_at")
         .map_err(|_| ApiError::Internal)?;
@@ -708,6 +715,8 @@ pub(crate) fn card_from_row(row: &sqlx::mysql::MySqlRow) -> Result<serde_json::V
         "province": row.try_get::<String, _>("province").map_err(|_| ApiError::Internal)?,
         "category": row.try_get::<String, _>("category").map_err(|_| ApiError::Internal)?,
         "cover_image": cover.map(|k| format!("/media/{k}")),
+        "cover_srcset": cover_srcset,
+        "cover_webp_srcset": cover_webp_srcset,
         "rating_average": average,
         "rating_count": count,
         "published_at": published_at.to_rfc3339(),
@@ -890,6 +899,8 @@ pub async fn feed(
          p.name_fa AS province, cat.name_fa AS category, \
          (SELECT storage_key FROM listing_images WHERE listing_id = l.id \
           ORDER BY sort_order LIMIT 1) AS cover, \
+         (SELECT width FROM listing_images WHERE listing_id = l.id \
+          ORDER BY sort_order LIMIT 1) AS cover_width, \
          ({}) AS k1, ({}) AS k2, ({}) AS k3 \
          FROM listings l JOIN cities c ON c.id = l.city_id \
          JOIN provinces p ON p.id = c.province_id \
@@ -1054,7 +1065,8 @@ pub async fn detail(
         None => None,
     };
     let images = sqlx::query(
-        "SELECT storage_key, alt_text FROM listing_images WHERE listing_id = ? ORDER BY sort_order",
+        "SELECT storage_key, alt_text, width, height FROM listing_images \
+         WHERE listing_id = ? ORDER BY sort_order",
     )
     .bind(id)
     .fetch_all(pool)
@@ -1065,7 +1077,19 @@ pub async fn detail(
         .map(|img| {
             let key: String = img.try_get("storage_key").map_err(|_| ApiError::Internal)?;
             let alt: Option<String> = img.try_get("alt_text").map_err(|_| ApiError::Internal)?;
-            Ok(serde_json::json!({ "url": format!("/media/{key}"), "alt_text": alt }))
+            let width: Option<u16> = img.try_get("width").map_err(|_| ApiError::Internal)?;
+            let height: Option<u16> = img.try_get("height").map_err(|_| ApiError::Internal)?;
+            let (srcset, webp_srcset) = width
+                .map(|width| crate::listing_images::responsive_srcsets(&key, width))
+                .unwrap_or_default();
+            Ok(serde_json::json!({
+                "url": format!("/media/{key}"),
+                "alt_text": alt,
+                "width": width,
+                "height": height,
+                "srcset": srcset,
+                "webp_srcset": webp_srcset,
+            }))
         })
         .collect::<Result<_, ApiError>>()?;
     let sum: u32 = row.try_get("rating_sum").map_err(|_| ApiError::Internal)?;

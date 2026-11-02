@@ -20,7 +20,7 @@
 
       <form class="post__form" @submit.prevent="save">
         <fieldset class="post__section">
-          <legend>مشخصات آگهی</legend>
+          <legend><span class="post__step" aria-hidden="true">۱</span>مشخصات آگهی</legend>
           <div class="post__fields">
             <AppField id="post-category" label="دسته" :error="fieldErrors.category_id">
               <template #default="{ id, describedBy, ariaInvalid }">
@@ -97,7 +97,7 @@
         </fieldset>
 
         <fieldset class="post__section">
-          <legend>قیمت</legend>
+          <legend><span class="post__step" aria-hidden="true">۲</span>قیمت</legend>
           <div class="post__price-options">
             <label class="post__price-option">
               <input v-model="form.price_type" type="radio" name="price_type" value="fixed">
@@ -135,7 +135,18 @@
         </fieldset>
 
         <fieldset class="post__section">
-          <legend>تصاویر</legend>
+          <legend><span class="post__step" aria-hidden="true">۳</span>تصاویر</legend>
+          <div class="post__upload-guide">
+            <div>
+              <strong>عکس‌های واضح، انتخاب آسان‌تر</strong>
+              <p>در نور روز و از زاویه‌های مختلف عکس بگیرید؛ جزئیات مهم و وضعیت واقعی کالا را نشان دهید.</p>
+            </div>
+            <ul aria-label="راهنمای تصاویر">
+              <li>تا ۸ تصویر</li>
+              <li>JPEG، PNG یا WebP ثابت</li>
+              <li>تصویر نخست، کاور آگهی می‌شود</li>
+            </ul>
+          </div>
           <AppField
             id="post-images"
             label="تصاویر آگهی"
@@ -380,7 +391,7 @@ async function submitForReview(): Promise<void> {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
-  max-inline-size: 52rem;
+  max-inline-size: 62rem;
   margin-inline: auto;
 }
 
@@ -389,7 +400,15 @@ async function submitForReview(): Promise<void> {
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-4);
+  padding: var(--space-6);
+  color: var(--color-hero-text);
+  background:
+    radial-gradient(circle at 10% 0%, rgb(110 231 183 / 0.14), transparent 36%),
+    linear-gradient(135deg, var(--color-hero), var(--color-hero-deep));
+  border: 1px solid var(--color-hero-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-card);
 }
 
 .post__header h1,
@@ -398,19 +417,21 @@ async function submitForReview(): Promise<void> {
 }
 
 .post__header h1 {
-  font-size: 1.75rem;
+  font-size: clamp(1.75rem, 4vw, 2.4rem);
+  line-height: 1.5;
 }
 
 .post__header > div > p {
-  color: var(--color-text-muted);
+  margin-block-start: var(--space-2);
+  color: var(--color-hero-muted);
 }
 
 .post__state {
   padding: var(--space-2) var(--space-3);
-  font-size: 0.875rem;
-  font-weight: 600;
+  font-size: 0.8125rem;
+  font-weight: 650;
   border: 1px solid currentColor;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-pill);
 }
 
 .post__state[data-state='editing'] {
@@ -435,46 +456,139 @@ async function submitForReview(): Promise<void> {
   gap: var(--space-4);
 }
 
+.post__form {
+  gap: var(--space-5);
+}
+
 .post__section {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-5);
   min-inline-size: 0;
   margin: 0;
-  padding: var(--space-4);
+  padding: var(--space-5);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
+  box-shadow: var(--shadow-xs);
 }
 
 .post__section > legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   padding-inline: var(--space-2);
-  font-weight: 700;
+  font-size: 1.0625rem;
+  font-weight: 720;
+}
+
+.post__step {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 30px;
+  block-size: 30px;
+  color: var(--color-on-primary);
+  font-size: 0.8125rem;
+  background: var(--color-primary);
+  border-radius: 10px;
 }
 
 .post__price-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
 }
 
 .post__price-option {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-1);
-  min-block-size: 44px;
+  min-block-size: 52px;
+  padding-inline: var(--space-2);
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.post__price-option:has(input:checked) {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface));
+  border-color: var(--color-primary);
 }
 
 .post__price-option input {
+  flex: 0 0 44px;
   inline-size: 44px;
   block-size: 44px;
   margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.post__upload-guide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-accent-soft);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 25%, var(--color-border));
+  border-radius: var(--radius-card);
+}
+
+.post__upload-guide strong {
+  color: var(--color-accent);
+}
+
+.post__upload-guide p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  line-height: 1.9;
+}
+
+.post__upload-guide ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  font-size: 0.75rem;
+  list-style: none;
+}
+
+.post__upload-guide li {
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+}
+
+.post__section input[type='file'] {
+  min-block-size: 60px;
+  padding: var(--space-2);
+  background: var(--color-surface-muted);
+  border-style: dashed;
+  cursor: pointer;
+}
+
+.post__section input[type='file']::file-selector-button {
+  min-block-size: 44px;
+  margin-inline-end: var(--space-3);
+  padding-inline: var(--space-4);
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
 }
 
 .post__previews {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(14rem, 100%), 1fr));
-  gap: var(--space-3);
+  gap: var(--space-4);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -484,7 +598,8 @@ async function submitForReview(): Promise<void> {
   min-inline-size: 0;
   overflow: hidden;
   background: var(--color-surface-muted);
-  border-radius: var(--radius-control);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
 }
 
 .post__preview img {
@@ -499,12 +614,52 @@ async function submitForReview(): Promise<void> {
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-3);
+  font-size: 0.8125rem;
   overflow-wrap: anywhere;
 }
 
 .post__actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+
+@media (min-width: 768px) {
+  .post__header {
+    padding: var(--space-8);
+  }
+
+  .post__section {
+    padding: var(--space-6);
+  }
+
+  .post__fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .post__fields > :nth-child(n + 3) {
+    grid-column: 1 / -1;
+  }
+
+  .post__upload-guide {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .post__upload-guide > div {
+    max-inline-size: 38rem;
+  }
+
+  .post__upload-guide ul {
+    max-inline-size: 15rem;
+    justify-content: flex-end;
+  }
 }
 </style>

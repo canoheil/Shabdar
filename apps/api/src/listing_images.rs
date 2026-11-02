@@ -7,7 +7,10 @@
 
 use std::io::Cursor;
 
-use image::{GenericImageView, ImageReader};
+use image::codecs::jpeg::JpegEncoder;
+use image::codecs::webp::WebPEncoder;
+use image::imageops::FilterType;
+use image::{DynamicImage, ExtendedColorType, GenericImageView, ImageEncoder, ImageReader};
 use serde::Serialize;
 use sqlx::{MySqlPool, Row};
 use tokio::io::AsyncReadExt;
@@ -17,6 +20,7 @@ use crate::error::ApiError;
 const MAX_IMAGE_DIMENSION: u32 = 8_000;
 const MAX_IMAGE_PIXELS: u64 = 16_000_000;
 const MAX_DECODER_ALLOCATION: u64 = 80 * 1024 * 1024;
+const DERIVATIVE_WIDTHS: [u32; 3] = [240, 480, 960];
 
 /// What the API returns per image (`url` is served from `MEDIA_DIR`).
 #[derive(Serialize)]
@@ -27,6 +31,8 @@ pub struct ImageOut {
     pub sort_order: u8,
     pub width: u16,
     pub height: u16,
+    pub srcset: String,
+    pub webp_srcset: String,
 }
 
 /// File signature → extension. Lengths are the shortest prefixes that pin
@@ -66,6 +72,7 @@ struct ValidatedImage {
     extension: &'static str,
     width: u16,
     height: u16,
+    decoded: DynamicImage,
 }
 
 fn image_validation(reason: &str) -> ApiError {
@@ -183,7 +190,183 @@ fn decode_image(bytes: &[u8]) -> Result<ValidatedImage, ImageRejection> {
         extension,
         width: u16::try_from(width).map_err(|_| ImageRejection::TooLarge)?,
         height: u16::try_from(height).map_err(|_| ImageRejection::TooLarge)?,
+        decoded,
     })
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DerivativeFormat {
+    Jpeg,
+    Webp,
+}
+
+impl DerivativeFormat {
+    fn extension(self) -> &'static str {
+        match self {
+            Self::Jpeg => "jpg",
+            Self::Webp => "webp",
+        }
+    }
+
+    fn content_type(self) -> &'static str {
+        match self {
+            Self::Jpeg => "image/jpeg",
+            Self::Webp => "image/webp",
+        }
+    }
+}
+
+struct GeneratedDerivative {
+    width: u32,
+    format: DerivativeFormat,
+    bytes: Vec<u8>,
+}
+
+/// The original extension is retained inside a derivative key so the parent
+/// row remains unambiguous: `name.png--w480.webp` belongs to `name.png`.
+fn derivative_key(original_key: &str, width: u32, format: DerivativeFormat) -> String {
+    format!("{original_key}--w{width}.{}", format.extension())
+}
+
+/// Lossless WebP is useful for large PNG/illustration sources, but can make
+/// photographic JPEGs larger. Keep the modern source where it has a credible
+/// byte-saving path and always retain a high-quality JPEG fallback.
+fn webp_is_justified(extension: &str, width: u16) -> bool {
+    extension == "png" && width > DERIVATIVE_WIDTHS[DERIVATIVE_WIDTHS.len() - 1]
+}
+
+/// Additive API metadata. No derivative is ever wider than its source; the
+/// original remains the largest fallback candidate.
+pub fn responsive_srcsets(storage_key: &str, width: u16) -> (String, String) {
+    let extension = storage_key
+        .rsplit_once('.')
+        .map(|(_, extension)| extension)
+        .unwrap_or_default();
+    let mut fallback = DERIVATIVE_WIDTHS
+        .iter()
+        .copied()
+        .filter(|candidate| *candidate < u32::from(width))
+        .map(|candidate| {
+            format!(
+                "/media/{} {candidate}w",
+                derivative_key(storage_key, candidate, DerivativeFormat::Jpeg)
+            )
+        })
+        .collect::<Vec<_>>();
+    fallback.push(format!("/media/{storage_key} {width}w"));
+    let webp = if webp_is_justified(extension, width) {
+        DERIVATIVE_WIDTHS
+            .iter()
+            .copied()
+            .filter(|candidate| *candidate < u32::from(width))
+            .map(|candidate| {
+                format!(
+                    "/media/{} {candidate}w",
+                    derivative_key(storage_key, candidate, DerivativeFormat::Webp)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    } else {
+        String::new()
+    };
+    (fallback.join(", "), webp)
+}
+
+fn encode_jpeg(image: &DynamicImage) -> image::ImageResult<Vec<u8>> {
+    let rgba = image.to_rgba8();
+    let (width, height) = rgba.dimensions();
+    let mut rgb = image::RgbImage::new(width, height);
+    // Composite transparency over white instead of letting a JPEG conversion
+    // turn transparent PNG pixels black.
+    for (x, y, pixel) in rgba.enumerate_pixels() {
+        let alpha = u16::from(pixel[3]);
+        let mut channels = [255_u8; 3];
+        for (channel, output) in channels.iter_mut().enumerate() {
+            let foreground = u16::from(pixel[channel]);
+            *output = ((foreground * alpha + 255 * (255 - alpha) + 127) / 255) as u8;
+        }
+        rgb.put_pixel(x, y, image::Rgb(channels));
+    }
+    let mut bytes = Vec::new();
+    JpegEncoder::new_with_quality(&mut bytes, 82).write_image(
+        rgb.as_raw(),
+        width,
+        height,
+        ExtendedColorType::Rgb8,
+    )?;
+    Ok(bytes)
+}
+
+fn encode_webp(image: &DynamicImage) -> image::ImageResult<Vec<u8>> {
+    let rgba = image.to_rgba8();
+    let (width, height) = rgba.dimensions();
+    let mut bytes = Vec::new();
+    WebPEncoder::new_lossless(&mut bytes).write_image(
+        rgba.as_raw(),
+        width,
+        height,
+        ExtendedColorType::Rgba8,
+    )?;
+    Ok(bytes)
+}
+
+fn generate_derivative(
+    decoded: &DynamicImage,
+    width: u32,
+    format: DerivativeFormat,
+) -> image::ImageResult<GeneratedDerivative> {
+    let resized = decoded.resize(width, u32::MAX, FilterType::Lanczos3);
+    let bytes = match format {
+        DerivativeFormat::Jpeg => encode_jpeg(&resized)?,
+        DerivativeFormat::Webp => encode_webp(&resized)?,
+    };
+    Ok(GeneratedDerivative {
+        width,
+        format,
+        bytes,
+    })
+}
+
+fn generate_derivatives(
+    validated: &ValidatedImage,
+) -> image::ImageResult<Vec<GeneratedDerivative>> {
+    let mut generated = Vec::new();
+    for width in DERIVATIVE_WIDTHS {
+        if width >= u32::from(validated.width) {
+            continue;
+        }
+        generated.push(generate_derivative(
+            &validated.decoded,
+            width,
+            DerivativeFormat::Jpeg,
+        )?);
+        if webp_is_justified(validated.extension, validated.width) {
+            generated.push(generate_derivative(
+                &validated.decoded,
+                width,
+                DerivativeFormat::Webp,
+            )?);
+        }
+    }
+    Ok(generated)
+}
+
+fn derivative_is_allowed(
+    source_extension: &str,
+    source_width: u16,
+    width: u32,
+    format: DerivativeFormat,
+) -> bool {
+    width < u32::from(source_width)
+        && DERIVATIVE_WIDTHS.contains(&width)
+        && (format != DerivativeFormat::Webp || webp_is_justified(source_extension, source_width))
+}
+
+async fn cleanup_files(paths: &[std::path::PathBuf]) {
+    for path in paths {
+        let _ = tokio::fs::remove_file(path).await;
+    }
 }
 
 /// Revalidate stored files at a human review boundary. Reads are capped even
@@ -310,24 +493,47 @@ pub async fn add_image(
     if bytes.len() as u64 > cfg.max_image_bytes {
         return Err(image_validation("too_large"));
     }
-    let (bytes, validated) = tokio::task::spawn_blocking(move || {
-        let validated = decode_image(&bytes)?;
-        Ok::<_, ImageRejection>((bytes, validated))
+    let (bytes, extension, width, height, derivatives) = tokio::task::spawn_blocking(move || {
+        let validated = decode_image(&bytes).map_err(|error| image_validation(error.reason()))?;
+        let derivatives = generate_derivatives(&validated).map_err(|_| ApiError::Internal)?;
+        Ok::<_, ApiError>((
+            bytes,
+            validated.extension,
+            validated.width,
+            validated.height,
+            derivatives,
+        ))
     })
     .await
-    .map_err(|_| ApiError::Internal)?
-    .map_err(|error| image_validation(error.reason()))?;
+    .map_err(|_| ApiError::Internal)??;
 
-    let key = storage_key(validated.extension);
+    let key = storage_key(extension);
     let path = std::path::Path::new(&cfg.media_dir).join(&key);
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent)
             .await
             .map_err(|_| ApiError::Internal)?;
     }
-    tokio::fs::write(&path, bytes)
-        .await
-        .map_err(|_| ApiError::Internal)?;
+    let mut written_paths = Vec::with_capacity(derivatives.len() + 1);
+    if tokio::fs::write(&path, bytes).await.is_err() {
+        return Err(ApiError::Internal);
+    }
+    written_paths.push(path.clone());
+    for derivative in &derivatives {
+        let derivative_path = std::path::Path::new(&cfg.media_dir).join(derivative_key(
+            &key,
+            derivative.width,
+            derivative.format,
+        ));
+        if tokio::fs::write(&derivative_path, &derivative.bytes)
+            .await
+            .is_err()
+        {
+            cleanup_files(&written_paths).await;
+            return Err(ApiError::Internal);
+        }
+        written_paths.push(derivative_path);
+    }
 
     let outcome = async {
         let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
@@ -363,8 +569,8 @@ pub async fn add_image(
         .bind(listing_id)
         .bind(&key)
         .bind(order)
-        .bind(validated.width)
-        .bind(validated.height)
+        .bind(width)
+        .bind(height)
         .bind(now)
         .execute(&mut *tx)
         .await
@@ -377,17 +583,20 @@ pub async fn add_image(
     let (result, order) = match outcome {
         Ok(result) => result,
         Err(error) => {
-            let _ = tokio::fs::remove_file(&path).await;
+            cleanup_files(&written_paths).await;
             return Err(error);
         }
     };
+    let (srcset, webp_srcset) = responsive_srcsets(&key, width);
     Ok(ImageOut {
         id: result.last_insert_id(),
         url: format!("/media/{key}"),
         storage_key: key,
         sort_order: order,
-        width: validated.width,
-        height: validated.height,
+        width,
+        height,
+        srcset,
+        webp_srcset,
     })
 }
 
@@ -425,7 +634,16 @@ pub async fn remove_image(
     }
     clear_review_in_tx(&mut tx, listing_id).await?;
     tx.commit().await.map_err(|_| ApiError::Internal)?;
-    let _ = tokio::fs::remove_file(std::path::Path::new(&cfg.media_dir).join(&key)).await;
+    let media_dir = std::path::Path::new(&cfg.media_dir);
+    let _ = tokio::fs::remove_file(media_dir.join(&key)).await;
+    for width in DERIVATIVE_WIDTHS {
+        for format in [DerivativeFormat::Jpeg, DerivativeFormat::Webp] {
+            let _ = tokio::fs::remove_file(
+                media_dir.join(derivative_key(&key, width, format)),
+            )
+            .await;
+        }
+    }
     Ok(())
 }
 
@@ -479,25 +697,79 @@ pub async fn set_order(
     Ok(())
 }
 
-/// Validates a `/media/<key>` path: exactly `<26-char ULID>/<26-char ULID>`
-/// with an image extension. Anything else → None (404 — never a filesystem
-/// read). The charset makes traversal impossible: no dots except the one
-/// before the extension, no slashes except the separator.
-fn valid_media_key(key: &str) -> Option<&'static str> {
-    let (dir, file) = key.split_once('/')?;
-    if dir.len() != 26 || !is_crockford(dir) {
-        return None;
-    }
-    let (name, ext) = file.rsplit_once('.')?;
-    if name.len() != 26 || !is_crockford(name) {
-        return None;
-    }
-    match ext {
+fn content_type_for_extension(extension: &str) -> Option<&'static str> {
+    match extension {
         "jpg" => Some("image/jpeg"),
         "png" => Some("image/png"),
         "webp" => Some("image/webp"),
         _ => None,
     }
+}
+
+/// Validate the original `<ULID>/<ULID>.<ext>` shape and return its extension.
+fn valid_original_file(dir: &str, file: &str) -> Option<&'static str> {
+    if dir.len() != 26 || !is_crockford(dir) {
+        return None;
+    }
+    let (name, extension) = file.rsplit_once('.')?;
+    if name.len() != 26 || !is_crockford(name) {
+        return None;
+    }
+    match extension {
+        "jpg" => Some("jpg"),
+        "png" => Some("png"),
+        "webp" => Some("webp"),
+        _ => None,
+    }
+}
+
+struct MediaRequest {
+    original_key: String,
+    source_extension: &'static str,
+    content_type: &'static str,
+    derivative: Option<(u32, DerivativeFormat)>,
+}
+
+/// Original and derivative keys share the same strict ULID grammar. Only the
+/// three server-approved widths and JPEG/WebP response formats can reach disk.
+fn parse_media_key(key: &str) -> Option<MediaRequest> {
+    let (dir, file) = key.split_once('/')?;
+    if let Some(source_extension) = valid_original_file(dir, file) {
+        return Some(MediaRequest {
+            original_key: key.to_string(),
+            source_extension,
+            content_type: content_type_for_extension(source_extension)?,
+            derivative: None,
+        });
+    }
+
+    let (derivative_stem, response_extension) = file.rsplit_once('.')?;
+    let format = match response_extension {
+        "jpg" => DerivativeFormat::Jpeg,
+        "webp" => DerivativeFormat::Webp,
+        _ => return None,
+    };
+    let (original_file, raw_width) = derivative_stem.rsplit_once("--w")?;
+    let source_extension = valid_original_file(dir, original_file)?;
+    let width = raw_width.parse::<u32>().ok()?;
+    if !DERIVATIVE_WIDTHS.contains(&width) {
+        return None;
+    }
+    Some(MediaRequest {
+        original_key: format!("{dir}/{original_file}"),
+        source_extension,
+        content_type: format.content_type(),
+        derivative: Some((width, format)),
+    })
+}
+
+/// Stored rows always point to originals, never to derived cache files.
+fn valid_media_key(key: &str) -> Option<&'static str> {
+    let request = parse_media_key(key)?;
+    if request.derivative.is_some() {
+        return None;
+    }
+    Some(request.content_type)
 }
 
 fn is_crockford(s: &str) -> bool {
@@ -507,23 +779,23 @@ fn is_crockford(s: &str) -> bool {
     })
 }
 
-/// Reads one stored file for `GET /media/…`. The parent listing is resolved
-/// before disk access: reviewed active images are public; every other image
-/// is owner/admin only. Missing, unknown, and unauthorized keys are all 404.
+/// Reads one stored original or derivative for `GET /media/…`. Authorization
+/// always resolves the original parent row before disk access. A missing
+/// derivative for legacy content is generated once from the bounded original.
 pub async fn read_media(
     pool: &MySqlPool,
     cfg: &crate::config::Config,
     key: &str,
     viewer: Option<(u64, bool)>,
 ) -> Result<(Vec<u8>, &'static str, bool), ApiError> {
-    let content_type = valid_media_key(key).ok_or(ApiError::NotFound)?;
+    let request = parse_media_key(key).ok_or(ApiError::NotFound)?;
     let row = sqlx::query(
-        "SELECT l.seller_id, l.status, l.deleted_at, \
+        "SELECT l.seller_id, l.status, l.deleted_at, i.width, \
          l.image_reviewed_at IS NOT NULL AS image_reviewed \
          FROM listing_images i JOIN listings l ON l.id = i.listing_id \
          WHERE i.storage_key = ?",
     )
-    .bind(key)
+    .bind(&request.original_key)
     .fetch_optional(pool)
     .await
     .map_err(|_| ApiError::Internal)?
@@ -542,10 +814,65 @@ pub async fn read_media(
             return Err(ApiError::NotFound);
         }
     }
-    let bytes = tokio::fs::read(std::path::Path::new(&cfg.media_dir).join(key))
-        .await
-        .map_err(|_| ApiError::NotFound)?;
-    Ok((bytes, content_type, public))
+
+    let source_width: Option<u16> = row.try_get("width").map_err(|_| ApiError::Internal)?;
+    if let (Some(width), Some((derivative_width, format))) = (source_width, request.derivative) {
+        if !derivative_is_allowed(
+            request.source_extension,
+            width,
+            derivative_width,
+            format,
+        ) {
+            return Err(ApiError::NotFound);
+        }
+    }
+
+    let path = std::path::Path::new(&cfg.media_dir).join(key);
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => return Ok((bytes, request.content_type, public)),
+        Err(_) if request.derivative.is_none() => return Err(ApiError::NotFound),
+        Err(_) => {}
+    }
+
+    let (derivative_width, format) = request.derivative.ok_or(ApiError::NotFound)?;
+    let original_bytes = tokio::fs::read(
+        std::path::Path::new(&cfg.media_dir).join(&request.original_key),
+    )
+    .await
+    .map_err(|_| ApiError::NotFound)?;
+    let source_extension = request.source_extension;
+    let bytes = tokio::task::spawn_blocking(move || {
+        let validated = decode_image(&original_bytes).map_err(|_| ApiError::NotFound)?;
+        if !derivative_is_allowed(
+            source_extension,
+            validated.width,
+            derivative_width,
+            format,
+        ) {
+            return Err(ApiError::NotFound);
+        }
+        generate_derivative(&validated.decoded, derivative_width, format)
+            .map(|generated| generated.bytes)
+            .map_err(|_| ApiError::Internal)
+    })
+    .await
+    .map_err(|_| ApiError::Internal)??;
+
+    // A unique temporary sibling plus atomic rename prevents concurrent
+    // first-hit requests from exposing a partially written derivative.
+    let temporary_path = std::path::PathBuf::from(format!(
+        "{}.{}.tmp",
+        path.to_string_lossy(),
+        ulid::Ulid::new()
+    ));
+    if tokio::fs::write(&temporary_path, &bytes).await.is_err() {
+        return Err(ApiError::Internal);
+    }
+    if tokio::fs::rename(&temporary_path, &path).await.is_err() {
+        let _ = tokio::fs::remove_file(&temporary_path).await;
+        return Err(ApiError::Internal);
+    }
+    Ok((bytes, request.content_type, public))
 }
 
 #[cfg(test)]
@@ -573,6 +900,61 @@ mod tests {
             !key.contains("..") && !key.starts_with('/'),
             "no traversal possible: {key}"
         );
+    }
+
+    #[test]
+    fn derivative_keys_resolve_only_their_original_and_approved_widths() {
+        let original = storage_key("png");
+        let derivative = derivative_key(&original, 480, DerivativeFormat::Webp);
+        let parsed = parse_media_key(&derivative).expect("valid derivative key");
+        assert_eq!(parsed.original_key, original);
+        assert_eq!(parsed.source_extension, "png");
+        assert_eq!(parsed.content_type, "image/webp");
+        assert_eq!(parsed.derivative, Some((480, DerivativeFormat::Webp)));
+        assert!(valid_media_key(&derivative).is_none());
+
+        assert!(parse_media_key(&derivative_key(&original, 481, DerivativeFormat::Jpeg)).is_none());
+        assert!(parse_media_key(&derivative.replace("--w480", "/--w480")).is_none());
+        assert!(parse_media_key("../--w480.webp").is_none());
+    }
+
+    #[test]
+    fn responsive_sources_never_upscale_and_webp_is_selective() {
+        let original = storage_key("png");
+        let (fallback, webp) = responsive_srcsets(&original, 1200);
+        for width in DERIVATIVE_WIDTHS {
+            assert!(fallback.contains(&format!("--w{width}.jpg {width}w")));
+            assert!(webp.contains(&format!("--w{width}.webp {width}w")));
+        }
+        assert!(fallback.contains(&format!("/media/{original} 1200w")));
+
+        let (small_fallback, small_webp) = responsive_srcsets(&original, 480);
+        assert!(small_fallback.contains("--w240.jpg 240w"));
+        assert!(!small_fallback.contains("--w480.jpg"));
+        assert!(!small_fallback.contains("--w960.jpg"));
+        assert!(small_fallback.contains(&format!("/media/{original} 480w")));
+        assert!(small_webp.is_empty());
+
+        let jpeg = storage_key("jpg");
+        assert!(responsive_srcsets(&jpeg, 1200).1.is_empty());
+    }
+
+    #[test]
+    fn generated_derivatives_have_real_dimensions_and_decodable_formats() {
+        let validated = ValidatedImage {
+            extension: "png",
+            width: 1200,
+            height: 600,
+            decoded: DynamicImage::new_rgba8(1200, 600),
+        };
+        let generated = generate_derivatives(&validated).expect("encode derivatives");
+        assert_eq!(generated.len(), 6);
+        for derivative in generated {
+            let decoded = image::load_from_memory(&derivative.bytes).expect("decodable derivative");
+            assert_eq!(decoded.width(), derivative.width);
+            assert_eq!(decoded.height(), derivative.width / 2);
+            assert!(DERIVATIVE_WIDTHS.contains(&decoded.width()));
+        }
     }
 
     #[test]

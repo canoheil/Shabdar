@@ -105,6 +105,8 @@ pub async fn list(
          p.name_fa AS province, cat.name_fa AS category, \
          (SELECT storage_key FROM listing_images WHERE listing_id = l.id \
           ORDER BY sort_order LIMIT 1) AS cover, \
+         (SELECT width FROM listing_images WHERE listing_id = l.id \
+          ORDER BY sort_order LIMIT 1) AS cover_width, \
          f.created_at AS saved_at, f.listing_id AS favorite_listing_id \
          FROM favorites f JOIN listings l ON l.id = f.listing_id \
          JOIN cities c ON c.id = l.city_id \

@@ -1,9 +1,24 @@
 <template>
   <section class="home">
-    <header class="home__intro">
-      <h1>جستجو در آگهی‌های محلی</h1>
-      <p>از میان آگهی‌های تازهٔ گیلان، مورد مناسب را پیدا کنید.</p>
-    </header>
+    <div class="home__hero">
+      <div class="home__hero-layout">
+        <header class="home__intro">
+          <p class="home__eyebrow"><span aria-hidden="true" /> بازارچهٔ محلی گیلان</p>
+          <h1>چیزهای خوب را همین نزدیکی <em>جستجو</em> کنید</h1>
+          <p class="home__intro-copy">از طعم‌های خانگی و صنایع دستی تا مهارت‌های محلی؛ آگهی‌های تازه را از آدم‌های اطراف خودتان پیدا کنید.</p>
+          <ul class="home__hero-points" aria-label="ویژگی‌های شبدر">
+            <li>{{ formatNumber(categories?.data.length ?? 0) }} دستهٔ محلی</li>
+            <li>شروع از رشت</li>
+            <li>دیدن آگهی‌ها بدون ورود</li>
+          </ul>
+        </header>
+        <div class="home__hero-emblem" aria-hidden="true">
+          <span class="home__hero-emblem-ring">
+            <BrandMascot />
+          </span>
+          <span>محلی، صمیمی، نزدیک</span>
+        </div>
+      </div>
 
     <form id="search" class="home__search" role="search" @submit.prevent="applyNow">
       <AppField id="listing-search" label="جستجو" class="home__search-field">
@@ -14,7 +29,7 @@
             class="field__input"
             type="search"
             name="q"
-            placeholder="مثلاً فرش دستباف"
+            placeholder="نام کالا، مهارت یا طعم دلخواه…"
             maxlength="100"
             :aria-describedby="describedBy"
             :aria-invalid="ariaInvalid"
@@ -85,6 +100,7 @@
         </AppField>
       </div>
     </form>
+    </div>
 
     <div class="home__categories" role="group" aria-label="دسته‌بندی‌ها">
       <button
@@ -175,8 +191,11 @@
 
     <section class="home__results" aria-labelledby="home-results-title" :aria-busy="feedPending">
       <div class="home__results-header">
-        <h2 id="home-results-title">آگهی‌ها</h2>
-        <p v-if="!feedPending && !feedError" class="meta">
+        <div>
+          <p class="home__results-kicker">تازه‌های شبدر</p>
+          <h2 id="home-results-title">آگهی‌های تازه</h2>
+        </div>
+        <p v-if="!feedPending && !feedError" class="home__result-count meta">
           {{ (feed?.data.length ?? 0).toLocaleString('fa-IR') }} نتیجه در این صفحه
         </p>
       </div>
@@ -386,6 +405,11 @@ useHead(() => ({
         rel: 'preload',
         as: 'image',
         href: priorityListing.value.cover_image,
+        imagesrcset: priorityListing.value.cover_webp_srcset || priorityListing.value.cover_srcset || undefined,
+        imagesizes: (priorityListing.value.cover_webp_srcset || priorityListing.value.cover_srcset)
+          ? LISTING_CARD_IMAGE_SIZES
+          : undefined,
+        type: priorityListing.value.cover_webp_srcset ? 'image/webp' : undefined,
         fetchpriority: 'high',
       }]
     : [],
@@ -416,14 +440,62 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
 .home {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-8);
   min-inline-size: 0;
+}
+
+.home__hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: var(--space-6) var(--space-5);
+  color: var(--color-hero-text);
+  background:
+    radial-gradient(circle at 10% 0%, rgb(110 231 183 / 0.17), transparent 34%),
+    linear-gradient(135deg, var(--color-hero) 0%, var(--color-hero-deep) 82%);
+  border: 1px solid var(--color-hero-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-lifted);
+}
+
+.home__hero::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  content: '';
+  opacity: 0.24;
+  background-image: radial-gradient(rgb(255 255 255 / 0.32) 0.75px, transparent 0.75px);
+  background-size: 18px 18px;
+  mask-image: linear-gradient(to left, #000, transparent 70%);
+}
+
+.home__hero::after {
+  position: absolute;
+  z-index: -1;
+  inset-block-start: -7rem;
+  inset-inline-end: -5rem;
+  inline-size: 18rem;
+  block-size: 18rem;
+  content: '';
+  border: 1px solid rgb(243 200 118 / 0.2);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2.5rem rgb(255 255 255 / 0.025), 0 0 0 5rem rgb(255 255 255 / 0.02);
+}
+
+.home__hero-layout {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-6);
 }
 
 .home__intro {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
+  min-inline-size: 0;
 }
 
 .home__intro h1,
@@ -434,28 +506,96 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
   margin: 0;
 }
 
-.home__intro h1 {
-  font-size: clamp(1.65rem, 4vw, 2.25rem);
-  line-height: 1.4;
+.home__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-hero-accent);
+  font-size: 0.8125rem;
+  font-weight: 650;
 }
 
-.home__intro p {
-  color: var(--color-text-muted);
+.home__eyebrow > span {
+  inline-size: 8px;
+  block-size: 8px;
+  content: '';
+  background: currentColor;
+  border-radius: 50%;
+  box-shadow: 0 0 0 5px rgb(243 200 118 / 0.12);
+}
+
+.home__intro h1 {
+  max-inline-size: 16ch;
+  font-size: clamp(1.9rem, 5.6vw, 3.5rem);
+  font-weight: 780;
+  line-height: 1.38;
+  text-wrap: balance;
+}
+
+.home__intro h1 em {
+  color: var(--color-hero-accent);
+  font-style: normal;
+}
+
+.home__intro-copy {
+  max-inline-size: 43rem;
+  color: var(--color-hero-muted);
+  font-size: 0.9375rem;
+  line-height: 2;
+}
+
+.home__hero-points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  color: var(--color-hero-muted);
+  font-size: 0.75rem;
+  list-style: none;
+}
+
+.home__hero-points li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.home__hero-points li::before {
+  inline-size: 5px;
+  block-size: 5px;
+  content: '';
+  background: var(--color-hero-accent);
+  border-radius: 50%;
+}
+
+.home__hero-points li:last-child {
+  display: none;
+}
+
+.home__hero-emblem {
+  display: none;
 }
 
 .home__search {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: var(--space-3);
-  padding: var(--space-4);
+  margin-block-start: var(--space-6);
+  padding: var(--space-3);
+  color: var(--color-text);
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
+  border: 1px solid rgb(255 255 255 / 0.35);
+  border-radius: 20px;
+  box-shadow: 0 16px 36px rgb(0 0 0 / 0.16);
 }
 
 .home__search-submit {
   min-inline-size: 5rem;
+  min-block-size: 48px;
 }
 
 .home__filter-open {
@@ -471,28 +611,41 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
 .home__categories {
   display: flex;
   gap: var(--space-2);
+  margin-block: calc(var(--space-4) * -1) calc(var(--space-2) * -1);
   overflow-x: auto;
-  padding: var(--space-1);
+  padding: var(--space-2) var(--space-1) var(--space-3);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
 }
 
 .home__category-button {
   flex: none;
   min-block-size: 44px;
-  padding-inline: var(--space-4);
+  padding-inline: var(--space-5);
   font: inherit;
-  font-weight: 500;
+  font-size: 0.875rem;
+  font-weight: 550;
   color: var(--color-text);
   white-space: nowrap;
   background: var(--color-surface);
-  border: 1px solid var(--color-control-border);
-  border-radius: var(--radius-control);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-xs);
   cursor: pointer;
+  transition: color var(--duration-fast), background-color var(--duration-fast), border-color var(--duration-fast), transform var(--duration-normal) var(--ease-out);
+}
+
+.home__category-button:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
 }
 
 .home__category-button[aria-pressed='true'] {
   color: var(--color-on-primary);
   background: var(--color-primary);
   border-color: var(--color-primary);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--color-primary) 18%, transparent);
 }
 
 .home__filter-dialog {
@@ -503,14 +656,16 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-dialog);
+  box-shadow: var(--shadow-lifted);
 }
 
 .home__filter-dialog::backdrop {
-  background: color-mix(in srgb, var(--color-text) 45%, transparent);
+  background: rgb(6 42 32 / 0.62);
+  backdrop-filter: blur(4px);
 }
 
 .home__dialog-header {
-  padding: var(--space-4) var(--space-4) 0;
+  padding: var(--space-5) var(--space-5) 0;
 }
 
 .home__dialog-header h2 {
@@ -522,7 +677,7 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-4);
+  padding: var(--space-5);
 }
 
 .home__dialog-actions,
@@ -544,20 +699,32 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
 .home__results-header {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: end;
   justify-content: space-between;
-  gap: var(--space-2);
-  margin-block-end: var(--space-4);
+  gap: var(--space-3);
+  margin-block-end: var(--space-5);
+}
+
+.home__results-kicker {
+  margin-block-end: var(--space-1) !important;
+  color: var(--color-accent);
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 .home__results-header h2 {
-  font-size: 1.25rem;
+  font-size: clamp(1.35rem, 3vw, 1.75rem);
+  line-height: 1.5;
+}
+
+.home__result-count {
+  padding-block-end: var(--space-1);
 }
 
 .home__cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr));
-  gap: var(--space-4);
+  gap: var(--space-5);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -582,13 +749,68 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  background: var(--color-surface-muted);
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-inline-start: 4px solid var(--color-accent);
   border-radius: var(--radius-card);
+  box-shadow: var(--shadow-xs);
+}
+
+.home__account strong {
+  font-size: 1.0625rem;
+}
+
+.home__account .meta {
+  margin-block-start: var(--space-1);
+}
+
+@media (min-width: 600px) {
+  .home__hero-layout {
+    grid-template-columns: minmax(0, 1fr) 9.5rem;
+  }
+
+  .home__hero-points li:last-child {
+    display: flex;
+  }
+
+  .home__hero-emblem {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-3);
+    color: var(--color-hero-muted);
+    font-size: 0.75rem;
+    text-align: center;
+  }
+
+  .home__hero-emblem-ring {
+    display: grid;
+    place-items: center;
+    inline-size: 8.5rem;
+    block-size: 8.5rem;
+    color: var(--color-hero-accent);
+    background: rgb(255 255 255 / 0.07);
+    border: 1px solid rgb(255 255 255 / 0.14);
+    border-radius: 42% 58% 54% 46% / 48% 42% 58% 52%;
+    box-shadow: inset 0 0 0 12px rgb(255 255 255 / 0.025);
+    transform: rotate(-5deg);
+  }
+
+  .home__hero-emblem :deep(.brand-mascot) {
+    inline-size: 84px;
+    block-size: 84px;
+    color: var(--color-hero-accent);
+    transform: rotate(5deg);
+  }
 }
 
 @media (min-width: 768px) {
+  .home__hero {
+    padding: var(--space-8);
+  }
+
   .home__filter-open {
     display: none;
   }
@@ -596,10 +818,32 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
   .home__desktop-filters {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-block-start: var(--space-1);
+    padding-block-start: var(--space-4);
+    border-block-start: 1px solid var(--color-border);
   }
 
   .home__search {
-    padding: var(--space-6);
+    padding: var(--space-4);
+  }
+
+  .home__intro-copy {
+    font-size: 1rem;
+  }
+}
+
+@media (min-width: 1200px) {
+  .home__hero {
+    padding: var(--space-10);
+  }
+
+  .home__hero-layout {
+    grid-template-columns: minmax(0, 1fr) 12rem;
+  }
+
+  .home__hero-emblem-ring {
+    inline-size: 10rem;
+    block-size: 10rem;
   }
 }
 </style>

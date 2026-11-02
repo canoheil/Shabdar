@@ -25,6 +25,14 @@ const LIGHT = {
   '--color-info-bg': '#F0F9FF',
   '--color-error': '#991B1B',
   '--color-error-bg': '#FEF2F2',
+  '--color-accent': '#9A4C0B',
+  '--color-accent-soft': '#FFF4E5',
+  '--color-hero': '#0B3D2E',
+  '--color-hero-deep': '#062A20',
+  '--color-hero-text': '#F4FBF7',
+  '--color-hero-muted': '#C4D9CE',
+  '--color-hero-accent': '#F3C876',
+  '--color-hero-border': '#396455',
 } as const
 
 const DARK = {
@@ -47,6 +55,14 @@ const DARK = {
   '--color-info-bg': '#10202B',
   '--color-error': '#FCA5A5',
   '--color-error-bg': '#162019',
+  '--color-accent': '#F3C876',
+  '--color-accent-soft': '#2B2519',
+  '--color-hero': '#12382C',
+  '--color-hero-deep': '#081F18',
+  '--color-hero-text': '#F4FBF7',
+  '--color-hero-muted': '#C4D9CE',
+  '--color-hero-accent': '#F3C876',
+  '--color-hero-border': '#396455',
 } as const
 
 async function tokenValues(page: Page, names: string[]) {

@@ -138,6 +138,14 @@ function statusLabel(status: string): string {
   gap: var(--space-3);
 }
 
+.dashboard__header {
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-xs);
+}
+
 .dashboard__admin {
   display: flex;
   flex-wrap: wrap;
@@ -179,14 +187,27 @@ function statusLabel(status: string): string {
 }
 
 .stat {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
   min-inline-size: 0;
-  padding: var(--space-4);
-  background: var(--color-surface);
+  overflow: hidden;
+  padding: var(--space-5);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--color-primary) 6%, var(--color-surface)), var(--color-surface));
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
+  box-shadow: var(--shadow-xs);
+}
+
+.stat::after {
+  position: absolute;
+  inset-block: var(--space-4);
+  inset-inline-start: 0;
+  inline-size: 3px;
+  content: '';
+  background: var(--color-primary);
+  border-radius: var(--radius-pill);
 }
 
 .stat__value {
@@ -230,6 +251,7 @@ function statusLabel(status: string): string {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
+  box-shadow: var(--shadow-xs);
 }
 
 .mine__body {

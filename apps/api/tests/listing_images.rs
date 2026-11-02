@@ -432,6 +432,121 @@ async fn media_is_owner_or_admin_only_until_image_review_and_publication() {
 }
 
 #[tokio::test]
+async fn responsive_derivatives_preserve_authorization_lazy_generation_and_cleanup() {
+    let _lock = UPLOAD_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let dir = scratch_media_dir("media-derivatives");
+    let cfg = media_cfg(&dir);
+    let app = common::spawn_app(cfg.clone()).await;
+    let (seller, seller_csrf) = register_user(&app, &pool, &cfg, "+989123456789").await;
+    let (other, _) = register_user(&app, &pool, &cfg, "+989009876543").await;
+    let public_id = create_draft(&app, &seller, &seller_csrf).await;
+    let source = image::DynamicImage::new_rgba8(1200, 900);
+    let mut source_bytes = Vec::new();
+    source
+        .write_to(
+            &mut std::io::Cursor::new(&mut source_bytes),
+            image::ImageFormat::Png,
+        )
+        .expect("encode large PNG fixture");
+    let (status, body) = upload(
+        app.clone(),
+        &public_id,
+        &seller,
+        Some(&seller_csrf),
+        "responsive.png",
+        "image/png",
+        &source_bytes,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let key = body["storage_key"].as_str().expect("storage key");
+    let image_id = body["id"].as_u64().expect("image id");
+    assert!(body["srcset"].as_str().unwrap().contains("--w960.jpg 960w"));
+    let webp_url = body["webp_srcset"]
+        .as_str()
+        .unwrap()
+        .split(", ")
+        .find_map(|candidate| candidate.contains("--w480.webp").then_some(candidate))
+        .and_then(|candidate| candidate.split(' ').next())
+        .expect("480 WebP candidate")
+        .to_string();
+    let jpeg_url = body["srcset"]
+        .as_str()
+        .unwrap()
+        .split(", ")
+        .find_map(|candidate| candidate.contains("--w480.jpg").then_some(candidate))
+        .and_then(|candidate| candidate.split(' ').next())
+        .expect("480 JPEG candidate")
+        .to_string();
+
+    for path in [&webp_url, &jpeg_url] {
+        let anonymous = get_media(app.clone(), path, None).await;
+        let other_user = get_media(app.clone(), path, Some(&other)).await;
+        let owner = get_media(app.clone(), path, Some(&seller)).await;
+        assert_eq!(anonymous.0, StatusCode::NOT_FOUND);
+        assert_eq!(other_user.0, StatusCode::NOT_FOUND);
+        assert_eq!(owner.0, StatusCode::OK);
+        assert_eq!(owner.2["cache-control"], "private, no-store");
+    }
+    let jpeg = get_media(app.clone(), &jpeg_url, Some(&seller)).await;
+    assert_eq!(jpeg.2["content-type"], "image/jpeg");
+    let decoded = image::load_from_memory(&jpeg.1).expect("JPEG derivative");
+    assert_eq!((decoded.width(), decoded.height()), (480, 360));
+
+    // Removing a derived cache file must not remove the original. Anonymous
+    // callers cannot regenerate it; the authorized owner can, on first hit.
+    let derivative_path = dir.join(format!("{key}--w480.webp"));
+    std::fs::remove_file(&derivative_path).expect("remove derived cache");
+    assert_eq!(get_media(app.clone(), &webp_url, None).await.0, StatusCode::NOT_FOUND);
+    assert!(!derivative_path.exists());
+    let regenerated = get_media(app.clone(), &webp_url, Some(&seller)).await;
+    assert_eq!(regenerated.0, StatusCode::OK);
+    assert_eq!(regenerated.2["content-type"], "image/webp");
+    assert!(derivative_path.is_file());
+    assert_eq!(
+        get_media(app.clone(), &format!("/media/{key}--w481.jpg"), Some(&seller)).await.0,
+        StatusCode::NOT_FOUND
+    );
+
+    sqlx::query(
+        "UPDATE listings SET status = 'active', published_at = NOW(3), \\
+         image_reviewed_by = seller_id, image_reviewed_at = NOW(3) WHERE public_id = ?",
+    )
+    .bind(&public_id)
+    .execute(&pool)
+    .await
+    .expect("public derivative fixture");
+    let public = get_media(app.clone(), &webp_url, None).await;
+    assert_eq!(public.0, StatusCode::OK);
+    assert_eq!(public.2["cache-control"], "public, no-cache");
+
+    sqlx::query("UPDATE listings SET status = 'draft' WHERE public_id = ?")
+        .bind(&public_id)
+        .execute(&pool)
+        .await
+        .expect("editable cleanup fixture");
+    let request = Request::builder()
+        .method(Method::DELETE)
+        .uri(format!("/api/v1/listings/{public_id}/images/{image_id}"))
+        .header("cookie", &seller)
+        .header("x-csrf-token", &seller_csrf)
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(app.clone().oneshot(request).await.unwrap().status(), StatusCode::OK);
+    assert!(!dir.join(key).exists());
+    for width in [240, 480, 960] {
+        for extension in ["jpg", "webp"] {
+            assert!(!dir.join(format!("{key}--w{width}.{extension}")).exists());
+        }
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
 async fn upload_rejects_exe_bytes_and_wrong_owner_and_active_listing() {
     let _lock = UPLOAD_LOCK.lock().await;
     let Some(pool) = common::test_pool().await else {

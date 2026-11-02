@@ -1,6 +1,7 @@
 :root {
   color-scheme: light;
 
+  /* Core semantic palette: stable Phase 7 contracts, extended for Phase 12. */
   --color-bg: #F6F8F7;
   --color-surface: #FFFFFF;
   --color-surface-muted: #EDF2EF;
@@ -22,22 +23,45 @@
   --color-error: #991B1B;
   --color-error-bg: #FEF2F2;
 
+  /* Shabdar identity: emerald depth with a warm, sparingly used accent. */
+  --color-accent: #9A4C0B;
+  --color-accent-soft: #FFF4E5;
+  --color-hero: #0B3D2E;
+  --color-hero-deep: #062A20;
+  --color-hero-text: #F4FBF7;
+  --color-hero-muted: #C4D9CE;
+  --color-hero-accent: #F3C876;
+  --color-hero-border: #396455;
+  --color-on-dark: #F4FBF7;
+  --color-on-dark-muted: #C4D9CE;
+
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
+  --space-10: 40px;
   --space-12: 48px;
+  --space-16: 64px;
 
   --radius-control: 12px;
-  --radius-card: 12px;
-  --radius-dialog: 16px;
+  --radius-card: 18px;
+  --radius-panel: 26px;
+  --radius-dialog: 24px;
+  --radius-pill: 999px;
+
+  --shadow-xs: 0 1px 2px rgb(6 42 32 / 0.05);
+  --shadow-card: 0 10px 30px rgb(6 42 32 / 0.07), 0 1px 2px rgb(6 42 32 / 0.05);
+  --shadow-lifted: 0 20px 48px rgb(6 42 32 / 0.14), 0 2px 6px rgb(6 42 32 / 0.06);
+  --shadow-nav: 0 12px 34px rgb(6 42 32 / 0.16);
 
   --font-family-fallback: Tahoma, Arial, sans-serif;
   --font-family-base: 'Vazirmatn Variable', Tahoma, Arial, sans-serif;
-  --duration-fast: 120ms;
-  --duration-normal: 180ms;
+  --duration-fast: 140ms;
+  --duration-normal: 220ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 :root.dark {
@@ -63,4 +87,18 @@
   --color-info-bg: #10202B;
   --color-error: #FCA5A5;
   --color-error-bg: #162019;
+
+  --color-accent: #F3C876;
+  --color-accent-soft: #2B2519;
+  --color-hero: #12382C;
+  --color-hero-deep: #081F18;
+  --color-hero-text: #F4FBF7;
+  --color-hero-muted: #C4D9CE;
+  --color-hero-accent: #F3C876;
+  --color-hero-border: #396455;
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.2);
+  --shadow-card: 0 12px 32px rgb(0 0 0 / 0.2), 0 1px 2px rgb(0 0 0 / 0.16);
+  --shadow-lifted: 0 22px 52px rgb(0 0 0 / 0.34), 0 2px 6px rgb(0 0 0 / 0.2);
+  --shadow-nav: 0 12px 34px rgb(0 0 0 / 0.36);
 }

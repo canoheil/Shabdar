@@ -182,12 +182,13 @@ function onStarKeydown(event: KeyboardEvent, stars: number): void {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: var(--space-3);
-  max-inline-size: 70ch;
-  padding: var(--space-4);
+  gap: var(--space-4);
+  min-inline-size: 0;
+  padding: var(--space-5);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
+  box-shadow: var(--shadow-xs);
 }
 
 .listing-rating__heading {
@@ -208,8 +209,17 @@ function onStarKeydown(event: KeyboardEvent, stars: number): void {
 }
 
 .listing-rating__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   font-weight: 700;
   color: var(--color-primary);
+}
+
+.listing-rating__summary::before {
+  content: '★';
+  color: var(--color-accent);
+  font-size: 1.25rem;
 }
 
 .listing-rating__stars {
@@ -241,7 +251,7 @@ function onStarKeydown(event: KeyboardEvent, stars: number): void {
 .listing-rating__star[aria-checked="true"],
 .listing-rating__star:has(~ [aria-checked="true"]),
 .listing-rating__star:hover {
-  color: var(--color-primary);
+  color: var(--color-accent);
 }
 
 .listing-rating__star:focus-visible {

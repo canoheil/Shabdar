@@ -85,7 +85,7 @@ Error codes used by the auth and session endpoints:
 | GET | `/listings/{slug}` | Public | Full detail: title, description, price, price_type, city, category, images, seller summary, `rating_average`, `rating_count`, `comment_count`. Returns `404` for unknown slugs and `410` for removed or deleted listings. Non-owners never see `pending`, `rejected`, or `draft`. |
 | GET | `/sellers/{public_id}` | Public | Minimal seller profile (display name, join date) and active listings. No phone number. |
 
-Listing card shape: `{ public_id, slug, title, price_toman, price_type, city, province, category, cover_image, rating_average, rating_count, published_at }`.
+Listing card shape: `{ public_id, slug, title, price_toman, price_type, city, province, category, cover_image, cover_srcset, cover_webp_srcset, rating_average, rating_count, published_at }`. The two srcset fields are additive responsive-image metadata; an empty modern source means clients should use the JPEG/original fallback. Public detail images similarly add `width`, `height`, `srcset`, and `webp_srcset` alongside `url` and `alt_text`. Legacy rows without stored dimensions keep their original-only behavior.
 
 Public detail keeps the existing visibility rules. For a valid logged-in viewer it also contains `favorited: true|false` and `my_stars: 1|2|3|4|5|null`; anonymous, invalid, expired, or non-active sessions receive the normal public payload with **both keys omitted**. A response containing viewer state is `Cache-Control: private, no-store`; it must not be placed in public SSR/cached HTML. Comment pages contain no `can_delete`, block, or report state. A valid viewer's comment page additionally excludes authors that viewer blocked and is `Cache-Control: private, no-store`; anonymous comment reads remain unfiltered and publicly cacheable.
 
@@ -133,7 +133,7 @@ Rejected listings include `rejection_reason` for the owner only.
 
 | Method | Path | Auth | Summary |
 |---|---|---|---|
-| POST | `/listings/{public_id}/images` | Owner + CSRF | Multipart `file`. Fully decodes one static JPEG, PNG, or WebP and returns `{id,url,storage_key,sort_order,width,height}`. |
+| POST | `/listings/{public_id}/images` | Owner + CSRF | Multipart `file`. Fully decodes one static JPEG, PNG, or WebP and returns `{id,url,storage_key,sort_order,width,height,srcset,webp_srcset}`. |
 | DELETE | `/listings/{public_id}/images/{image_id}` | Owner + CSRF | Removes an image from a `draft` or `rejected` listing and clears any review snapshot. |
 | PATCH | `/listings/{public_id}/images/order` | Owner + CSRF | Body: `{ image_ids: [...] }`, exactly the current set. Reorders without invalidating review. |
 
@@ -141,7 +141,9 @@ Uploads never accept client file paths. The server generates ULID storage keys b
 
 Image add/delete and submit/resubmit clear `image_reviewed_by`, `image_reviewed_at`, and `image_reviewed_ids`; reorder alone preserves them. Image mutations lock the listing before image rows and recheck editable status/count inside their transaction.
 
-`GET /media/{storage_key}` resolves the parent listing before reading disk. Reviewed active images use `Cache-Control: public, no-cache`; owner/admin reads of non-public images use `private, no-store`. Anonymous/other-user access to non-public media, unknown keys, and missing files all return the same 404 without an existence signal. Every media error is `private, no-store` and all media responses include `X-Content-Type-Options: nosniff`. The Nuxt `/media/**` proxy preserves status/cache headers and same-origin cookies; PNG transport may be gzipped without changing decoded bytes.
+Responsive derivatives use only server-approved 240, 480, and 960-pixel widths, never upscale, and retain the original as the largest fallback candidate. Their deterministic keys append `--w{width}.jpg` or `--w{width}.webp` to the complete original key (for example `name.png--w480.webp`), so authorization always resolves the original row. JPEG derivatives are generated for every accepted source. The pure-Rust WebP encoder is lossless, so its source is offered only for large PNG content where a modern lossless path is appropriate; photographic originals keep the JPEG path rather than risking a larger modern file. Derivatives are written with the upload and lazily regenerated for legacy content after the same bounded decode; deleting an image removes every derivative.
+
+`GET /media/{storage_key}` (including a validated derivative key) resolves the parent listing before reading disk. Reviewed active images use `Cache-Control: public, no-cache`; owner/admin reads of non-public images use `private, no-store`. Anonymous/other-user access to non-public media, unknown keys, and missing files all return the same 404 without an existence signal. Every media error is `private, no-store` and all media responses include `X-Content-Type-Options: nosniff`. The Nuxt `/media/**` proxy preserves status/cache headers and same-origin cookies; PNG transport may be gzipped without changing decoded bytes.
 
 ## 6. Favorites (Phase 6 — built)
 

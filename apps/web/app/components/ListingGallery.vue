@@ -1,22 +1,39 @@
 <template>
   <section ref="root" class="listing-gallery" aria-label="تصاویر آگهی">
     <div class="listing-gallery__main">
-      <img
+      <picture
         v-if="selectedImage && !mainImageFailed"
         :key="selectedImage.url"
-        class="listing-gallery__main-image"
-        :src="selectedImage.url"
-        :alt="mainImageAlt"
-        width="1200"
-        height="900"
-        loading="eager"
-        fetchpriority="high"
-        :data-index="selectedIndex"
-        @error="markImageFailed(selectedIndex)"
+        class="listing-gallery__main-picture"
       >
+        <source
+          v-if="selectedImage.webp_srcset"
+          type="image/webp"
+          :srcset="selectedImage.webp_srcset"
+          :sizes="LISTING_GALLERY_IMAGE_SIZES"
+        >
+        <img
+          class="listing-gallery__main-image"
+          :src="selectedImage.url"
+          :srcset="selectedImage.srcset || undefined"
+          :sizes="LISTING_GALLERY_IMAGE_SIZES"
+          :alt="mainImageAlt"
+          width="1200"
+          height="900"
+          loading="eager"
+          fetchpriority="high"
+          decoding="async"
+          :data-index="selectedIndex"
+          @error="markImageFailed(selectedIndex)"
+        >
+      </picture>
       <div v-else class="listing-gallery__main-placeholder">
-        {{ selectedImage ? 'تصویر در دسترس نیست' : 'تصویری برای این آگهی ثبت نشده است.' }}
+        <span class="listing-gallery__placeholder-mark" aria-hidden="true" />
+        <span>{{ selectedImage ? 'تصویر در دسترس نیست' : 'تصویری برای این آگهی ثبت نشده است.' }}</span>
       </div>
+      <span v-if="images.length" class="listing-gallery__counter" aria-hidden="true">
+        {{ formatNumber(selectedIndex + 1) }} / {{ formatNumber(images.length) }}
+      </span>
     </div>
     <div v-if="images.length" class="listing-gallery__thumbnails" role="group" aria-label="انتخاب تصویر">
       <button
@@ -29,19 +46,28 @@
         :aria-label="`تصویر ${index + 1} از ${images.length}`"
         @click="selectedIndex = index"
       >
-        <img
-          v-if="!failedImages.has(index)"
-          class="listing-gallery__thumbnail-image"
-          :src="image.url"
-          alt=""
-          width="160"
-          height="120"
-          loading="lazy"
-          fetchpriority="low"
-          decoding="async"
-          :data-index="index"
-          @error="markImageFailed(index)"
-        >
+        <picture v-if="!failedImages.has(index)" class="listing-gallery__thumbnail-picture">
+          <source
+            v-if="image.webp_srcset"
+            type="image/webp"
+            :srcset="image.webp_srcset"
+            :sizes="LISTING_THUMBNAIL_IMAGE_SIZES"
+          >
+          <img
+            class="listing-gallery__thumbnail-image"
+            :src="image.url"
+            :srcset="image.srcset || undefined"
+            :sizes="LISTING_THUMBNAIL_IMAGE_SIZES"
+            alt=""
+            width="160"
+            height="120"
+            loading="lazy"
+            fetchpriority="low"
+            decoding="async"
+            :data-index="index"
+            @error="markImageFailed(index)"
+          >
+        </picture>
         <span v-else class="listing-gallery__thumbnail-placeholder" aria-hidden="true">ناموجود</span>
       </button>
     </div>
