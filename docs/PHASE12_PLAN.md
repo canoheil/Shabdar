@@ -1,6 +1,6 @@
 # Phase 12 — Design System, UX Polish & Image Performance
 
-Status: implemented; final full-stack CI verification in progress (2026-11-02).
+Status: complete; independent full-stack CI passed on `0ff0a17` (2026-11-02).
 
 ## Product goal
 
@@ -47,7 +47,7 @@ The committed evidence is tied to implementation commit `2b1e3ff843cf6fe3cc414dc
 - `docs/performance/phase12-client-js.json` records **94,982 bytes gzip on Home** and **99,437 on Detail**, each across three same-origin scripts and below the 100KB route ceiling.
 - `docs/performance/phase12-lighthouse.json` contains all six mobile reports. Median Home/Detail LCP is **2256.890/2261.634ms**, CLS **0.04050/0.00521**, TBT **120.0/85.5ms**, and accessibility **1.0/1.0**.
 
-These measurements are evidence, not a substitute for the independent full CI run; the phase remains open until that run passes on the final code.
+Independent GitHub Actions run [41487335598](https://github.com/canoheil/Shabdar/actions/runs/41487335598) passed on final code commit `0ff0a1727c1fd4dddcbf78d99b456e19d3937c5e`: the full API suite, Rust formatting/Clippy, web typecheck, production build, all **101 Playwright tests**, six Lighthouse runs/assertions, and the client-JS budget. These recorded measurements and that independent gate are both satisfied.
 
 ## Verification and delivery order
 
