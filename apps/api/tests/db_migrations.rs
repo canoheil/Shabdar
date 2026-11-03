@@ -175,13 +175,15 @@ async fn reference_tables_are_seeded_for_national_coverage() {
         .execute(&pool)
         .await
         .expect("national seed replay");
-    let row = sqlx::query("SELECT \
+    let row = sqlx::query(
+        "SELECT \
          (SELECT COUNT(*) FROM provinces) AS provinces, \
          (SELECT COUNT(*) FROM cities) AS cities, \
-         (SELECT id FROM cities WHERE slug = 'rasht') AS rasht_id")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+         (SELECT id FROM cities WHERE slug = 'rasht') AS rasht_id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(row.try_get::<i64, _>("provinces").unwrap(), 31);
     assert_eq!(row.try_get::<i64, _>("cities").unwrap(), 1547);
     assert_eq!(row.try_get::<u32, _>("rasht_id").unwrap(), 1);

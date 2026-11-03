@@ -100,9 +100,9 @@ async fn cities_cover_multiple_provinces_and_preserve_rasht_identity() {
     assert_eq!(status, StatusCode::OK);
     let tehran_data = tehran["data"].as_array().expect("Tehran cities");
     assert_eq!(tehran_data.len(), 52, "Tehran city seed: {tehran}");
-    assert!(tehran_data.iter().any(|item| {
-        item["slug"] == "tehran" && item["name_fa"] == "تهران"
-    }));
+    assert!(tehran_data
+        .iter()
+        .any(|item| { item["slug"] == "tehran" && item["name_fa"] == "تهران" }));
 }
 
 #[tokio::test]
