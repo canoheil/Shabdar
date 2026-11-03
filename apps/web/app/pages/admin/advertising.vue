@@ -525,8 +525,10 @@ useHead({ title: 'مدیریت تبلیغات | شبدر' })
 }
 
 .advertising-slot__enabled input {
-  inline-size: 1.25rem;
-  block-size: 1.25rem;
+  inline-size: 44px;
+  block-size: 44px;
+  flex: 0 0 44px;
+  margin: 0;
 }
 
 .advertising-slot__actions,
