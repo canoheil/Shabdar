@@ -245,7 +245,8 @@ pub async fn save_slot(
         action,
         "advertising_slot",
         1,
-        serde_json::json!({ "public_id": public_id, "enabled": input.enabled }),
+        None,
+        Some(&serde_json::json!({ "public_id": public_id, "enabled": input.enabled })),
     )
     .await?;
     tx.commit().await.map_err(crate::error::database_error)?;
@@ -273,7 +274,8 @@ pub async fn delete_slot(pool: &MySqlPool, admin_id: u64) -> Result<serde_json::
         "advertising.slot.delete",
         "advertising_slot",
         1,
-        serde_json::json!({ "public_id": public_id }),
+        None,
+        Some(&serde_json::json!({ "public_id": public_id })),
     )
     .await?;
     tx.commit().await.map_err(crate::error::database_error)?;
@@ -589,7 +591,8 @@ pub async fn update_request(
             "advertising.request.status",
             "advertising_request",
             id,
-            serde_json::json!({ "public_id": public_id, "from": previous, "to": status }),
+            None,
+            Some(&serde_json::json!({ "public_id": public_id, "from": previous, "to": status })),
         )
         .await?;
     }
