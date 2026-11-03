@@ -3,12 +3,12 @@
     <div class="home__hero">
       <div class="home__hero-layout">
         <header class="home__intro">
-          <p class="home__eyebrow"><span aria-hidden="true" /> بازارچهٔ محلی گیلان</p>
+          <p class="home__eyebrow"><span aria-hidden="true" /> بازارچهٔ آگهی‌های ایران</p>
           <h1>چیزهای خوب را همین نزدیکی <em>جستجو</em> کنید</h1>
           <p class="home__intro-copy">از طعم‌های خانگی و صنایع دستی تا مهارت‌های محلی؛ آگهی‌های تازه را از آدم‌های اطراف خودتان پیدا کنید.</p>
           <ul class="home__hero-points" aria-label="ویژگی‌های شبدر">
             <li>{{ formatNumber(categories?.data.length ?? 0) }} دستهٔ محلی</li>
-            <li>شروع از رشت</li>
+            <li>شهرهای سراسر ایران</li>
             <li>دیدن آگهی‌ها بدون ورود</li>
           </ul>
         </header>
@@ -65,21 +65,53 @@
             </select>
           </template>
         </AppField>
-        <AppField id="city-filter" label="شهر">
+        <AppField id="province-filter" label="استان">
+          <template #default="{ id, describedBy, ariaInvalid }">
+            <select
+              :id="id"
+              v-model="province"
+              class="field__input"
+              :aria-describedby="describedBy"
+              :aria-invalid="ariaInvalid"
+              @change="onProvinceChange"
+            >
+              <option value="">همهٔ استان‌ها</option>
+              <option v-for="item in provinces?.data ?? []" :key="item.slug" :value="item.slug">
+                {{ item.name_fa }}
+              </option>
+            </select>
+          </template>
+        </AppField>
+        <AppField
+          id="city-filter"
+          label="شهر"
+          :help="citiesPending ? 'در حال بارگذاری شهرها…' : undefined"
+          :error="citiesError ? 'بارگذاری شهرها ممکن نشد.' : undefined"
+        >
           <template #default="{ id, describedBy, ariaInvalid }">
             <select
               :id="id"
               v-model="city"
               class="field__input"
+              :disabled="!province || citiesPending || citiesError"
+              :aria-busy="citiesPending"
               :aria-describedby="describedBy"
               :aria-invalid="ariaInvalid"
               @change="applyNow"
             >
-              <option value="">همه</option>
-              <option v-for="item in cities?.data ?? []" :key="item.slug" :value="item.slug">
+              <option value="">{{ province ? 'همهٔ شهرها' : 'ابتدا استان را انتخاب کنید' }}</option>
+              <option v-for="item in cities" :key="item.slug" :value="item.slug">
                 {{ item.name_fa }}
               </option>
             </select>
+            <button
+              v-if="citiesError"
+              type="button"
+              class="btn btn--secondary"
+              @click="retryCities"
+            >
+              تلاش دوباره برای دریافت شهرها
+            </button>
           </template>
         </AppField>
         <AppField id="min-price-filter" label="کمترین قیمت (تومان)">
@@ -189,20 +221,52 @@
             </select>
           </template>
         </AppField>
-        <AppField id="mobile-city-filter" label="شهر">
+        <AppField id="mobile-province-filter" label="استان">
+          <template #default="{ id, describedBy, ariaInvalid }">
+            <select
+              :id="id"
+              v-model="draftProvince"
+              class="field__input"
+              :aria-describedby="describedBy"
+              :aria-invalid="ariaInvalid"
+              @change="onDraftProvinceChange"
+            >
+              <option value="">همهٔ استان‌ها</option>
+              <option v-for="item in provinces?.data ?? []" :key="item.slug" :value="item.slug">
+                {{ item.name_fa }}
+              </option>
+            </select>
+          </template>
+        </AppField>
+        <AppField
+          id="mobile-city-filter"
+          label="شهر"
+          :help="draftCitiesPending ? 'در حال بارگذاری شهرها…' : undefined"
+          :error="draftCitiesError ? 'بارگذاری شهرها ممکن نشد.' : undefined"
+        >
           <template #default="{ id, describedBy, ariaInvalid }">
             <select
               :id="id"
               v-model="draftCity"
               class="field__input"
+              :disabled="!draftProvince || draftCitiesPending || draftCitiesError"
+              :aria-busy="draftCitiesPending"
               :aria-describedby="describedBy"
               :aria-invalid="ariaInvalid"
             >
-              <option value="">همه</option>
-              <option v-for="item in cities?.data ?? []" :key="item.slug" :value="item.slug">
+              <option value="">{{ draftProvince ? 'همهٔ شهرها' : 'ابتدا استان را انتخاب کنید' }}</option>
+              <option v-for="item in draftCities" :key="item.slug" :value="item.slug">
                 {{ item.name_fa }}
               </option>
             </select>
+            <button
+              v-if="draftCitiesError"
+              type="button"
+              class="btn btn--secondary"
+              @click="retryDraftCities"
+            >
+              تلاش دوباره برای دریافت شهرها
+            </button>
           </template>
         </AppField>
         <AppField id="mobile-min-price-filter" label="کمترین قیمت (تومان)">
@@ -349,7 +413,7 @@
 import type {
   ApiAdvertisingSlot,
   ApiCategory,
-  ApiCity,
+  ApiProvince,
   ApiListingCard,
   ApiPage,
 } from '~/types'
@@ -369,6 +433,7 @@ function queryString(value: unknown): string {
 const route = useRoute()
 const q = ref(queryString(route.query.q))
 const category = ref(queryString(route.query.category))
+const province = ref(queryString(route.query.province))
 const city = ref(queryString(route.query.city))
 const minPrice = ref(queryString(route.query.min_price))
 const maxPrice = ref(queryString(route.query.max_price))
@@ -378,6 +443,7 @@ const hasFilters = computed(
   () => Boolean(
     q.value.trim()
     || category.value
+    || province.value
     || city.value
     || String(minPrice.value).trim()
     || String(maxPrice.value).trim()
@@ -392,6 +458,7 @@ function feedQuery() {
   const maximumPrice = String(maxPrice.value).trim()
   if (term) query.q = term
   if (category.value) query.category = category.value
+  if (province.value) query.province = province.value
   if (city.value) query.city = city.value
   if (minimumPrice) query.min_price = minimumPrice
   if (maximumPrice) query.max_price = maximumPrice
@@ -405,12 +472,14 @@ function requestedFeedQuery() {
   const query: Record<string, string> = {}
   const term = queryString(route.query.q).trim()
   const selectedCategory = queryString(route.query.category)
+  const selectedProvince = queryString(route.query.province)
   const selectedCity = queryString(route.query.city)
   const selectedMinPrice = queryString(route.query.min_price)
   const selectedMaxPrice = queryString(route.query.max_price)
   const selectedSort = queryString(route.query.sort) || 'newest'
   if (term) query.q = term
   if (selectedCategory) query.category = selectedCategory
+  if (selectedProvince) query.province = selectedProvince
   if (selectedCity) query.city = selectedCity
   if (selectedMinPrice) query.min_price = selectedMinPrice
   if (selectedMaxPrice) query.max_price = selectedMaxPrice
@@ -432,9 +501,17 @@ function selectCategory(value: string): void {
   category.value = value
   applyNow()
 }
+function onProvinceChange(): void {
+  city.value = ''
+  applyNow()
+}
+function onDraftProvinceChange(): void {
+  draftCity.value = ''
+}
 function clearFilters(): void {
   q.value = ''
   category.value = ''
+  province.value = ''
   city.value = ''
   minPrice.value = ''
   maxPrice.value = ''
@@ -447,6 +524,7 @@ watch(
   (query) => {
     q.value = queryString(query.q)
     category.value = queryString(query.category)
+    province.value = queryString(query.province)
     city.value = queryString(query.city)
     minPrice.value = queryString(query.min_price)
     maxPrice.value = queryString(query.max_price)
@@ -470,12 +548,14 @@ const filterDialog = ref<HTMLDialogElement | null>(null)
 const filterButton = ref<HTMLButtonElement | null>(null)
 const filterDialogReady = ref(false)
 const draftCategory = ref('')
+const draftProvince = ref('')
 const draftCity = ref('')
 const draftMinPrice = ref('')
 const draftMaxPrice = ref('')
 const draftSort = ref('newest')
 async function openMobileFilters(): Promise<void> {
   draftCategory.value = category.value
+  draftProvince.value = province.value
   draftCity.value = city.value
   draftMinPrice.value = minPrice.value
   draftMaxPrice.value = maxPrice.value
@@ -495,6 +575,7 @@ function returnFilterFocus(): void {
 }
 function applyMobileFilters(): void {
   category.value = draftCategory.value
+  province.value = draftProvince.value
   city.value = draftCity.value
   minPrice.value = String(draftMinPrice.value).trim()
   maxPrice.value = String(draftMaxPrice.value).trim()
@@ -503,20 +584,18 @@ function applyMobileFilters(): void {
   applyNow()
 }
 
-const { data: categories } = await useFetch<{ data: ApiCategory[] }>('/api/v1/categories')
-const { data: cities } = await useFetch<{ data: ApiCity[] }>(
-  '/api/v1/locations/provinces/gilan/cities',
-)
-
 const [
-  {
-    data: feed,
-    pending: feedPending,
-    error: feedError,
-    refresh: refreshFeed,
-  },
-  { data: advertising },
+  categoriesResult,
+  provincesResult,
+  desktopCities,
+  mobileCities,
+  feedResult,
+  advertisingResult,
 ] = await Promise.all([
+  useFetch<{ data: ApiCategory[] }>('/api/v1/categories'),
+  useFetch<{ data: ApiProvince[] }>('/api/v1/locations/provinces'),
+  useProvinceCities(province, 'home:desktop-cities'),
+  useProvinceCities(draftProvince, 'home:mobile-cities'),
   useFetch<ApiPage<ApiListingCard>>('/api/v1/listings', {
     query: computed(() => requestedFeedQuery()),
   }),
@@ -524,6 +603,28 @@ const [
     default: () => ({ slot: null }),
   }),
 ])
+
+const { data: categories } = categoriesResult
+const { data: provinces } = provincesResult
+const {
+  cities,
+  pending: citiesPending,
+  error: citiesError,
+  refresh: retryCities,
+} = desktopCities
+const {
+  cities: draftCities,
+  pending: draftCitiesPending,
+  error: draftCitiesError,
+  refresh: retryDraftCities,
+} = mobileCities
+const {
+  data: feed,
+  pending: feedPending,
+  error: feedError,
+  refresh: refreshFeed,
+} = feedResult
+const { data: advertising } = advertisingResult
 
 const items = ref<ApiListingCard[]>(feed.value?.data ?? [])
 const nextCursor = ref(feed.value?.page.next_cursor ?? null)
@@ -1054,13 +1155,11 @@ onBeforeUnmount(() => clearTimeout(typingTimer))
   }
 }
 
-@media (min-width: 1024px) {
-  .home__desktop-filters {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-}
-
 @media (min-width: 1200px) {
+  .home__desktop-filters {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
   .home__hero {
     padding: var(--space-8);
   }
