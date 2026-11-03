@@ -16,9 +16,25 @@ pull-request merge is implied.
   `province_slug` for edit restoration; create/update payloads are unchanged.
 - Product copy and reference documentation are Iran-wide. The pinned MIT source
   and its complete notice are recorded in `THIRD_PARTY_NOTICES.md`.
-- Verification must use the real Axum/Nuxt/MariaDB stack. The first national UI
-  candidate is being checked in run `41641421607`; final Playwright, Lighthouse,
-  and client budget results will be recorded only after a completed run.
+- **Verification: PASS for code candidate `37b7967`.** Completed CI run
+  `41643876582` passed Rust formatting/lint, the full real API/MariaDB suite,
+  Nuxt typecheck/build, real-stack startup, all **116/116 Playwright tests**,
+  three-run Lighthouse medians, and both independent client-JS budgets.
+- Lighthouse mobile medians: Home FCP **755.078ms**, LCP **2405.078ms**, CLS
+  **0.075765**, TBT **106.5ms**, Accessibility **100**; Detail FCP
+  **726.703ms**, LCP **2254.567ms**, CLS **0.002221**, TBT **68.5ms**,
+  Accessibility **100**. Initial client JS is Home **98,871 gzip bytes / 5
+  scripts** and Detail **99,668 / 3**, both below the unchanged 100,000-byte
+  ceiling; self-hosted Arabic/Latin fonts total 80,832 bytes.
+- Verification history is retained: run `41638259697` established national API
+  GREEN and unchanged-UI browser RED (108 passed / 7 failed). Intermediate UI
+  run `41641421607` passed 112 tests but rejected three Post journeys whose
+  selectors incorrectly used slugs for numeric city-ID option values. The tests
+  now select the same visible Persian city labels without weakening any
+  downstream create/upload assertions; final run `41643876582` is authoritative.
+- Production rollout is not claimed: apply migration 0013 through the normal
+  startup migrator after backup. Chat remains absent and requires its separate
+  approved design/implementation cycle.
 
 ## Historical Phase 11 record
 
