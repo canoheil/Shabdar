@@ -8,7 +8,7 @@ use axum::Router;
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
 use shabdar_api::config::Config;
-use sqlx::{MySqlPool, Row};
+use sqlx::MySqlPool;
 use tower::ServiceExt;
 
 static TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
