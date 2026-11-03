@@ -91,6 +91,17 @@ Public detail keeps the existing visibility rules. For a valid logged-in viewer 
 
 An `active` listing with one or more images is public only after an admin has reviewed the exact current image set. Feed, detail, sitemap, favorites, and public comment/rating/favorite/report interaction checks all apply this gate; unreviewed active image listings are suppressed rather than treated as human-reviewed. An active listing with zero image rows retains its accepted public behavior. Owner dashboards and admin moderation views are not public feeds and keep their own authorization rules.
 
+### Advertising inventory and internal requests
+
+| Method | Path | Auth | Summary |
+|---|---|---|---|
+| GET | `/advertising/slot` | Public | Returns `{slot: null}` or the enabled house-ad creative `{public_id,title,body,cta_label,cta_url}`. Never contains contact details. |
+| POST | `/advertising/requests` | Public | Body `{submission_id,contact_name,phone,details?}`. Returns `{request:{public_id,status:"new"}}`; no login, session cookie, or CSRF token is required. |
+
+`submission_id` is a per-form UUID used only for request idempotency, not an anonymous viewer identity. Repeating it returns the original receipt without changing contact details, workflow status, or timestamps. `contact_name` is required and capped at 80 characters; `phone` accepts the same Iranian mobile formats as auth and is stored as E.164; optional `details` is capped at 1000 characters. Validation uses the standard `400 validation_error` envelope. New-request abuse limits are process-local: 8 per client IP/hour, 3 per normalized phone/day, and 200 globally/hour. Existing-receipt replays remain idempotent even after a limit is reached.
+
+The Nuxt Home page renders this separate slot once after four real listings only in the unfiltered feed. It never enters listing data, cursors, counts, or deduplication. Device dismissal stores only the slot `public_id` in local storage. Creative destinations are restricted to internal absolute paths or HTTPS URLs; HTML and JavaScript are not accepted.
+
 ### Search and sorting (Phase 4)
 
 - **`q`** — at most 100 characters. Split on whitespace into at most 5 terms; **every** term must
@@ -309,6 +320,11 @@ All endpoints are under `/api/v1/admin`. Each requires `is_admin = true` and mut
 | POST | `/admin/listings/{public_id}/remove` | Body: `{ reason }`. `active` → `removed`. Returns 410 publicly afterward. |
 | GET | `/admin/reports?status=open&cursor=…` | Report queue. |
 | POST | `/admin/reports/{public_id}/actions` | Body: `{ action: "hide_comment" \| "restore_comment" \| "remove_listing" \| "suspend_user" \| "dismiss", reason? }`. Sets report status. |
+| GET | `/admin/advertising/slot` | Full singleton creative plus `enabled` and timestamps, or `slot:null`. |
+| PUT | `/admin/advertising/slot` | Full validated create/replacement; retains `public_id` on edits and writes one audit. |
+| DELETE | `/admin/advertising/slot` | Removes the singleton; actual deletion is audited, an empty repeat is not. |
+| GET | `/admin/advertising/requests?status=new&cursor=…&limit=…` | Newest-first private request pages with contact details. Status: `new`, `in_progress`, `closed`, or `all`. |
+| PATCH | `/admin/advertising/requests/{public_id}` | Body `{status}`; confirms one workflow transition and returns the full private request. |
 | GET | `/admin/users?query=…&cursor=…` | Search users by phone or display name. Phone is shown only in the admin view. |
 | POST | `/admin/users/{public_id}/suspend` | Body: `{ reason }`. Ends the user's sessions. |
 | POST | `/admin/users/{public_id}/unsuspend` | `suspended` → `active`; old sessions stay revoked and a fresh login is required. |
@@ -318,6 +334,12 @@ All endpoints are under `/api/v1/admin`. Each requires `is_admin = true` and mut
 | GET | `/admin/moderation/comments?status=pending&cursor=…` | Oldest-first automatic-review cases. |
 | POST | `/admin/moderation/comments/{public_id}/actions` | Confirm hidden or restore a filtered comment. |
 | POST | `/admin/moderation/rescan` | Run one revision-checked batch over existing visible comments. |
+
+### Advertising administration
+
+Advertising slot PUT accepts `{title,body,cta_label,cta_url,enabled}` with respective character maxima 100, 500, 80, and 500. All text is trimmed and rendered as plain text. Destinations must be an internal `/…` path (not protocol-relative) or an HTTPS URL without credentials, whitespace, controls, or backslashes. GET/PUT return `{slot: …}`; DELETE returns `{deleted: true|false}`. Editing and enable/disable preserve the slot `public_id`; deleting then recreating assigns a new one. Actual create/update/delete writes `advertising.slot.*` audit metadata without request contact data.
+
+Admin request GET responses are `Cache-Control: private, no-store` with `Vary: Cookie`. Items contain `public_id,contact_name,phone_e164,details,status,created_at,updated_at,handled_at,handled_by`; internal database IDs and idempotency UUIDs are not exposed. Pagination is newest-first `(created_at,id)` with the standard opaque cursor and default 20 / maximum 50. PATCH accepts any explicit `new|in_progress|closed` transition. Moving out of `new` records the admin and handling time; returning to `new` clears them. A same-status retry returns current state without another audit. Actual transitions write one `advertising.request.status` audit in the same transaction. Public responses never include the private request queue or phone number.
 
 ### Exact image review (Phase 11)
 

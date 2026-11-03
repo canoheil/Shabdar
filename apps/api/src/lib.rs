@@ -4,6 +4,7 @@
 pub mod admin;
 pub mod admin_reports;
 pub mod admin_users;
+pub mod advertising;
 pub mod api_json;
 pub mod blocks;
 pub mod client_ip;

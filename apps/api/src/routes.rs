@@ -37,6 +37,11 @@ pub fn router(state: AppState) -> Router {
         .unwrap_or(usize::MAX);
     Router::new()
         .route("/api/v1/health", get(health))
+        .route("/api/v1/advertising/slot", get(public_advertising_slot))
+        .route(
+            "/api/v1/advertising/requests",
+            post(create_advertising_request),
+        )
         .route("/api/v1/auth/otp/request", post(otp_request))
         .route("/api/v1/auth/otp/verify", post(otp_verify))
         .route("/api/v1/auth/logout", post(logout))
@@ -118,6 +123,20 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/v1/admin/reports/{public_id}/actions",
             post(admin_report_action),
+        )
+        .route(
+            "/api/v1/admin/advertising/slot",
+            get(admin_advertising_slot)
+                .put(admin_save_advertising_slot)
+                .delete(admin_delete_advertising_slot),
+        )
+        .route(
+            "/api/v1/admin/advertising/requests",
+            get(admin_advertising_requests),
+        )
+        .route(
+            "/api/v1/admin/advertising/requests/{public_id}",
+            patch(admin_update_advertising_request),
         )
         .route("/api/v1/admin/users", get(admin_users_search))
         .route(
@@ -855,6 +874,144 @@ async fn admin_moderation_rescan(
         )
         .await?,
     ))
+}
+
+#[derive(Deserialize)]
+struct AdvertisingRequestBody {
+    submission_id: Option<String>,
+    contact_name: Option<String>,
+    phone: Option<String>,
+    details: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct AdminAdvertisingSlotBody {
+    title: Option<String>,
+    body: Option<String>,
+    cta_label: Option<String>,
+    cta_url: Option<String>,
+    enabled: Option<bool>,
+}
+
+#[derive(Deserialize)]
+struct AdminAdvertisingRequestPatchBody {
+    status: Option<String>,
+}
+
+/// GET /api/v1/advertising/slot — public creative, or an explicit null.
+async fn public_advertising_slot(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(crate::advertising::public_slot(&state.pool).await?))
+}
+
+/// POST /api/v1/advertising/requests — anonymous, CSRF-free and idempotent.
+/// No session or viewer cookie is read or created by this endpoint.
+async fn create_advertising_request(
+    State(state): State<AppState>,
+    peer: PeerAddr,
+    headers: HeaderMap,
+    ApiJson(body): ApiJson<AdvertisingRequestBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let ip = client_ip(state.config.trust_proxy, peer.0, &headers);
+    Ok(Json(
+        crate::advertising::create_request(
+            &state.pool,
+            &state.limiter,
+            &ip,
+            crate::advertising::RequestInput {
+                submission_id: body.submission_id,
+                contact_name: body.contact_name,
+                phone: body.phone,
+                details: body.details,
+            },
+        )
+        .await?,
+    ))
+}
+
+/// GET /api/v1/admin/advertising/slot — complete editable singleton state.
+async fn admin_advertising_slot(
+    State(state): State<AppState>,
+    user: CurrentUser,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::admin::require_admin(&user)?;
+    Ok(Json(crate::advertising::admin_slot(&state.pool).await?))
+}
+
+/// PUT /api/v1/admin/advertising/slot — validated full replacement or create.
+async fn admin_save_advertising_slot(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    ApiJson(body): ApiJson<AdminAdvertisingSlotBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::advertising::save_slot(
+            &state.pool,
+            user.user_id,
+            crate::advertising::SlotInput {
+                title: body.title,
+                body: body.body,
+                cta_label: body.cta_label,
+                cta_url: body.cta_url,
+                enabled: body.enabled,
+            },
+        )
+        .await?,
+    ))
+}
+
+/// DELETE /api/v1/admin/advertising/slot — confirmed, audited removal.
+async fn admin_delete_advertising_slot(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    Ok(Json(
+        crate::advertising::delete_slot(&state.pool, user.user_id).await?,
+    ))
+}
+
+/// GET /api/v1/admin/advertising/requests — private contact details and pages.
+async fn admin_advertising_requests(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<axum::response::Response, ApiError> {
+    crate::admin::require_admin(&user)?;
+    let body = crate::advertising::list_requests(
+        &state.pool,
+        params.get("status").map(String::as_str),
+        params.get("cursor").map(String::as_str),
+        params.get("limit").map(String::as_str),
+    )
+    .await?;
+    let mut response = Json(body).into_response();
+    mark_private_viewer(&mut response);
+    Ok(response)
+}
+
+/// PATCH /api/v1/admin/advertising/requests/{public_id} — workflow transition.
+async fn admin_update_advertising_request(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    ApiJson(body): ApiJson<AdminAdvertisingRequestPatchBody>,
+) -> Result<axum::response::Response, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    crate::admin::require_admin(&user)?;
+    let body =
+        crate::advertising::update_request(&state.pool, user.user_id, &public_id, body.status)
+            .await?;
+    let mut response = Json(body).into_response();
+    mark_private_viewer(&mut response);
+    Ok(response)
 }
 
 /// GET /api/v1/admin/reports — oldest-first filtered report queue.

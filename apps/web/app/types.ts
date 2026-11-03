@@ -219,6 +219,41 @@ export interface ApiListingOut {
   updated_at: string
 }
 
+export interface ApiAdvertisingSlot {
+  public_id: string
+  title: string
+  body: string
+  cta_label: string
+  cta_url: string
+}
+
+export interface ApiAdminAdvertisingSlot extends ApiAdvertisingSlot {
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type ApiAdvertisingRequestStatus = 'new' | 'in_progress' | 'closed'
+
+export interface ApiAdvertisingRequestReceipt {
+  request: {
+    public_id: string
+    status: ApiAdvertisingRequestStatus
+  }
+}
+
+export interface ApiAdminAdvertisingRequest {
+  public_id: string
+  contact_name: string
+  phone_e164: string
+  details: string | null
+  status: ApiAdvertisingRequestStatus
+  created_at: string
+  updated_at: string
+  handled_at: string | null
+  handled_by: { public_id: string; display_name: string | null } | null
+}
+
 export interface ApiPage<T> {
   data: T[]
   page: { next_cursor: string | null; has_more: boolean }

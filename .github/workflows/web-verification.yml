@@ -3,7 +3,7 @@ name: Web verification
 on:
   push:
     branches:
-      - arena/6b0cfc68-shabdar
+      - arena/cdb557a3-shabdar
     paths:
       - apps/api/**
       - apps/web/**

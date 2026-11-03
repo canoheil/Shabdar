@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 export const MAX_ROUTE_GZIP_DELTA = 25_600
+export const MAX_ROUTE_GZIP_TOTAL = 100_000
 const ROUTES = ['home', 'detail']
 
 function routeTotal(report, route) {
@@ -34,12 +35,17 @@ function formatBytes(value) {
 
 export function assertWithinBudget(baseline, current, limit = MAX_ROUTE_GZIP_DELTA) {
   const result = compareReports(baseline, current)
-  const failures = ROUTES.filter((route) => result[route].delta > limit)
-  if (failures.length > 0) {
-    throw new Error(failures.map((route) =>
-      `${route} initial-route client JS grew by ${formatBytes(result[route].delta)} bytes; limit is ${formatBytes(limit)}`,
-    ).join('\n'))
-  }
+  const failures = ROUTES.flatMap((route) => {
+    const messages = []
+    if (result[route].delta > limit) {
+      messages.push(`${route} initial-route client JS grew by ${formatBytes(result[route].delta)} bytes; delta limit is ${formatBytes(limit)}`)
+    }
+    if (result[route].current > MAX_ROUTE_GZIP_TOTAL) {
+      messages.push(`${route} initial-route client JS is ${formatBytes(result[route].current)} bytes; total ceiling is ${formatBytes(MAX_ROUTE_GZIP_TOTAL)}`)
+    }
+    return messages
+  })
+  if (failures.length > 0) throw new Error(failures.join('\n'))
   return result
 }
 

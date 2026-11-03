@@ -14,6 +14,8 @@ Phase 11 adds image moderation and launch-safety controls:
 
 Local decode checks file validity only. It is not an automated appropriateness score. Thumbnails, resizing, metadata stripping, and modern derivative formats remain separately scoped optimization work.
 
+The advertising workflow adds one admin-controlled, visitor-dismissible house-ad slot to the ordinary Home feed, plus an internal public request form and a private new/in-progress/closed admin queue. Advertising stays outside listing cursors/counts; contact details are admin-only, and no third-party ad or chat service is involved. Apply migration `0012_advertising.sql` through the normal startup migrator during rollout.
+
 See [docs/STATUS.md](docs/STATUS.md) for the canonical verification record and remaining launch work. Code/test completion does **not** mean a production database has been migrated or its legacy image/comment backlogs have been reviewed.
 
 ## Repository layout

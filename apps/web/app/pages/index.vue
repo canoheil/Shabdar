@@ -296,9 +296,14 @@
       </AppEmptyState>
       <template v-else>
         <ul class="home__cards">
-          <li v-for="item in items" :key="item.public_id">
-            <ListingCard :listing="item" :image-priority="item.public_id === priorityImageId" />
-          </li>
+          <template v-for="(item, index) in items" :key="item.public_id">
+            <li>
+              <ListingCard :listing="item" :image-priority="item.public_id === priorityImageId" />
+            </li>
+            <li v-if="index === 3 && homeAdvertisingSlot" class="home__advertising">
+              <HomeAdvertisingCard :slot="homeAdvertisingSlot" @dismiss="dismissHomeAdvertising" />
+            </li>
+          </template>
         </ul>
         <div v-if="hasMore || loadMoreError" class="home__pagination">
           <AppAlert v-if="loadMoreError" tone="error">{{ loadMoreError }}</AppAlert>
@@ -341,7 +346,13 @@
 </template>
 
 <script setup lang="ts">
-import type { ApiCategory, ApiCity, ApiListingCard, ApiPage } from '~/types'
+import type {
+  ApiAdvertisingSlot,
+  ApiCategory,
+  ApiCity,
+  ApiListingCard,
+  ApiPage,
+} from '~/types'
 
 const SORT_OPTIONS = [
   { value: 'newest', label: 'تازه‌ترین' },
@@ -497,14 +508,22 @@ const { data: cities } = await useFetch<{ data: ApiCity[] }>(
   '/api/v1/locations/provinces/gilan/cities',
 )
 
-const {
-  data: feed,
-  pending: feedPending,
-  error: feedError,
-  refresh: refreshFeed,
-} = await useFetch<ApiPage<ApiListingCard>>('/api/v1/listings', {
-  query: computed(() => requestedFeedQuery()),
-})
+const [
+  {
+    data: feed,
+    pending: feedPending,
+    error: feedError,
+    refresh: refreshFeed,
+  },
+  { data: advertising },
+] = await Promise.all([
+  useFetch<ApiPage<ApiListingCard>>('/api/v1/listings', {
+    query: computed(() => requestedFeedQuery()),
+  }),
+  useFetch<{ slot: ApiAdvertisingSlot | null }>('/api/v1/advertising/slot', {
+    default: () => ({ slot: null }),
+  }),
+])
 
 const items = ref<ApiListingCard[]>(feed.value?.data ?? [])
 const nextCursor = ref(feed.value?.page.next_cursor ?? null)
@@ -512,6 +531,34 @@ const hasMore = ref(feed.value?.page.has_more ?? false)
 const loadingMore = ref(false)
 const loadMoreError = ref('')
 const paginationNotice = ref('')
+
+const ADVERTISING_DISMISSAL_KEY = 'shabdar.home-ad.dismissed'
+const dismissedAdvertisingId = ref<string | null>(null)
+const advertisingSlot = computed(() => advertising.value?.slot ?? null)
+const homeAdvertisingSlot = computed(() => {
+  const slot = advertisingSlot.value
+  if (!slot || hasFilters.value || items.value.length < 4) return null
+  return dismissedAdvertisingId.value === slot.public_id ? null : slot
+})
+
+onMounted(() => {
+  try {
+    dismissedAdvertisingId.value = localStorage.getItem(ADVERTISING_DISMISSAL_KEY)
+  } catch {
+    // Storage can be unavailable in hardened/private browser contexts.
+  }
+})
+
+function dismissHomeAdvertising(): void {
+  const slot = advertisingSlot.value
+  if (!slot) return
+  dismissedAdvertisingId.value = slot.public_id
+  try {
+    localStorage.setItem(ADVERTISING_DISMISSAL_KEY, slot.public_id)
+  } catch {
+    // Dismissal still applies to this page when persistent storage is blocked.
+  }
+}
 
 watch(feed, (page) => {
   items.value = page?.data ?? []

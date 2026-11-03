@@ -266,6 +266,33 @@ The integration reset/drop helpers include `favorites`, so a fresh test schema a
 - `created_at DATETIME(3) NOT NULL`
 - Index: `(user_id, read_at, created_at)`
 
+### `advertising_slots`
+
+**Built in migration `0012_advertising.sql`.** This is one house-ad creative, not a listing and never part of listing feed keys or counters. The singleton `id = 1` is enforced by a check constraint. A restrained default creative is inserted enabled; disabling retains the row, while deleting removes it. Editing keeps `public_id`, and recreating after deletion generates a new one.
+
+- `id BIGINT UNSIGNED PK` with `CHECK (id = 1)`
+- `public_id CHAR(26) UNIQUE NOT NULL`
+- `title VARCHAR(100)`, `body VARCHAR(500)`, `cta_label VARCHAR(80)`, `cta_url VARCHAR(500)` — all required
+- `enabled BOOLEAN NOT NULL DEFAULT TRUE`
+- `created_at`, `updated_at DATETIME(3) NOT NULL`
+
+### `advertising_requests`
+
+**Built in migration `0012_advertising.sql`.** Public submissions are idempotent on a per-form UUID without creating a user/session. Contact data is available only through admin APIs. The admin queue uses newest-first `(created_at,id)` keysets, optionally filtered by status.
+
+- `id BIGINT UNSIGNED AUTO_INCREMENT PK`
+- `public_id CHAR(26) UNIQUE NOT NULL`
+- `submission_id CHAR(36) UNIQUE NOT NULL` — idempotency boundary, not a viewer identity
+- `contact_name VARCHAR(80) NOT NULL`
+- `phone_e164 VARCHAR(16) NOT NULL`
+- `details VARCHAR(1000) NULL`
+- `status ENUM('new','in_progress','closed') NOT NULL DEFAULT 'new'`
+- `handled_by BIGINT UNSIGNED NULL` FK → `users.id` (`ON DELETE SET NULL`)
+- `handled_at`, `created_at`, `updated_at DATETIME(3)`; only creation/update timestamps are required
+- Indexes: `(status, created_at, id)` and `(created_at, id)`
+
+A duplicate `submission_id` returns the original row without overwriting its payload or workflow state. Actual admin status changes record handling attribution and one audit; same-status retries do not. Returning to `new` clears handling attribution.
+
 ### `admin_audit_logs`
 - `id BIGINT UNSIGNED PK`
 - `admin_id BIGINT UNSIGNED NOT NULL` FK → `users.id`
