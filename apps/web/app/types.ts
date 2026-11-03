@@ -214,6 +214,8 @@ export interface ApiListingOut {
   status: string
   category_id: number
   city_id: number
+  // Present on owner-list reads so editing can restore the province selector.
+  province_slug?: string
   rejection_reason: string | null
   created_at: string
   updated_at: string

@@ -70,6 +70,16 @@ pub struct ListingOut {
     pub updated_at: String,
 }
 
+/// Owner-list responses add the reference slug needed to restore the
+/// province/city controls without changing the established write-response
+/// shape used by create and update.
+#[derive(Serialize)]
+pub struct MyListingOut {
+    #[serde(flatten)]
+    pub listing: ListingOut,
+    pub province_slug: String,
+}
+
 pub fn listing_out(row: &sqlx::mysql::MySqlRow) -> Result<ListingOut, ApiError> {
     // Timestamps serialize as RFC3339 strings (ponytail: string fields dodge
     // the chrono `serde` feature — no new dependency surface for one format).
@@ -92,6 +102,15 @@ pub fn listing_out(row: &sqlx::mysql::MySqlRow) -> Result<ListingOut, ApiError> 
             .map_err(|_| ApiError::Internal)?,
         created_at: created_at.to_rfc3339(),
         updated_at: updated_at.to_rfc3339(),
+    })
+}
+
+fn my_listing_out(row: &sqlx::mysql::MySqlRow) -> Result<MyListingOut, ApiError> {
+    Ok(MyListingOut {
+        listing: listing_out(row)?,
+        province_slug: row
+            .try_get("province_slug")
+            .map_err(|_| ApiError::Internal)?,
     })
 }
 
@@ -551,18 +570,21 @@ fn bad_transition() -> ApiError {
 }
 
 /// GET /me/listings — the seller's own listings, newest first, optional
-/// status filter (`all` default). No cursor: seller lists are small at Rasht
-/// scale (ponytail: cursor pagination deferred to the dashboard follow-up).
+/// status filter (`all` default). No cursor: the seller working set is capped
+/// at 50 (ponytail: cursor pagination deferred to the dashboard follow-up).
 pub async fn my_listings(
     pool: &MySqlPool,
     seller_id: u64,
     status: &str,
-) -> Result<Vec<ListingOut>, ApiError> {
+) -> Result<Vec<MyListingOut>, ApiError> {
     const ALLOWED: [&str; 6] = ["draft", "pending", "active", "rejected", "sold", "archived"];
     let rows = if status == "all" || status.is_empty() {
         sqlx::query(
-            "SELECT * FROM listings WHERE seller_id = ? AND deleted_at IS NULL \
-             ORDER BY updated_at DESC, id DESC LIMIT 50",
+            "SELECT l.*, p.slug AS province_slug FROM listings l \
+             JOIN cities c ON c.id = l.city_id \
+             JOIN provinces p ON p.id = c.province_id \
+             WHERE l.seller_id = ? AND l.deleted_at IS NULL \
+             ORDER BY l.updated_at DESC, l.id DESC LIMIT 50",
         )
         .bind(seller_id)
         .fetch_all(pool)
@@ -570,8 +592,11 @@ pub async fn my_listings(
         .map_err(|_| ApiError::Internal)?
     } else if ALLOWED.contains(&status) {
         sqlx::query(
-            "SELECT * FROM listings WHERE seller_id = ? AND status = ? AND deleted_at IS NULL \
-             ORDER BY updated_at DESC, id DESC LIMIT 50",
+            "SELECT l.*, p.slug AS province_slug FROM listings l \
+             JOIN cities c ON c.id = l.city_id \
+             JOIN provinces p ON p.id = c.province_id \
+             WHERE l.seller_id = ? AND l.status = ? AND l.deleted_at IS NULL \
+             ORDER BY l.updated_at DESC, l.id DESC LIMIT 50",
         )
         .bind(seller_id)
         .bind(status)
@@ -583,7 +608,7 @@ pub async fn my_listings(
         fields.insert("status".to_string(), "unknown_status".to_string());
         return Err(ApiError::Validation { fields });
     };
-    rows.iter().map(listing_out).collect()
+    rows.iter().map(my_listing_out).collect()
 }
 
 /// GET /me/dashboard/summary — the seller's own counts (API.md §4).
