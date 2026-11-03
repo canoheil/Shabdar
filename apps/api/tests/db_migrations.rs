@@ -124,7 +124,7 @@ async fn users_and_otp_challenges_have_the_approved_public_id_char26() {
 }
 
 #[tokio::test]
-async fn reference_tables_are_seeded_for_launch() {
+async fn reference_tables_are_seeded_for_national_coverage() {
     let _lock = DB_LOCK.lock().await;
     let Some(pool) = common::test_pool().await else {
         return; // skipped
@@ -138,23 +138,53 @@ async fn reference_tables_are_seeded_for_launch() {
         .await
         .unwrap();
     let provinces: i64 = row.try_get("c").unwrap();
-    assert_eq!(provinces, 1, "seed: exactly Gilan province");
+    assert_eq!(provinces, 31, "seed: every Iranian province");
+
+    let row = sqlx::query("SELECT COUNT(*) AS c FROM cities")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let cities: i64 = row.try_get("c").unwrap();
+    assert_eq!(cities, 1547, "seed: the pinned national city data");
 
     let row = sqlx::query(
-        "SELECT COUNT(*) AS c FROM cities WHERE slug = 'rasht' AND is_launch_city = TRUE",
+        "SELECT c.id FROM cities c JOIN provinces p ON p.id = c.province_id \
+         WHERE p.slug = 'gilan' AND c.slug = 'rasht'",
     )
     .fetch_one(&pool)
     .await
     .unwrap();
-    let rasht: i64 = row.try_get("c").unwrap();
-    assert_eq!(rasht, 1, "seed: Rasht is the launch city");
+    let rasht_id: u32 = row.try_get("id").unwrap();
+    assert_eq!(rasht_id, 1, "the established Rasht identity is preserved");
 
     let row = sqlx::query("SELECT COUNT(*) AS c FROM categories WHERE is_active = TRUE")
         .fetch_one(&pool)
         .await
         .unwrap();
     let categories: i64 = row.try_get("c").unwrap();
-    assert_eq!(categories, 7, "seed: the 7 launch categories");
+    assert_eq!(categories, 7, "seed: the 7 established categories");
+
+    // Replaying the additive seed directly must not duplicate rows or replace
+    // identities, even though the normal migrator records it only once.
+    let national_sql = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/migrations/0013_national_locations.sql"
+    ))
+    .expect("national location migration");
+    sqlx::raw_sql(&national_sql)
+        .execute(&pool)
+        .await
+        .expect("national seed replay");
+    let row = sqlx::query("SELECT \
+         (SELECT COUNT(*) FROM provinces) AS provinces, \
+         (SELECT COUNT(*) FROM cities) AS cities, \
+         (SELECT id FROM cities WHERE slug = 'rasht') AS rasht_id")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(row.try_get::<i64, _>("provinces").unwrap(), 31);
+    assert_eq!(row.try_get::<i64, _>("cities").unwrap(), 1547);
+    assert_eq!(row.try_get::<u32, _>("rasht_id").unwrap(), 1);
 }
 
 #[tokio::test]

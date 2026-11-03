@@ -53,36 +53,56 @@ async fn categories_lists_the_seven_launch_categories() {
 }
 
 #[tokio::test]
-async fn provinces_lists_gilan() {
+async fn provinces_lists_all_31_national_provinces() {
     let Some(app) = reference_app().await else {
         return; // skipped
     };
     let (status, body) = send(app, Method::GET, "/api/v1/locations/provinces", None).await;
     assert_eq!(status, StatusCode::OK);
     let data = body["data"].as_array().expect("data is an array");
-    assert_eq!(data.len(), 1, "exactly Gilan: {body}");
-    assert_eq!(data[0]["slug"], "gilan");
+    assert_eq!(data.len(), 31, "all Iranian provinces: {body}");
+    for slug in ["gilan", "tehran", "fars", "sistan-and-baluchestan"] {
+        assert!(
+            data.iter().any(|item| item["slug"] == slug),
+            "missing province {slug}: {body}"
+        );
+    }
 }
 
 #[tokio::test]
-async fn cities_of_gilan_contains_launch_city_rasht() {
+async fn cities_cover_multiple_provinces_and_preserve_rasht_identity() {
     let Some(app) = reference_app().await else {
         return; // skipped
     };
-    let (status, body) = send(
-        app,
+    let (status, gilan) = send(
+        app.clone(),
         Method::GET,
         "/api/v1/locations/provinces/gilan/cities",
         None,
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let data = body["data"].as_array().expect("data is an array");
-    assert_eq!(data.len(), 1, "exactly Rasht: {body}");
-    assert_eq!(data[0]["slug"], "rasht");
-    assert_eq!(data[0]["is_launch_city"], true);
-    // The post form binds real ids (no array-index fiction).
-    assert_eq!(data[0]["id"], 1);
+    let gilan_data = gilan["data"].as_array().expect("Gilan cities");
+    assert_eq!(gilan_data.len(), 54, "Gilan city seed: {gilan}");
+    let rasht = gilan_data
+        .iter()
+        .find(|item| item["slug"] == "rasht")
+        .expect("Rasht keeps its established slug");
+    assert_eq!(rasht["id"], 1, "Rasht keeps its established ID");
+
+    let (status, tehran) = send(
+        app,
+        Method::GET,
+        "/api/v1/locations/provinces/tehran/cities",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let tehran_data = tehran["data"].as_array().expect("Tehran cities");
+    assert_eq!(tehran_data.len(), 52, "Tehran city seed: {tehran}");
+    assert!(tehran_data.iter().any(|item| {
+        item["slug"] == "tehran" && item["name_fa"] == "تهران"
+    }));
 }
 
 #[tokio::test]
@@ -93,7 +113,7 @@ async fn cities_of_unknown_province_is_not_found() {
     let (status, body) = send(
         app,
         Method::GET,
-        "/api/v1/locations/provinces/tehran/cities",
+        "/api/v1/locations/provinces/unknown-province/cities",
         None,
     )
     .await;
@@ -519,6 +539,10 @@ async fn dashboard_filters_drafts() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["data"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        body["data"][0]["province_slug"], "gilan",
+        "the edit form can restore the listing's province without guessing"
+    );
 }
 
 #[tokio::test]

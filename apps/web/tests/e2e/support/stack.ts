@@ -38,6 +38,8 @@ export interface CreateListingInput {
   priceToman?: number | null
   priceType?: 'fixed' | 'negotiable' | 'free'
   imageCount?: number
+  provinceSlug?: string
+  citySlug?: string
   state: 'active' | 'pending' | 'draft'
 }
 
@@ -131,18 +133,22 @@ function assertCover(): Buffer {
   return cover
 }
 
-async function referenceIds(context: APIRequestContext): Promise<{ categoryId: number; cityId: number }> {
+async function referenceIds(
+  context: APIRequestContext,
+  provinceSlug = 'gilan',
+  citySlug = 'rasht',
+): Promise<{ categoryId: number; cityId: number }> {
   const [categories, cities] = await Promise.all([
     context.get('/api/v1/categories'),
-    context.get('/api/v1/locations/provinces/gilan/cities'),
+    context.get(`/api/v1/locations/provinces/${provinceSlug}/cities`),
   ])
   if (!categories.ok()) throw await responseError(categories, 'Category fixture read')
   if (!cities.ok()) throw await responseError(cities, 'City fixture read')
   const categoryBody = await categories.json() as { data: ApiCategory[] }
   const cityBody = await cities.json() as { data: ApiCity[] }
   const category = categoryBody.data[0]
-  const city = cityBody.data.find((item) => item.is_launch_city) ?? cityBody.data[0]
-  if (!category || !city) throw new Error('Launch reference fixtures are missing')
+  const city = cityBody.data.find((item) => item.slug === citySlug)
+  if (!category || !city) throw new Error(`Reference fixtures are missing: ${provinceSlug}/${citySlug}`)
   return { categoryId: category.id, cityId: city.id }
 }
 
@@ -154,7 +160,11 @@ export async function createListing(input: CreateListingInput): Promise<{ public
   const seller = await apiAs('seller')
   const admin = input.state === 'active' ? await apiAs('admin') : null
   try {
-    const { categoryId, cityId } = await referenceIds(seller)
+    const { categoryId, cityId } = await referenceIds(
+      seller,
+      input.provinceSlug,
+      input.citySlug,
+    )
     const priceType = input.priceType ?? 'fixed'
     const priceToman = input.priceToman === undefined
       ? priceType === 'fixed' ? 12_500_000 : null
@@ -164,7 +174,7 @@ export async function createListing(input: CreateListingInput): Promise<{ public
         category_id: categoryId,
         city_id: cityId,
         title: input.title,
-        description: input.description ?? `توضیحات واقعی fixture برای «${input.title}» در رشت.`,
+        description: input.description ?? `توضیحات واقعی fixture برای «${input.title}» در شبدر.`,
         price_type: priceType,
         price_toman: priceToman,
       },
@@ -229,7 +239,7 @@ export async function initializeStack(): Promise<void> {
   await promoteAdmin(ADMIN_PHONE)
   const listing = await createListing({
     title: 'آگهی آزمون شبدر',
-    description: 'آگهیٔ فعال و پایدار برای آزمون‌های واقعی شبدر در رشت.',
+    description: 'آگهیٔ فعال و پایدار برای آزمون‌های واقعی شبدر.',
     state: 'active',
   })
   const fixtures: E2eFixtures = {
