@@ -103,7 +103,10 @@ fn required_text(
     if value.chars().count() > maximum {
         return Err(validation(field, "too_long"));
     }
-    if value.chars().any(|character| character.is_control() && character != '\n') {
+    if value
+        .chars()
+        .any(|character| character.is_control() && character != '\n')
+    {
         return Err(validation(field, "invalid"));
     }
     Ok(value)
@@ -141,7 +144,9 @@ fn valid_destination(value: &str) -> bool {
         !label.is_empty()
             && !label.starts_with('-')
             && !label.ends_with('-')
-            && label.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+            && label
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
     })
 }
 
@@ -300,10 +305,13 @@ struct ValidatedRequest {
 fn valid_submission_id(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes.len() == 36
-        && [8, 13, 18, 23].into_iter().all(|index| bytes[index] == b'-')
-        && bytes.iter().enumerate().all(|(index, byte)| {
-            [8, 13, 18, 23].contains(&index) || byte.is_ascii_hexdigit()
-        })
+        && [8, 13, 18, 23]
+            .into_iter()
+            .all(|index| bytes[index] == b'-')
+        && bytes
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| [8, 13, 18, 23].contains(&index) || byte.is_ascii_hexdigit())
 }
 
 fn validate_request(input: RequestInput) -> Result<ValidatedRequest, ApiError> {
@@ -339,14 +347,16 @@ fn validate_request(input: RequestInput) -> Result<ValidatedRequest, ApiError> {
     })
 }
 
-async fn request_receipt(pool: &MySqlPool, submission_id: &str) -> Result<serde_json::Value, ApiError> {
-    let row = sqlx::query(
-        "SELECT public_id, status FROM advertising_requests WHERE submission_id = ?",
-    )
-    .bind(submission_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|_| ApiError::Internal)?;
+async fn request_receipt(
+    pool: &MySqlPool,
+    submission_id: &str,
+) -> Result<serde_json::Value, ApiError> {
+    let row =
+        sqlx::query("SELECT public_id, status FROM advertising_requests WHERE submission_id = ?")
+            .bind(submission_id)
+            .fetch_one(pool)
+            .await
+            .map_err(|_| ApiError::Internal)?;
     Ok(serde_json::json!({
         "request": {
             "public_id": row.try_get::<String, _>("public_id").map_err(|_| ApiError::Internal)?,
@@ -364,11 +374,12 @@ pub async fn create_request(
     input: RequestInput,
 ) -> Result<serde_json::Value, ApiError> {
     let input = validate_request(input)?;
-    let existing = sqlx::query("SELECT public_id FROM advertising_requests WHERE submission_id = ?")
-        .bind(&input.submission_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| ApiError::Internal)?;
+    let existing =
+        sqlx::query("SELECT public_id FROM advertising_requests WHERE submission_id = ?")
+            .bind(&input.submission_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|_| ApiError::Internal)?;
     if existing.is_some() {
         return request_receipt(pool, &input.submission_id).await;
     }
@@ -431,7 +442,9 @@ impl AdminRequestRecord {
     fn from_row(row: &MySqlRow) -> Result<Self, ApiError> {
         Ok(Self {
             public_id: row.try_get("public_id").map_err(|_| ApiError::Internal)?,
-            contact_name: row.try_get("contact_name").map_err(|_| ApiError::Internal)?,
+            contact_name: row
+                .try_get("contact_name")
+                .map_err(|_| ApiError::Internal)?,
             phone_e164: row.try_get("phone_e164").map_err(|_| ApiError::Internal)?,
             details: row.try_get("details").map_err(|_| ApiError::Internal)?,
             status: row.try_get("status").map_err(|_| ApiError::Internal)?,
@@ -515,7 +528,8 @@ pub async fn list_requests(
     let next_cursor = if has_more {
         rows.last()
             .map(|row| {
-                let created_at: DateTime<Utc> = row.try_get("created_at").map_err(|_| ApiError::Internal)?;
+                let created_at: DateTime<Utc> =
+                    row.try_get("created_at").map_err(|_| ApiError::Internal)?;
                 let id: u64 = row.try_get("id").map_err(|_| ApiError::Internal)?;
                 Ok(crate::listings::encode_cursor(&created_at, id))
             })
@@ -533,7 +547,10 @@ pub async fn list_requests(
     }))
 }
 
-async fn fetch_admin_request(pool: &MySqlPool, public_id: &str) -> Result<serde_json::Value, ApiError> {
+async fn fetch_admin_request(
+    pool: &MySqlPool,
+    public_id: &str,
+) -> Result<serde_json::Value, ApiError> {
     let row = sqlx::query(&format!("{ADMIN_REQUEST_SELECT} WHERE r.public_id = ?"))
         .bind(public_id)
         .fetch_optional(pool)
@@ -557,14 +574,13 @@ pub async fn update_request(
     }
     let now = Utc::now();
     let mut tx = pool.begin().await.map_err(crate::error::database_error)?;
-    let row = sqlx::query(
-        "SELECT id, status FROM advertising_requests WHERE public_id = ? FOR UPDATE",
-    )
-    .bind(public_id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(crate::error::database_error)?
-    .ok_or(ApiError::NotFound)?;
+    let row =
+        sqlx::query("SELECT id, status FROM advertising_requests WHERE public_id = ? FOR UPDATE")
+            .bind(public_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(crate::error::database_error)?
+            .ok_or(ApiError::NotFound)?;
     let id: u64 = row.try_get("id").map_err(|_| ApiError::Internal)?;
     let previous: String = row.try_get("status").map_err(|_| ApiError::Internal)?;
     if previous != status {

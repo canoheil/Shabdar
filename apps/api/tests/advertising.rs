@@ -141,7 +141,11 @@ async fn call(
     } else {
         serde_json::from_slice(&bytes).expect("JSON response")
     };
-    TestResponse { status, headers, body }
+    TestResponse {
+        status,
+        headers,
+        body,
+    }
 }
 
 fn valid_slot(enabled: bool) -> Value {
@@ -169,13 +173,29 @@ async fn slot_is_public_admin_controlled_and_safely_deleted() {
     let admin = create_user(&setup.pool, &setup.cfg, "+989100000101", true).await;
     let member = create_user(&setup.pool, &setup.cfg, "+989100000102", false).await;
 
-    let public = call(&setup.app, Method::GET, "/api/v1/advertising/slot", None, false, None).await;
+    let public = call(
+        &setup.app,
+        Method::GET,
+        "/api/v1/advertising/slot",
+        None,
+        false,
+        None,
+    )
+    .await;
     assert_eq!(public.status, StatusCode::OK);
     assert_eq!(public.body["slot"]["cta_url"], "/advertising");
     assert!(public.body["slot"].get("enabled").is_none());
     assert!(public.body["slot"].get("phone_e164").is_none());
 
-    let anonymous_admin = call(&setup.app, Method::GET, "/api/v1/admin/advertising/slot", None, false, None).await;
+    let anonymous_admin = call(
+        &setup.app,
+        Method::GET,
+        "/api/v1/admin/advertising/slot",
+        None,
+        false,
+        None,
+    )
+    .await;
     assert_eq!(anonymous_admin.status, StatusCode::UNAUTHORIZED);
     let member_save = call(
         &setup.app,
@@ -227,7 +247,15 @@ async fn slot_is_public_admin_controlled_and_safely_deleted() {
     assert_eq!(disabled.status, StatusCode::OK);
     assert_eq!(disabled.body["slot"]["public_id"], original_id);
     assert_eq!(disabled.body["slot"]["enabled"], false);
-    let hidden = call(&setup.app, Method::GET, "/api/v1/advertising/slot", None, false, None).await;
+    let hidden = call(
+        &setup.app,
+        Method::GET,
+        "/api/v1/advertising/slot",
+        None,
+        false,
+        None,
+    )
+    .await;
     assert_eq!(hidden.body["slot"], Value::Null);
 
     let without_csrf = call(
@@ -312,8 +340,14 @@ async fn requests_are_idempotent_private_and_follow_the_admin_workflow() {
     .await;
     assert_eq!(first.status, StatusCode::OK);
     assert_eq!(first.body["request"]["status"], "new");
-    let request_id = first.body["request"]["public_id"].as_str().expect("id").to_string();
-    assert!(!first.headers.contains_key("set-cookie"), "no anonymous identity cookie");
+    let request_id = first.body["request"]["public_id"]
+        .as_str()
+        .expect("id")
+        .to_string();
+    assert!(
+        !first.headers.contains_key("set-cookie"),
+        "no anonymous identity cookie"
+    );
 
     let mut retry = request_body(1);
     retry["contact_name"] = json!("نام تغییرکرده در retry");
@@ -334,7 +368,15 @@ async fn requests_are_idempotent_private_and_follow_the_admin_workflow() {
         .expect("stored request");
     assert_eq!(stored_name, "درخواست‌کنندهٔ 1");
 
-    let anonymous_queue = call(&setup.app, Method::GET, "/api/v1/admin/advertising/requests", None, false, None).await;
+    let anonymous_queue = call(
+        &setup.app,
+        Method::GET,
+        "/api/v1/admin/advertising/requests",
+        None,
+        false,
+        None,
+    )
+    .await;
     assert_eq!(anonymous_queue.status, StatusCode::UNAUTHORIZED);
     let member_queue = call(
         &setup.app,
@@ -400,7 +442,10 @@ async fn requests_are_idempotent_private_and_follow_the_admin_workflow() {
         assert_eq!(updated.body["request"]["phone_e164"], "+989123456789");
         assert_eq!(updated.headers["cache-control"], "private, no-store");
         if status == "in_progress" {
-            assert_eq!(updated.body["request"]["handled_by"]["public_id"], admin.public_id);
+            assert_eq!(
+                updated.body["request"]["handled_by"]["public_id"],
+                admin.public_id
+            );
             let repeat = call(
                 &setup.app,
                 Method::PATCH,
@@ -449,7 +494,10 @@ async fn request_pages_are_keyset_and_phone_abuse_limit_keeps_replays_idempotent
         .await;
         assert_eq!(created.status, StatusCode::OK);
         if index == 1 {
-            first_id = created.body["request"]["public_id"].as_str().expect("id").to_string();
+            first_id = created.body["request"]["public_id"]
+                .as_str()
+                .expect("id")
+                .to_string();
         }
         sqlx::query("UPDATE advertising_requests SET created_at = created_at + INTERVAL 1 SECOND, updated_at = updated_at + INTERVAL 1 SECOND WHERE submission_id = ?")
             .bind(format!("00000000-0000-4000-8000-{index:012}"))
@@ -470,7 +518,9 @@ async fn request_pages_are_keyset_and_phone_abuse_limit_keeps_replays_idempotent
     assert_eq!(first_page.status, StatusCode::OK);
     assert_eq!(first_page.body["data"].as_array().expect("data").len(), 2);
     assert_eq!(first_page.body["page"]["has_more"], true);
-    let cursor = first_page.body["page"]["next_cursor"].as_str().expect("cursor");
+    let cursor = first_page.body["page"]["next_cursor"]
+        .as_str()
+        .expect("cursor");
     let second_page = call(
         &setup.app,
         Method::GET,
@@ -485,7 +535,9 @@ async fn request_pages_are_keyset_and_phone_abuse_limit_keeps_replays_idempotent
     assert_eq!(second_page.body["page"]["has_more"], false);
     let first_ids = first_page.body["data"].as_array().expect("data");
     let second_ids = second_page.body["data"].as_array().expect("data");
-    assert!(!first_ids.iter().any(|left| second_ids.iter().any(|right| left["public_id"] == right["public_id"])));
+    assert!(!first_ids.iter().any(|left| second_ids
+        .iter()
+        .any(|right| left["public_id"] == right["public_id"])));
 
     let limited = call(
         &setup.app,
@@ -513,6 +565,10 @@ async fn request_pages_are_keyset_and_phone_abuse_limit_keeps_replays_idempotent
         Some(request_body(1)),
     )
     .await;
-    assert_eq!(replay.status, StatusCode::OK, "existing receipt bypasses abuse counters");
+    assert_eq!(
+        replay.status,
+        StatusCode::OK,
+        "existing receipt bypasses abuse counters"
+    );
     assert_eq!(replay.body["request"]["public_id"], first_id);
 }

@@ -1006,13 +1006,9 @@ async fn admin_update_advertising_request(
 ) -> Result<axum::response::Response, ApiError> {
     crate::csrf::check_csrf(&headers)?;
     crate::admin::require_admin(&user)?;
-    let body = crate::advertising::update_request(
-        &state.pool,
-        user.user_id,
-        &public_id,
-        body.status,
-    )
-    .await?;
+    let body =
+        crate::advertising::update_request(&state.pool, user.user_id, &public_id, body.status)
+            .await?;
     let mut response = Json(body).into_response();
     mark_private_viewer(&mut response);
     Ok(response)
