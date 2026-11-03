@@ -1,7 +1,7 @@
 # Shabdar: agent instructions
 
 ## Project
-Persian RTL classifieds marketplace. Launch focus: Rasht. Goal: national coverage later.
+Persian RTL classifieds marketplace for all of Iran. Province and city reference data covers all 31 provinces; Rasht and Gilan remain ordinary location choices.
 Stack: Rust + Axum (API), Nuxt (SSR frontend), MariaDB (native, no Docker).
 
 ## Skills

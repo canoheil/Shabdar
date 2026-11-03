@@ -79,8 +79,8 @@ Error codes used by the auth and session endpoints:
 | Method | Path | Auth | Summary |
 |---|---|---|---|
 | GET | `/categories` | Public | Active category tree with Persian names and slugs. |
-| GET | `/locations/provinces` | Public | Provinces. |
-| GET | `/locations/provinces/{slug}/cities` | Public | Cities of a province. `is_launch_city` is included. |
+| GET | `/locations/provinces` | Public | All 31 provinces. |
+| GET | `/locations/provinces/{slug}/cities` | Public | Cities of the selected province (1,547 reference cities nationwide). `is_launch_city` is retained as legacy informational metadata. |
 | GET | `/listings` | Public | Query: `q`, `category`, `city`, `province`, `min_price`, `max_price`, `sort` (`newest` \| `price_asc` \| `price_desc` \| `popular`), `cursor`, `limit`. Returns only `active` listings. |
 | GET | `/listings/{slug}` | Public | Full detail: title, description, price, price_type, city, category, images, seller summary, `rating_average`, `rating_count`, `comment_count`. Returns `404` for unknown slugs and `410` for removed or deleted listings. Non-owners never see `pending`, `rejected`, or `draft`. |
 | GET | `/sellers/{public_id}` | Public | Minimal seller profile (display name, join date) and active listings. No phone number. |
@@ -135,7 +135,7 @@ measured numbers and the FULLTEXT/ngram upgrade path.
 | POST | `/listings/{public_id}/mark-sold` | Owner | `active` → `sold`. |
 | POST | `/listings/{public_id}/archive` | Owner | `active` → `archived`. |
 | DELETE | `/listings/{public_id}` | Owner | Soft-deletes a `draft`, `rejected`, or `archived` listing. Returns `{ ok: true }`. |
-| GET | `/me/listings?status=all\|pending\|active\|rejected\|sold&cursor=…` | User | Dashboard list of the user's own listings. |
+| GET | `/me/listings?status=all\|pending\|active\|rejected\|sold&cursor=…` | User | Dashboard list of the user's own listings. Each item includes flattened `province_slug` alongside `city_id` so the province → city editor can be restored without changing the listing create/update contract. |
 | GET | `/me/dashboard/summary` | User | `{ active_count, sold_count, pending_count, favorite_count }`. Counts are scoped to the session's own listings; `favorite_count` sums current favorites **received** on all of the seller's non-deleted listings, regardless of listing status. It is not the seller's personal saved-list count. |
 
 Rejected listings include `rejection_reason` for the owner only.

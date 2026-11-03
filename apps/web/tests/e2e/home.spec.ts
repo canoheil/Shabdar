@@ -70,6 +70,41 @@ test('@home national province and city filters load real locations and survive r
   await expect(city).toBeEnabled()
   await expect(city).toHaveValue('tehran')
   await expect(cards).toHaveCount(1)
+
+  await province.selectOption('gilan')
+  await expect(city).toHaveValue('')
+  await expect(page).toHaveURL(/[?&]province=gilan(?:&|$)/)
+  await expect(page).not.toHaveURL(/[?&]city=/)
+  await expect(city).toBeEnabled()
+  await expect(city.locator('option')).toHaveCount(55)
+})
+
+test('@home city-loading failure keeps the selected province and retries real options', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 900 })
+  await page.goto('/')
+  const filters = page.locator('.home__desktop-filters')
+  const province = filters.getByLabel('استان', { exact: true })
+  const city = filters.getByLabel('شهر', { exact: true })
+  let fail = true
+  await page.route('**/api/v1/locations/provinces/tehran/cities', async (route) => {
+    if (fail) {
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: '{"error":{"code":"internal","message":"fixture"}}',
+      })
+      return
+    }
+    await route.continue()
+  })
+  await province.selectOption('tehran')
+  await expect(filters.getByText('بارگذاری شهرها ممکن نشد.', { exact: true })).toBeVisible()
+  await expect(city).toBeDisabled()
+  fail = false
+  await filters.getByRole('button', { name: 'تلاش دوباره برای دریافت شهرها', exact: true }).click()
+  await expect(city).toBeEnabled()
+  await expect(city.locator('option')).toHaveCount(53)
+  await expect(province).toHaveValue('tehran')
 })
 
 test('@home search debounce, URL state and Back restore controls', async ({ page }) => {

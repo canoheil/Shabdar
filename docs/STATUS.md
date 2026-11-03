@@ -1,4 +1,26 @@
-# Status — Phase 11 image moderation & launch safety
+# Status — National locations and historical phases
+
+Updated 2026-11-03 on Arena.ai Agent Mode. The current nationwide-location
+implementation is on branch `arena/c2c8a31c-shabdar`; no production rollout or
+pull-request merge is implied.
+
+## Current nationwide-location scope
+
+- Additive migration `0013_national_locations.sql` contains the pinned reference
+  snapshot of 31 provinces and 1,547 cities. Existing listing relationships,
+  city IDs, and the Rasht `rasht` compatibility slug are preserved; historical
+  migration `0003_reference_data.sql` is unchanged.
+- Home and Post now select province before city, load only the selected
+  province's cities, clear stale city selections, preserve URL filter state,
+  and expose loading/error/retry states. Owner-list responses include
+  `province_slug` for edit restoration; create/update payloads are unchanged.
+- Product copy and reference documentation are Iran-wide. The pinned MIT source
+  and its complete notice are recorded in `THIRD_PARTY_NOTICES.md`.
+- Verification must use the real Axum/Nuxt/MariaDB stack. The first national UI
+  candidate is being checked in run `41641421607`; final Playwright, Lighthouse,
+  and client budget results will be recorded only after a completed run.
+
+## Historical Phase 11 record
 
 Updated 2026-10-31 on Arena.ai Agent Mode after the post-review enforcing
 GitHub Actions gate on the real Axum/Nuxt/MariaDB stack.

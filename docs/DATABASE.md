@@ -12,7 +12,8 @@
 - Soft delete (`deleted_at`) for users and listings. Hard delete only for personal data on request, after a retention review.
 - Uniqueness and check constraints are enforced in the database.
 - This is a logical design, not executable migration SQL. Migrations are written after approval. Each migration is tested on an empty database.
-- Phase 11 status (2026-10-31): migrations 0003–0011 build the launch reference/listing/media/audit tables plus favorites, ratings, comments, reports, blocks, moderation, and exact image-review attribution. Migration `0010_comment_moderation.sql` seeds 143 attributed/deduplicated rules without backfilling comments; `0011_image_moderation.sql` deliberately leaves legacy image review NULL. Reset/drop helpers remain FK-safe. Still deferred: `listing_locations`, `support_tickets`, conversations, messages, and notifications.
+- Phase 11 status (2026-10-31): migrations 0003–0011 build the launch reference/listing/media/audit tables plus favorites, ratings, comments, reports, blocks, moderation, and exact image-review attribution. Migration `0010_comment_moderation.sql` seeds 143 attributed/deduplicated rules without backfilling comments; `0011_image_moderation.sql` deliberately leaves legacy image review NULL. Reset/drop helpers remain FK-safe.
+- National-location status (2026-11-03): additive migration `0013_national_locations.sql` expands the reference data to 31 provinces and 1,547 cities. Existing province/city IDs, slugs, and listing foreign keys are preserved; historical `0003_reference_data.sql` is unchanged. Earlier migrations through `0012_advertising.sql` remain in place. Still deferred: `listing_locations`, `support_tickets`, conversations, messages, and notifications.
 
 ## 2. Tables
 
@@ -61,11 +62,11 @@ Reasoning: ARCHITECTURE.md §7 requires session records with expiry and revocati
 - `id INT UNSIGNED PK`
 - `province_id SMALLINT UNSIGNED NOT NULL` FK → `provinces.id`
 - `name_fa VARCHAR(120) NOT NULL`, `slug VARCHAR(140) NOT NULL`
-- `is_launch_city BOOLEAN NOT NULL DEFAULT FALSE` (Rasht = true at launch)
+- `is_launch_city BOOLEAN NOT NULL DEFAULT FALSE` (legacy informational flag; it does not restrict national selection)
 - Unique: `(province_id, slug)`
 - Index: `(is_launch_city, name_fa)`
 
-Seed: Gilan province and Rasht at launch. Other cities added as needed.
+Seed: migration `0003_reference_data.sql` originally supplied Gilan/Rasht. Additive migration `0013_national_locations.sql` now supplies all 31 provinces and 1,547 cities, retaining the original Rasht ID and `rasht` slug for compatibility. City slugs are unique within their province; national source attribution is recorded in `THIRD_PARTY_NOTICES.md`.
 
 ### `categories`
 - `id SMALLINT UNSIGNED PK`
@@ -322,7 +323,7 @@ When the nearby feature returns:
 
 - MVP search: simple `LIKE` on title for short queries. `FULLTEXT` on title and description is tested with real Persian queries before it is enabled. Persian normalization (Arabic ي and ك to Persian, removing zero-width characters) is applied to the query and stored text.
 - Feed paging uses keyset pagination on `(published_at, id)` with page size capped at 50.
-- Popular sort uses the Bayesian formula from PRODUCT.md, computed in the query. It is not indexed in v1; that is acceptable at Rasht scale and is re-evaluated when the listing count grows.
+- Popular sort uses the Bayesian formula from PRODUCT.md, computed in the query. It is not indexed in v1; this is re-evaluated as national listing volume grows.
 
 ## 5. Open schema decisions
 

@@ -108,7 +108,7 @@
               v-if="citiesError"
               type="button"
               class="btn btn--secondary"
-              @click="retryCities"
+              @click="retryCities()"
             >
               تلاش دوباره برای دریافت شهرها
             </button>
@@ -263,7 +263,7 @@
               v-if="draftCitiesError"
               type="button"
               class="btn btn--secondary"
-              @click="retryDraftCities"
+              @click="retryDraftCities()"
             >
               تلاش دوباره برای دریافت شهرها
             </button>

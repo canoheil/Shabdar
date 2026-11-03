@@ -1,6 +1,6 @@
 # Shabdar Product Brief
 
-> **خلاصه فارسی:** شبدر یک بازارچه آگهی ایرانی با رابط فارسی و راست‌به‌چپ است. تمرکز اولیه روی شهر رشت است و بعداً به سراسر ایران گسترش می‌یابد. هر آگهی قبل از نمایش عمومی باید توسط ادمین تأیید شود. کاربران می‌توانند آگهی‌ها را امتیاز بدهند، کامنت بگذارند و موارد نامناسب را گزارش کنند. فیلتر قطعی دیدگاه فارسی با قوانین مدیریت‌شده و صف بازبینی پیاده‌سازی شده است؛ پیش از ادعای عبور corpus فعلی از این مانع انتشار، بررسی کامل و رسیدگی به backlog لازم است.
+> **خلاصه فارسی:** شبدر یک بازارچه آگهی برای سراسر ایران با رابط فارسی و راست‌به‌چپ است. استان و شهر از داده‌های مرجع ۳۱ استان انتخاب می‌شوند؛ رشت و گیلان نیز مانند سایر شهرها و استان‌ها در دسترس‌اند. هر آگهی قبل از نمایش عمومی باید توسط ادمین تأیید شود. کاربران می‌توانند آگهی‌ها را امتیاز بدهند، کامنت بگذارند و موارد نامناسب را گزارش کنند. فیلتر قطعی دیدگاه فارسی با قوانین مدیریت‌شده و صف بازبینی پیاده‌سازی شده است؛ پیش از ادعای عبور corpus فعلی از این مانع انتشار، بررسی کامل و رسیدگی به backlog لازم است.
 
 ## 1. Product intent
 
@@ -8,7 +8,7 @@ Shabdar is a Persian-language, mobile-first classifieds marketplace for Iranian 
 
 The interface is RTL-first, works on small screens, supports light and dark themes, and keeps listing pages crawlable through server-rendered HTML.
 
-Launch focus is Rasht. The long-term goal is national coverage.
+National coverage is the product baseline: all 31 provinces and their reference cities are available for discovery and posting. Rasht/Gilan have no special product restriction or launch-only positioning.
 
 The previous version is not available. The feature list from the user's screenshots and notes is the only product reference. Details not in that list are proposed defaults.
 
@@ -29,7 +29,7 @@ The previous version is not available. The feature list from the user's screensh
 - Blocking another user.
 
 ### Listings and moderation
-- Create, edit, and submit a listing for review. Fields: category, city, title, description, price in toman (or free, or negotiable), photos.
+- Create, edit, and submit a listing for review. Fields: category, province, city, title, description, price in toman (or free, or negotiable), photos. Province is selected first; changing it clears the previous city selection.
 - Every listing starts as `draft`, then goes to `pending` when submitted. Only an admin can move it to `active` (approved) or `rejected` (with a reason).
 - Seller actions after approval: mark as sold, archive, or delete (soft).
 - Admin moderation queue: pending listings plus a separate legacy image-review backlog. Detail shows every current image; exact human image approval publishes/restores, while rejection/removal keeps its required reason.
@@ -38,7 +38,7 @@ The previous version is not available. The feature list from the user's screensh
 - Public home feed of active listings only.
 - Sort options: newest, cheapest, most expensive, popular.
 - "Popular" = weighted average rating (see section 6). Not raw views.
-- Advanced filters: category, city, price range.
+- Advanced filters: category, province, city, price range. Province and city are represented in URL query state; a city is loaded only for its selected province.
 - Category pages and city pages with clean slug URLs.
 - Listing detail page: title, price, city, category, photos, seller summary, average rating, comments, and contact/chat button.
 - Search by keyword (basic, title and description). Persian-specific search quality is tested before promising more.
@@ -86,7 +86,7 @@ The previous version is not available. The feature list from the user's screensh
 ## 5. Core user flows
 
 ### A. Publish a listing
-1. Logged-in seller opens "Post listing" and fills in category, city, title, description, price, and photos.
+1. Logged-in seller opens "Post listing", chooses a province and then a city, and fills in category, title, description, price, and photos.
 2. Seller saves as draft or submits for review. Submit moves the listing to `pending`.
 3. Seller sees the status in the dashboard ("waiting for review").
 4. Admin opens the queue and listing detail, reviews every loaded current image, and either confirms the exact set or rejects with a reason. Broken/unloaded images cannot be confirmed.
@@ -127,7 +127,7 @@ The previous version is not available. The feature list from the user's screensh
   - `C` = minimum ratings before a listing is treated as reliable (start with 5)
   - Listings with no ratings use `m` as their score.
 - **Blocks:** the blocker’s authenticated comment view excludes the blocked author’s comments. Blocking does not change anonymous SSR, global counters, or another viewer’s page; chat enforcement remains with the separately scoped chat domain.
-- **Location:** city is required for every listing. Exact coordinates are not collected in v1.
+- **Location:** province and city are required for every listing. The additive national migration supplies 31 provinces and 1,547 cities while preserving existing city IDs, slugs, and listing relationships. Exact coordinates are not collected in v1.
 - **Moderation rollout:** migration does not claim that old comments were reviewed. Before using this filter to clear the launch blocker for the existing corpus, an admin must complete one full rescan and review the initial pending backlog. Later rule changes need another full rescan to affect existing visible comments; deactivation never auto-restores.
 
 ## 7. UX and design direction

@@ -86,9 +86,9 @@ FLUSH PRIVILEGES;
 into `DATABASE_URL` / `TEST_DATABASE_URL` — never into any file in the
 repository.
 
-Migrations (`migrations/0001_users_otp_challenges.sql` … `0011_image_moderation.sql`:
-users, OTP challenges, sessions, provinces/cities/categories + Rasht and
-7-category seeds, listings, listing_images, admin_audit_logs, favorites,
+Migrations (`migrations/0001_users_otp_challenges.sql` … `0013_national_locations.sql`):
+users, OTP challenges, sessions, all 31 provinces/1,547 cities, categories,
+listings, listing_images, admin_audit_logs, favorites,
 listing_ratings, listing_comments, reports, blocks, moderation_rules,
 comment_moderation_cases, moderation_settings, and exact image-review
 attribution) are applied
@@ -102,6 +102,10 @@ active listings with images stay non-public until an admin drains
 `/api/v1/admin/listings/image-review-queue`; unreadable/invalid entries require
 rejection/removal or storage repair. Back up `MEDIA_DIR` and the database
 together. Code completion alone does not clear this production rollout step.
+
+Migration 0013 is additive national reference data: it preserves existing city
+IDs, slugs, and listing relationships while adding all 31 provinces and 1,547
+cities. The pinned MIT source and attribution are in `THIRD_PARTY_NOTICES.md`.
 
 ## Commands
 
@@ -127,7 +131,7 @@ Keep the phone awake during long runs: `termux-wake-lock`.
   edit: seconds. Measure and record the first cold `cargo build` / `cargo test`
   on your device when you run them.
 
-## Endpoints (Phase 1–11)
+## Endpoints (current)
 
 | Method | Path | Summary |
 |---|---|---|
@@ -138,14 +142,14 @@ Keep the phone awake during long runs: `termux-wake-lock`.
 | GET | `/api/v1/me` | Requires session → `{"user":{"public_id","display_name","is_admin"}}` |
 | PATCH | `/api/v1/me` | Requires session + `X-CSRF-Token`. Body `{"display_name":"…"}` (trimmed, 1–80 chars) → the same `{"user":{…}}` shape with the new value. Field errors: `fields: {"display_name":"required"|"too_long"}` |
 | GET | `/api/v1/categories` | Active categories `[{id,parent_id,name_fa,slug,sort_order}]` |
-| GET | `/api/v1/locations/provinces` | `[{name_fa,slug}]` (seed: Gilan) |
-| GET | `/api/v1/locations/provinces/{slug}/cities` | `[{id,name_fa,slug,is_launch_city}]`; unknown province → 404 |
+| GET | `/api/v1/locations/provinces` | All 31 provinces as `[{name_fa,slug}]` |
+| GET | `/api/v1/locations/provinces/{slug}/cities` | Selected province's cities as `[{id,name_fa,slug,is_launch_city}]`; 1,547 nationwide reference cities; unknown province → 404 |
 | POST | `/api/v1/listings` | Requires session + CSRF. Draft body `{category_id,city_id,title,description,price_toman?,price_type}` → `draft` with server-made `slug` |
 | PATCH | `/api/v1/listings/{public_id}` | Owner, `draft`/`rejected` only (active is immutable in v1) |
 | POST | `/api/v1/listings/{public_id}/submit` | Owner, needs ≥ 1 image → `pending` |
 | POST | `…/mark-sold` / `…/archive` | Owner, `active` → `sold` / `archived` |
 | DELETE | `/api/v1/listings/{public_id}` | Owner, soft-deletes `draft`/`rejected`/`archived` → `{ok:true}` |
-| GET | `/api/v1/me/listings?status=` | Own listings (`all`\|`pending`\|`active`\|`rejected`\|`sold`\|`archived`) |
+| GET | `/api/v1/me/listings?status=` | Own listings (`all`\|`pending`\|`active`\|`rejected`\|`sold`\|`archived`), including `province_slug` for edit restoration |
 | GET | `/api/v1/me/dashboard/summary` | Own counts `{active_count,sold_count,pending_count,favorite_count}`; `favorite_count` is the sum of favorites received on the seller's non-deleted listings |
 | GET | `/api/v1/listings?…` | Public feed, `active` only, keyset (`q`,`category`,`city`,`province`,`min_price`,`max_price`,`sort`,`cursor`,`limit` ≤ 50) → `{data:[card…],page:{next_cursor,has_more}}` |
 | GET | `/api/v1/listings/{slug}` | Public detail; unknown/non-public → 404, removed/deleted → 410 `gone`; valid viewers also get private `favorited` + `my_stars`, anonymous responses omit both |
