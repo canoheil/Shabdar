@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   MAX_ROUTE_GZIP_DELTA,
+  MAX_ROUTE_GZIP_TOTAL,
   assertWithinBudget,
   compareReports,
 } from './compare-client-js.mjs'
@@ -15,12 +16,23 @@ function report(home, detail) {
 }
 
 test('a route delta of exactly 25,600 bytes is allowed independently', () => {
-  const baseline = report(100_000, 80_000)
-  const current = report(100_000 + MAX_ROUTE_GZIP_DELTA, 80_000 - MAX_ROUTE_GZIP_DELTA)
+  const baseline = report(70_000, 80_000)
+  const current = report(70_000 + MAX_ROUTE_GZIP_DELTA, 80_000 - MAX_ROUTE_GZIP_DELTA)
   const result = compareReports(baseline, current)
   assert.equal(result.home.delta, 25_600)
   assert.equal(result.detail.delta, -25_600)
   assert.doesNotThrow(() => assertWithinBudget(baseline, current))
+})
+
+test('the absolute 100,000-byte route ceiling is enforced independently', () => {
+  assert.doesNotThrow(() => assertWithinBudget(
+    report(90_000, 90_000),
+    report(MAX_ROUTE_GZIP_TOTAL, MAX_ROUTE_GZIP_TOTAL),
+  ))
+  assert.throws(
+    () => assertWithinBudget(report(90_000, 90_000), report(90_000, MAX_ROUTE_GZIP_TOTAL + 1)),
+    /detail.*100,001.*100,000/,
+  )
 })
 
 test('a Home delta of 25,601 bytes fails with the exact delta', () => {

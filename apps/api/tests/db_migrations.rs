@@ -22,6 +22,8 @@ static DB_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// named *_test.
 async fn drop_owned_tables(pool: &sqlx::MySqlPool) {
     for table in [
+        "advertising_requests",
+        "advertising_slots",
         "comment_moderation_cases",
         "moderation_rules",
         "moderation_settings",
@@ -61,6 +63,8 @@ async fn migrations_apply_on_empty_database() {
 
     for table in [
         "users",
+        "advertising_slots",
+        "advertising_requests",
         "otp_challenges",
         "sessions",
         "provinces",

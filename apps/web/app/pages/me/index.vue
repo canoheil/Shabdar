@@ -29,6 +29,7 @@
         <NuxtLink to="/admin/reports">گزارش‌ها</NuxtLink>
         <NuxtLink to="/admin/moderation">مدیریت دیدگاه</NuxtLink>
         <NuxtLink to="/admin/moderation/rules">قوانین دیدگاه</NuxtLink>
+        <NuxtLink to="/admin/advertising">مدیریت تبلیغات</NuxtLink>
         <NuxtLink to="/admin/users">کاربران</NuxtLink>
       </nav>
 

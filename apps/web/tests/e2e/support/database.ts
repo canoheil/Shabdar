@@ -52,6 +52,8 @@ export async function resetDynamicRows(): Promise<void> {
     DELETE FROM listing_ratings;
     DELETE FROM favorites;
     DELETE FROM admin_audit_logs;
+    DELETE FROM advertising_requests;
+    DELETE FROM advertising_slots;
     DELETE FROM listing_images;
     DELETE FROM listings;
     DELETE FROM sessions;

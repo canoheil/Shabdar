@@ -28,6 +28,13 @@ export default defineNuxtConfig({
               // every tiny shared control on the production HTTP/1.1 server.
               if (id === '\0plugin-vue:export-helper') return 'shell'
               if (id.endsWith('/app/app.vue')) return 'shell'
+              // House-ad rendering belongs to Home/admin routes, not the shell
+              // loaded by login, Detail, Post and every other public page.
+              if (/\/app\/components\/HomeAdvertisingCard\.vue/.test(id)) return
+              // Listing cards belong to discovery/favorites routes, not Detail.
+              // Match Vue sub-module queries too, or they pull the component
+              // straight back into the shared shell.
+              if (/\/app\/components\/ListingCard\.vue/.test(id)) return
               // Detail-only engagement stays in the existing detail route chunk;
               // putting its mutation UI in the shell penalizes every Home visit.
               if (/\/app\/components\/(?:Listing(?:Rating|Comments)|BlockControl|ReportControl)\.vue/.test(id)) return

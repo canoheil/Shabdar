@@ -46,36 +46,14 @@
               <span>{{ accountLabel }}</span>
             </NuxtLink>
           </li>
-          <li v-if="user?.is_admin" class="shell__nav-item shell__nav-item--admin">
-            <NuxtLink to="/admin/queue" class="shell__nav-action">
-              <PhShieldCheck :size="22" aria-hidden="true" />
-              <span>صف بررسی</span>
-            </NuxtLink>
-          </li>
-          <li v-if="user?.is_admin" class="shell__nav-item shell__nav-item--admin">
-            <NuxtLink to="/admin/reports" class="shell__nav-action">
-              <PhShieldCheck :size="22" aria-hidden="true" />
-              <span>گزارش‌ها</span>
-            </NuxtLink>
-          </li>
-          <li v-if="user?.is_admin" class="shell__nav-item shell__nav-item--admin">
-            <NuxtLink to="/admin/moderation" class="shell__nav-action">
-              <PhShieldCheck :size="22" aria-hidden="true" />
-              <span>دیدگاه‌ها</span>
-            </NuxtLink>
-          </li>
-          <li v-if="user?.is_admin" class="shell__nav-item shell__nav-item--admin">
-            <NuxtLink to="/admin/moderation/rules" class="shell__nav-action">
-              <PhShieldCheck :size="22" aria-hidden="true" />
-              <span>قوانین</span>
-            </NuxtLink>
-          </li>
-          <li v-if="user?.is_admin" class="shell__nav-item shell__nav-item--admin">
-            <NuxtLink to="/admin/users" class="shell__nav-action">
-              <PhShieldCheck :size="22" aria-hidden="true" />
-              <span>کاربران</span>
-            </NuxtLink>
-          </li>
+          <template v-if="user?.is_admin">
+            <li v-for="item in adminLinks" :key="item.to" class="shell__nav-item shell__nav-item--admin">
+              <NuxtLink :to="item.to" class="shell__nav-action">
+                <PhShieldCheck :size="22" aria-hidden="true" />
+                <span>{{ item.label }}</span>
+              </NuxtLink>
+            </li>
+          </template>
         </ul>
       </nav>
     </header>
@@ -106,6 +84,15 @@ import {
 
 const route = useRoute()
 const { user, status: authStatus, refresh: refreshAuth } = await useAuth()
+
+const adminLinks = [
+  { to: '/admin/queue', label: 'صف بررسی' },
+  { to: '/admin/reports', label: 'گزارش‌ها' },
+  { to: '/admin/moderation', label: 'دیدگاه‌ها' },
+  { to: '/admin/moderation/rules', label: 'قوانین' },
+  { to: '/admin/advertising', label: 'تبلیغات' },
+  { to: '/admin/users', label: 'کاربران' },
+]
 
 const accountTarget = computed(() => authStatus.value === 'anonymous' ? '/login' : '/me')
 const accountLabel = computed(() => {

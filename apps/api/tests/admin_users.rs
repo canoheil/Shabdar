@@ -35,6 +35,8 @@ struct UserRow {
 
 async fn reset_db(pool: &MySqlPool) {
     for table in [
+        "advertising_requests",
+        "advertising_slots",
         "comment_moderation_cases",
         "moderation_rules",
         "moderation_settings",
