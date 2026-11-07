@@ -15,7 +15,7 @@ use axum::Router;
 use chrono::{DateTime, Utc};
 use http_body_util::BodyExt;
 use shabdar_api::config::Config;
-use sqlx::{MySqlPool, Row};
+use sqlx::MySqlPool;
 use tower::ServiceExt;
 
 static TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -39,7 +39,6 @@ struct TestUser {
 struct ListingFixture {
     id: u64,
     slug: String,
-    public_id: String,
 }
 
 async fn setup() -> Option<Setup> {
@@ -137,7 +136,6 @@ async fn create_listing(pool: &MySqlPool, seller_id: u64, status: &str) -> Listi
     ListingFixture {
         id: result.last_insert_id(),
         slug,
-        public_id,
     }
 }
 
