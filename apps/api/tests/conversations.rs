@@ -1397,7 +1397,7 @@ async fn message_pages_are_disjoint_and_cursors_are_scoped() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_private(&headers);
-    let data = page["data"].as_array().expect("data").cloned();
+    let data = page["data"].as_array().expect("data").to_vec();
     assert_eq!(data.len(), 30);
     assert_eq!(page["page"]["has_more_older"], true);
     assert_eq!(page["page"]["has_more_newer"], false);
@@ -1419,7 +1419,7 @@ async fn message_pages_are_disjoint_and_cursors_are_scoped() {
         )
         .await;
         assert_eq!(status, StatusCode::OK);
-        let items = page["data"].as_array().expect("data").cloned();
+        let items = page["data"].as_array().expect("data").to_vec();
         if items.is_empty() {
             assert_eq!(page["page"]["has_more_older"], false);
             break;
@@ -1439,7 +1439,10 @@ async fn message_pages_are_disjoint_and_cursors_are_scoped() {
     // Forward catch-up continues beyond one page.
     let (status, _, page) = get_as(
         &setup.app,
-        &format!("/api/v1/conversations/{public_id}/messages?after={seeded[5]}&limit=30"),
+        &format!(
+            "/api/v1/conversations/{public_id}/messages?after={}&limit=30",
+            seeded[5]
+        ),
         &buyer,
     )
     .await;
@@ -1719,7 +1722,7 @@ async fn inbox_pages_unread_previews_and_sync_cursor() {
     let (status, headers, page) = get_as(&setup.app, "/api/v1/me/conversations", &viewer).await;
     assert_eq!(status, StatusCode::OK);
     assert_private(&headers);
-    let data = page["data"].as_array().expect("data").cloned();
+    let data = page["data"].as_array().expect("data").to_vec();
     assert_eq!(data.len(), 20);
     assert_eq!(page["page"]["has_more_older"], true);
     assert!(page["page"]["older_cursor"].is_string());
@@ -1772,7 +1775,7 @@ async fn inbox_pages_unread_previews_and_sync_cursor() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let rest = next["data"].as_array().expect("data").cloned();
+    let rest = next["data"].as_array().expect("data").to_vec();
     assert_eq!(rest.len(), 5);
     assert_eq!(next["page"]["has_more_older"], false);
     let first_page: Vec<&str> = data
