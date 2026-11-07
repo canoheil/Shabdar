@@ -52,18 +52,12 @@ impl ConversationRow {
 fn conversation_row(row: &MySqlRow) -> Result<ConversationRow, ApiError> {
     Ok(ConversationRow {
         id: row.try_get("id").map_err(|_| ApiError::Internal)?,
-        public_id: row
-            .try_get("public_id")
-            .map_err(|_| ApiError::Internal)?,
-        user_low_id: row
-            .try_get("user_low_id")
-            .map_err(|_| ApiError::Internal)?,
+        public_id: row.try_get("public_id").map_err(|_| ApiError::Internal)?,
+        user_low_id: row.try_get("user_low_id").map_err(|_| ApiError::Internal)?,
         user_high_id: row
             .try_get("user_high_id")
             .map_err(|_| ApiError::Internal)?,
-        created_at: row
-            .try_get("created_at")
-            .map_err(|_| ApiError::Internal)?,
+        created_at: row.try_get("created_at").map_err(|_| ApiError::Internal)?,
         last_message_at: row
             .try_get("last_message_at")
             .map_err(|_| ApiError::Internal)?,
@@ -251,13 +245,14 @@ pub async fn start(
         return Err(ApiError::ConversationBlocked);
     }
 
-    let existing: Option<u64> =
-        sqlx::query_scalar("SELECT id FROM conversations WHERE user_low_id = ? AND user_high_id = ?")
-            .bind(low)
-            .bind(high)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(crate::error::database_error)?;
+    let existing: Option<u64> = sqlx::query_scalar(
+        "SELECT id FROM conversations WHERE user_low_id = ? AND user_high_id = ?",
+    )
+    .bind(low)
+    .bind(high)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(crate::error::database_error)?;
 
     let conversation_id = match existing {
         Some(id) => id,
@@ -277,12 +272,14 @@ pub async fn start(
             .map_err(crate::error::database_error)?;
             let id = inserted.last_insert_id();
             for user_id in [low, high] {
-                sqlx::query("INSERT INTO conversation_reads (conversation_id, user_id) VALUES (?, ?)")
-                    .bind(id)
-                    .bind(user_id)
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(crate::error::database_error)?;
+                sqlx::query(
+                    "INSERT INTO conversation_reads (conversation_id, user_id) VALUES (?, ?)",
+                )
+                .bind(id)
+                .bind(user_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(crate::error::database_error)?;
             }
             id
         }
@@ -344,8 +341,9 @@ async fn metadata_from(
     .map_err(|_| ApiError::Internal)?
     .ok_or(ApiError::NotFound)?;
     let status: String = other.try_get("status").map_err(|_| ApiError::Internal)?;
-    let deleted_at: Option<DateTime<Utc>> =
-        other.try_get("deleted_at").map_err(|_| ApiError::Internal)?;
+    let deleted_at: Option<DateTime<Utc>> = other
+        .try_get("deleted_at")
+        .map_err(|_| ApiError::Internal)?;
     let viewer_blocked: bool = other
         .try_get("viewer_blocked_other")
         .map_err(|_| ApiError::Internal)?;
@@ -489,9 +487,7 @@ pub(crate) const MESSAGE_SELECT: &str = "\
 /// Builds the public listing reference (or `None`) without leaking any
 /// seller-only or moderation field.
 pub(crate) fn listing_reference(row: &MySqlRow) -> Result<Option<serde_json::Value>, ApiError> {
-    let listing_id: Option<u64> = row
-        .try_get("listing_id")
-        .map_err(|_| ApiError::Internal)?;
+    let listing_id: Option<u64> = row.try_get("listing_id").map_err(|_| ApiError::Internal)?;
     if listing_id.is_none() {
         return Ok(None);
     }
@@ -623,13 +619,14 @@ pub async fn inbox(
         let other_blocked: bool = row
             .try_get("other_blocked_viewer")
             .map_err(|_| ApiError::Internal)?;
-        let unread: i64 = row.try_get("unread_count").map_err(|_| ApiError::Internal)?;
+        let unread: i64 = row
+            .try_get("unread_count")
+            .map_err(|_| ApiError::Internal)?;
         let last_message_at: DateTime<Utc> = row
             .try_get("last_message_at")
             .map_err(|_| ApiError::Internal)?;
-        let conversation_created_at: DateTime<Utc> = row
-            .try_get("created_at")
-            .map_err(|_| ApiError::Internal)?;
+        let conversation_created_at: DateTime<Utc> =
+            row.try_get("created_at").map_err(|_| ApiError::Internal)?;
         let body: String = row
             .try_get("message_body")
             .map_err(|_| ApiError::Internal)?;

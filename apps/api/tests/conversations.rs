@@ -174,7 +174,11 @@ async fn call(
     (status, headers, body)
 }
 
-async fn get_as(app: &Router, uri: &str, user: &TestUser) -> (StatusCode, HeaderMap, serde_json::Value) {
+async fn get_as(
+    app: &Router,
+    uri: &str,
+    user: &TestUser,
+) -> (StatusCode, HeaderMap, serde_json::Value) {
     call(app, Method::GET, uri, Some(&user.cookie), None, None).await
 }
 
@@ -195,7 +199,11 @@ async fn post_as(
     .await
 }
 
-async fn start_conversation(app: &Router, user: &TestUser, slug: &str) -> (StatusCode, HeaderMap, serde_json::Value) {
+async fn start_conversation(
+    app: &Router,
+    user: &TestUser,
+    slug: &str,
+) -> (StatusCode, HeaderMap, serde_json::Value) {
     call(
         app,
         Method::POST,
@@ -362,7 +370,11 @@ async fn seed_messages(
         )
         .bind(&public_id)
         .bind(conversation_id)
-        .bind(if index % 2 == 0 { sender_id } else { other_of(sender_id, low, high) })
+        .bind(if index % 2 == 0 {
+            sender_id
+        } else {
+            other_of(sender_id, low, high)
+        })
         .bind(ulid::Ulid::new().to_string())
         .bind(format!("پیام {index}"))
         .bind(created)
@@ -414,7 +426,8 @@ async fn start_is_canonical_in_both_directions() {
     let seller_listing = create_listing(&setup.pool, seller.id, "active").await;
     let buyer_listing = create_listing(&setup.pool, buyer.id, "active").await;
 
-    let (status, headers, body) = start_conversation(&setup.app, &buyer, &seller_listing.slug).await;
+    let (status, headers, body) =
+        start_conversation(&setup.app, &buyer, &seller_listing.slug).await;
     assert_eq!(status, StatusCode::OK, "start failed: {body}");
     assert_private(&headers);
     let public_id = body["public_id"].as_str().expect("public_id").to_string();
@@ -444,11 +457,12 @@ async fn start_is_canonical_in_both_directions() {
             .expect("initiator");
     assert_eq!(initiator, buyer.id, "initiator is the first caller only");
 
-    let read_rows: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM conversation_reads WHERE last_read_message_id IS NULL")
-            .fetch_one(&setup.pool)
-            .await
-            .expect("read rows");
+    let read_rows: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM conversation_reads WHERE last_read_message_id IS NULL",
+    )
+    .fetch_one(&setup.pool)
+    .await
+    .expect("read rows");
     assert_eq!(read_rows, 2, "both participant read rows start NULL");
 }
 
@@ -489,11 +503,13 @@ async fn start_rejects_self_and_unavailable_listings() {
 
     // Unreviewed images hide the listing from contact exactly like Detail.
     let unreviewed = create_listing(&setup.pool, seller.id, "active").await;
-    sqlx::query("UPDATE listings SET image_reviewed_at = NULL, image_reviewed_by = NULL WHERE id = ?")
-        .bind(unreviewed.id)
-        .execute(&setup.pool)
-        .await
-        .expect("clear image review");
+    sqlx::query(
+        "UPDATE listings SET image_reviewed_at = NULL, image_reviewed_by = NULL WHERE id = ?",
+    )
+    .bind(unreviewed.id)
+    .execute(&setup.pool)
+    .await
+    .expect("clear image review");
     sqlx::query(
         "INSERT INTO listing_images (listing_id, storage_key, alt_text, sort_order, width, \
          height, created_at) VALUES (?, 'unreviewed.png', 'x', 0, 800, 600, NOW(3))",
@@ -516,18 +532,37 @@ async fn start_requires_csrf_and_returns_private_errors() {
     let listing = create_listing(&setup.pool, seller.id, "active").await;
     let uri = format!("/api/v1/listings/{}/conversations", listing.slug);
 
-    let (status, headers, body) = call(&setup.app, Method::POST, &uri, Some(&buyer.cookie), None, None).await;
+    let (status, headers, body) = call(
+        &setup.app,
+        Method::POST,
+        &uri,
+        Some(&buyer.cookie),
+        None,
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
     assert_private(&headers);
-    let (status, headers, _) =
-        call(&setup.app, Method::POST, &uri, Some(&buyer.cookie), Some("wrong"), None).await;
+    let (status, headers, _) = call(
+        &setup.app,
+        Method::POST,
+        &uri,
+        Some(&buyer.cookie),
+        Some("wrong"),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_private(&headers);
 
     let (status, headers, body) = call(&setup.app, Method::POST, &uri, None, None, None).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
     assert_private(&headers);
-    assert_eq!(conversation_count(&setup.pool).await, 0, "CSRF precedes any write");
+    assert_eq!(
+        conversation_count(&setup.pool).await,
+        0,
+        "CSRF precedes any write"
+    );
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM conversation_reads")
             .fetch_one(&setup.pool)
@@ -557,8 +592,12 @@ async fn metadata_hides_nonparticipants_and_account_state() {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_private(&headers);
-    let (status, headers, foreign) =
-        get_as(&setup.app, &format!("/api/v1/conversations/{public_id}"), &outsider).await;
+    let (status, headers, foreign) = get_as(
+        &setup.app,
+        &format!("/api/v1/conversations/{public_id}"),
+        &outsider,
+    )
+    .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_private(&headers);
     assert_eq!(
@@ -566,8 +605,12 @@ async fn metadata_hides_nonparticipants_and_account_state() {
         "non-participant and unknown must be indistinguishable"
     );
 
-    let (status, _, body) =
-        get_as(&setup.app, &format!("/api/v1/conversations/{public_id}"), &buyer).await;
+    let (status, _, body) = get_as(
+        &setup.app,
+        &format!("/api/v1/conversations/{public_id}"),
+        &buyer,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["can_message"], true);
 
@@ -577,8 +620,12 @@ async fn metadata_hides_nonparticipants_and_account_state() {
         .execute(&setup.pool)
         .await
         .expect("suspend seller");
-    let (status, _, body) =
-        get_as(&setup.app, &format!("/api/v1/conversations/{public_id}"), &buyer).await;
+    let (status, _, body) = get_as(
+        &setup.app,
+        &format!("/api/v1/conversations/{public_id}"),
+        &buyer,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["can_message"], false);
 }
@@ -602,12 +649,31 @@ async fn block_sync_only_on_real_change_and_start_is_blocked() {
     let before = conversation_updated_at(&setup.pool, conversation_id).await;
 
     let uri = format!("/api/v1/me/blocks/{}", seller.public_id);
-    let (status, _, _) = call(&setup.app, Method::PUT, &uri, Some(&buyer.cookie), Some(&buyer.csrf), None).await;
+    let (status, _, _) = call(
+        &setup.app,
+        Method::PUT,
+        &uri,
+        Some(&buyer.cookie),
+        Some(&buyer.csrf),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     let after_first = conversation_updated_at(&setup.pool, conversation_id).await;
-    assert!(after_first > before, "a real block advances synchronization");
+    assert!(
+        after_first > before,
+        "a real block advances synchronization"
+    );
 
-    let (status, _, _) = call(&setup.app, Method::PUT, &uri, Some(&buyer.cookie), Some(&buyer.csrf), None).await;
+    let (status, _, _) = call(
+        &setup.app,
+        Method::PUT,
+        &uri,
+        Some(&buyer.cookie),
+        Some(&buyer.csrf),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         conversation_updated_at(&setup.pool, conversation_id).await,
@@ -620,13 +686,33 @@ async fn block_sync_only_on_real_change_and_start_is_blocked() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(body["error"]["code"], "conversation_blocked");
     let (status, _, body) = start_conversation(&setup.app, &seller, &listing.slug).await;
-    assert_eq!(status, StatusCode::FORBIDDEN, "reverse start also blocked: {body}");
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "reverse start also blocked: {body}"
+    );
 
-    let (status, _, _) = call(&setup.app, Method::DELETE, &uri, Some(&buyer.cookie), Some(&buyer.csrf), None).await;
+    let (status, _, _) = call(
+        &setup.app,
+        Method::DELETE,
+        &uri,
+        Some(&buyer.cookie),
+        Some(&buyer.csrf),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     let after_unblock = conversation_updated_at(&setup.pool, conversation_id).await;
     assert!(after_unblock > after_first);
-    let (status, _, _) = call(&setup.app, Method::DELETE, &uri, Some(&buyer.cookie), Some(&buyer.csrf), None).await;
+    let (status, _, _) = call(
+        &setup.app,
+        Method::DELETE,
+        &uri,
+        Some(&buyer.cookie),
+        Some(&buyer.csrf),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         conversation_updated_at(&setup.pool, conversation_id).await,
@@ -659,10 +745,26 @@ async fn send_validation_boundaries() {
 
     for (client_id, text, field) in [
         (CLIENT_ID, "س".repeat(1001), "body"),
-        ("123e4567-e89b-42d3-a456-426614174001", "   ".to_string(), "body"),
-        ("123e4567-e89b-42d3-a456-426614174002", "a\u{0}b".to_string(), "body"),
-        ("123e4567-e89b-42d3-a456-426614174003", "a\rb".to_string(), "body"),
-        ("123e4567-e89b-42d3-a456-426614174004", "a\tb".to_string(), "body"),
+        (
+            "123e4567-e89b-42d3-a456-426614174001",
+            "   ".to_string(),
+            "body",
+        ),
+        (
+            "123e4567-e89b-42d3-a456-426614174002",
+            "a\u{0}b".to_string(),
+            "body",
+        ),
+        (
+            "123e4567-e89b-42d3-a456-426614174003",
+            "a\rb".to_string(),
+            "body",
+        ),
+        (
+            "123e4567-e89b-42d3-a456-426614174004",
+            "a\tb".to_string(),
+            "body",
+        ),
         ("not-a-uuid", "سلام".to_string(), "client_message_id"),
         ("", "سلام".to_string(), "client_message_id"),
     ] {
@@ -702,7 +804,11 @@ async fn send_validation_boundaries() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"]["code"], "invalid_request");
-    assert_eq!(message_count(&setup.pool).await, 2, "only the valid sends wrote rows");
+    assert_eq!(
+        message_count(&setup.pool).await,
+        2,
+        "only the valid sends wrote rows"
+    );
 }
 
 #[tokio::test]
@@ -716,15 +822,39 @@ async fn send_is_idempotent_and_conflicts_safely() {
     let (_, _, body) = start_conversation(&setup.app, &buyer, &listing.slug).await;
     let public_id = body["public_id"].as_str().expect("public_id").to_string();
 
-    let (status, _, first) =
-        send_message(&setup.app, &buyer, &public_id, CLIENT_ID, "  سلام، موجود است؟  ", None).await;
+    let (status, _, first) = send_message(
+        &setup.app,
+        &buyer,
+        &public_id,
+        CLIENT_ID,
+        "  سلام، موجود است؟  ",
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{first}");
-    let first_id = first["message"]["public_id"].as_str().expect("id").to_string();
-    assert_eq!(first["message"]["body"], "سلام، موجود است؟", "body is trimmed");
+    let first_id = first["message"]["public_id"]
+        .as_str()
+        .expect("id")
+        .to_string();
+    assert_eq!(
+        first["message"]["body"], "سلام، موجود است؟",
+        "body is trimmed"
+    );
 
-    let (status, _, replay) =
-        send_message(&setup.app, &buyer, &public_id, CLIENT_ID, "سلام، موجود است؟", None).await;
-    assert_eq!(status, StatusCode::OK, "identical replay succeeds: {replay}");
+    let (status, _, replay) = send_message(
+        &setup.app,
+        &buyer,
+        &public_id,
+        CLIENT_ID,
+        "سلام، موجود است؟",
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "identical replay succeeds: {replay}"
+    );
     assert_eq!(replay["message"]["public_id"], first_id);
     assert_eq!(message_count(&setup.pool).await, 1);
     let last_at: DateTime<Utc> =
@@ -733,8 +863,15 @@ async fn send_is_idempotent_and_conflicts_safely() {
             .fetch_one(&setup.pool)
             .await
             .expect("last_message_at");
-    let (status, _, _) =
-        send_message(&setup.app, &buyer, &public_id, CLIENT_ID, "متن تغییر کرد", None).await;
+    let (status, _, _) = send_message(
+        &setup.app,
+        &buyer,
+        &public_id,
+        CLIENT_ID,
+        "متن تغییر کرد",
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let last_after: DateTime<Utc> =
         sqlx::query_scalar("SELECT last_message_at FROM conversations WHERE public_id = ?")
@@ -742,17 +879,34 @@ async fn send_is_idempotent_and_conflicts_safely() {
             .fetch_one(&setup.pool)
             .await
             .expect("last_message_at");
-    assert_eq!(last_at, last_after, "replays and conflicts never move the Inbox");
+    assert_eq!(
+        last_at, last_after,
+        "replays and conflicts never move the Inbox"
+    );
 
-    let (status, _, conflict) =
-        send_message(&setup.app, &buyer, &public_id, CLIENT_ID, "متن تغییر کرد", None).await;
+    let (status, _, conflict) = send_message(
+        &setup.app,
+        &buyer,
+        &public_id,
+        CLIENT_ID,
+        "متن تغییر کرد",
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(conflict["error"]["fields"]["client_message_id"], "conflict");
     assert_eq!(message_count(&setup.pool).await, 1);
 
     // The UUID is scoped per sender and conversation.
-    let (status, _, other) =
-        send_message(&setup.app, &seller, &public_id, CLIENT_ID, "پاسخ فروشنده", None).await;
+    let (status, _, other) = send_message(
+        &setup.app,
+        &seller,
+        &public_id,
+        CLIENT_ID,
+        "پاسخ فروشنده",
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{other}");
     assert_ne!(other["message"]["public_id"], first_id);
     assert_eq!(message_count(&setup.pool).await, 2);
@@ -790,8 +944,15 @@ async fn listing_reference_rules_and_lifecycle() {
         .enumerate()
     {
         let client_id = format!("123e4567-e89b-42d3-a456-42661417402{index}");
-        let (status, _, body) =
-            send_message(&setup.app, &buyer, &public_id, &client_id, "مرجع نامعتبر", Some(slug)).await;
+        let (status, _, body) = send_message(
+            &setup.app,
+            &buyer,
+            &public_id,
+            &client_id,
+            "مرجع نامعتبر",
+            Some(slug),
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
         assert_eq!(body["error"]["fields"]["listing_slug"], "invalid");
     }
@@ -826,10 +987,19 @@ async fn listing_reference_rules_and_lifecycle() {
         assert_eq!(status_code, StatusCode::OK);
         let reference = &page["data"][0]["listing"];
         assert_eq!(reference["slug"], second_listing.slug);
-        assert_eq!(reference["available"], false, "state {status} removes the link");
+        assert_eq!(
+            reference["available"], false,
+            "state {status} removes the link"
+        );
         let client_id = format!("123e4567-e89b-42d3-a456-4266141741{state_index}0");
-        let (send_status, _, sent) =
-            send_message(&setup.app, &buyer, &public_id, &client_id, "ادامهٔ گفتگو", None)
+        let (send_status, _, sent) = send_message(
+            &setup.app,
+            &buyer,
+            &public_id,
+            &client_id,
+            "ادامهٔ گفتگو",
+            None,
+        )
         .await;
         assert_eq!(send_status, StatusCode::OK, "thread stays writable: {sent}");
     }
@@ -862,14 +1032,36 @@ async fn send_requires_auth_csrf_and_participation() {
     let uri = format!("/api/v1/conversations/{public_id}/messages");
     let payload = serde_json::json!({ "client_message_id": CLIENT_ID, "body": "سلام" });
 
-    let (status, headers, _) = call(&setup.app, Method::POST, &uri, None, None, Some(payload.clone())).await;
+    let (status, headers, _) = call(
+        &setup.app,
+        Method::POST,
+        &uri,
+        None,
+        None,
+        Some(payload.clone()),
+    )
+    .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     assert_private(&headers);
-    let (status, _, _) =
-        call(&setup.app, Method::POST, &uri, Some(&buyer.cookie), None, Some(payload.clone())).await;
+    let (status, _, _) = call(
+        &setup.app,
+        Method::POST,
+        &uri,
+        Some(&buyer.cookie),
+        None,
+        Some(payload.clone()),
+    )
+    .await;
     assert_eq!(status, StatusCode::FORBIDDEN, "CSRF is required");
-    let (status, _, body) =
-        call(&setup.app, Method::POST, &uri, Some(&outsider.cookie), Some(&outsider.csrf), Some(payload.clone())).await;
+    let (status, _, body) = call(
+        &setup.app,
+        Method::POST,
+        &uri,
+        Some(&outsider.cookie),
+        Some(&outsider.csrf),
+        Some(payload.clone()),
+    )
+    .await;
     assert_eq!(status, StatusCode::NOT_FOUND, "non-participant: {body}");
 
     sqlx::query("UPDATE users SET status = 'suspended' WHERE id = ?")
@@ -877,9 +1069,20 @@ async fn send_requires_auth_csrf_and_participation() {
         .execute(&setup.pool)
         .await
         .expect("suspend");
-    let (status, _, body) =
-        call(&setup.app, Method::POST, &uri, Some(&buyer.cookie), Some(&buyer.csrf), Some(payload)).await;
-    assert_eq!(status, StatusCode::FORBIDDEN, "inactive counterpart: {body}");
+    let (status, _, body) = call(
+        &setup.app,
+        Method::POST,
+        &uri,
+        Some(&buyer.cookie),
+        Some(&buyer.csrf),
+        Some(payload),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "inactive counterpart: {body}"
+    );
     assert_eq!(message_count(&setup.pool).await, 0);
 }
 
@@ -982,7 +1185,16 @@ async fn concurrent_identical_sends_collapse_to_one_row() {
     let spawn = |app: Router, cookie: String, csrf: String, payload: serde_json::Value| {
         let uri = uri.clone();
         tokio::spawn(async move {
-            call(&app, Method::POST, &uri, Some(&cookie), Some(&csrf), Some(payload)).await.2
+            call(
+                &app,
+                Method::POST,
+                &uri,
+                Some(&cookie),
+                Some(&csrf),
+                Some(payload),
+            )
+            .await
+            .2
         })
     };
     let (first, second) = tokio::join!(
@@ -1015,16 +1227,39 @@ async fn blocked_pair_keeps_history_and_replays_confirmed_receipt() {
     let listing = create_listing(&setup.pool, seller.id, "active").await;
     let (_, _, body) = start_conversation(&setup.app, &buyer, &listing.slug).await;
     let public_id = body["public_id"].as_str().expect("public_id").to_string();
-    let (status, _, _) = send_message(&setup.app, &buyer, &public_id, CLIENT_ID, "قبل از مسدودسازی", None).await;
+    let (status, _, _) = send_message(
+        &setup.app,
+        &buyer,
+        &public_id,
+        CLIENT_ID,
+        "قبل از مسدودسازی",
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
 
     let uri = format!("/api/v1/me/blocks/{}", seller.public_id);
-    let (status, _, _) = call(&setup.app, Method::PUT, &uri, Some(&buyer.cookie), Some(&buyer.csrf), None).await;
+    let (status, _, _) = call(
+        &setup.app,
+        Method::PUT,
+        &uri,
+        Some(&buyer.cookie),
+        Some(&buyer.csrf),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
 
     // A confirmed receipt still replays after the block; nothing new is written.
-    let (status, _, replay) =
-        send_message(&setup.app, &buyer, &public_id, CLIENT_ID, "قبل از مسدودسازی", None).await;
+    let (status, _, replay) = send_message(
+        &setup.app,
+        &buyer,
+        &public_id,
+        CLIENT_ID,
+        "قبل از مسدودسازی",
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{replay}");
     assert_eq!(message_count(&setup.pool).await, 1);
 
@@ -1052,8 +1287,12 @@ async fn blocked_pair_keeps_history_and_replays_confirmed_receipt() {
     assert_eq!(status, StatusCode::FORBIDDEN);
 
     // History and Read remain available while blocked.
-    let (status, _, page) =
-        get_as(&setup.app, &format!("/api/v1/conversations/{public_id}/messages"), &buyer).await;
+    let (status, _, page) = get_as(
+        &setup.app,
+        &format!("/api/v1/conversations/{public_id}/messages"),
+        &buyer,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(page["data"].as_array().expect("data").len(), 1);
     let message_public_id = page["data"][0]["public_id"].as_str().expect("id");
@@ -1150,8 +1389,12 @@ async fn message_pages_are_disjoint_and_cursors_are_scoped() {
     let seeded = seed_messages(&setup.pool, conversation_id, low, high, seller.id, 65).await;
     assert_eq!(seeded.len(), 65);
 
-    let (status, headers, page) =
-        get_as(&setup.app, &format!("/api/v1/conversations/{public_id}/messages"), &buyer).await;
+    let (status, headers, page) = get_as(
+        &setup.app,
+        &format!("/api/v1/conversations/{public_id}/messages"),
+        &buyer,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_private(&headers);
     let data = page["data"].as_array().expect("data").cloned();
@@ -1171,9 +1414,7 @@ async fn message_pages_are_disjoint_and_cursors_are_scoped() {
     for _ in 0..3 {
         let (status, _, page) = get_as(
             &setup.app,
-            &format!(
-                "/api/v1/conversations/{public_id}/messages?before={cursor}&limit=30"
-            ),
+            &format!("/api/v1/conversations/{public_id}/messages?before={cursor}&limit=30"),
             &buyer,
         )
         .await;
@@ -1272,7 +1513,10 @@ async fn read_is_monotonic_and_drives_seen_and_unread() {
     let public_id = body["public_id"].as_str().expect("public_id").to_string();
 
     let (_, _, first) = send_message(&setup.app, &seller, &public_id, CLIENT_ID, "سلام", None).await;
-    let first_id = first["message"]["public_id"].as_str().expect("id").to_string();
+    let first_id = first["message"]["public_id"]
+        .as_str()
+        .expect("id")
+        .to_string();
     let (_, _, second) = send_message(
         &setup.app,
         &seller,
@@ -1282,23 +1526,40 @@ async fn read_is_monotonic_and_drives_seen_and_unread() {
         None,
     )
     .await;
-    let second_id = second["message"]["public_id"].as_str().expect("id").to_string();
+    let second_id = second["message"]["public_id"]
+        .as_str()
+        .expect("id")
+        .to_string();
 
-    let (status, _, page) =
-        get_as(&setup.app, &format!("/api/v1/conversations/{public_id}/messages"), &buyer).await;
+    let (status, _, page) = get_as(
+        &setup.app,
+        &format!("/api/v1/conversations/{public_id}/messages"),
+        &buyer,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(page["read_state"]["viewer_read_through"], serde_json::Value::Null);
+    assert_eq!(
+        page["read_state"]["viewer_read_through"],
+        serde_json::Value::Null
+    );
     assert_eq!(page["data"].as_array().expect("data").len(), 2);
 
     // Sender does not see "seen" before the other party reads.
-    let (_, _, sender_view) =
-        get_as(&setup.app, &format!("/api/v1/conversations/{public_id}/messages"), &seller).await;
+    let (_, _, sender_view) = get_as(
+        &setup.app,
+        &format!("/api/v1/conversations/{public_id}/messages"),
+        &seller,
+    )
+    .await;
     assert_eq!(sender_view["data"][0]["seen"], false);
 
     let (status, _, receipt) = mark_read(&setup.app, &buyer, &public_id, &first_id).await;
     assert_eq!(status, StatusCode::OK, "{receipt}");
     assert_eq!(receipt["read_through"], first_id);
-    assert_eq!(receipt["unread_count"], 1, "one newer incoming message remains");
+    assert_eq!(
+        receipt["unread_count"], 1,
+        "one newer incoming message remains"
+    );
 
     // Older and duplicate reads are no-ops that return the current state.
     let (status, _, repeat) = mark_read(&setup.app, &buyer, &public_id, &first_id).await;
@@ -1311,8 +1572,12 @@ async fn read_is_monotonic_and_drives_seen_and_unread() {
     assert!(receipt["read_at"].is_string());
 
     // The sender now sees Seen on both of their messages.
-    let (_, _, sender_view) =
-        get_as(&setup.app, &format!("/api/v1/conversations/{public_id}/messages"), &seller).await;
+    let (_, _, sender_view) = get_as(
+        &setup.app,
+        &format!("/api/v1/conversations/{public_id}/messages"),
+        &seller,
+    )
+    .await;
     assert_eq!(sender_view["data"][0]["seen"], true);
     assert_eq!(sender_view["data"][1]["seen"], true);
     assert_eq!(sender_view["read_state"]["other_read_through"], second_id);
@@ -1327,7 +1592,10 @@ async fn read_is_monotonic_and_drives_seen_and_unread() {
         None,
     )
     .await;
-    let third_id = third["message"]["public_id"].as_str().expect("id").to_string();
+    let third_id = third["message"]["public_id"]
+        .as_str()
+        .expect("id")
+        .to_string();
     let (status, _, receipt) = mark_read(&setup.app, &buyer, &public_id, &second_id).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
@@ -1389,8 +1657,12 @@ async fn empty_thread_starts_with_null_read_state() {
     let listing = create_listing(&setup.pool, seller.id, "active").await;
     let (_, _, body) = start_conversation(&setup.app, &buyer, &listing.slug).await;
     let public_id = body["public_id"].as_str().expect("public_id").to_string();
-    let (status, _, page) =
-        get_as(&setup.app, &format!("/api/v1/conversations/{public_id}/messages"), &buyer).await;
+    let (status, _, page) = get_as(
+        &setup.app,
+        &format!("/api/v1/conversations/{public_id}/messages"),
+        &buyer,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(page["data"].as_array().expect("data").len(), 0);
     assert!(page["page"]["older_cursor"].is_null());
@@ -1457,9 +1729,15 @@ async fn inbox_pages_unread_previews_and_sync_cursor() {
     let preview = data[0]["last_message"]["body_preview"]
         .as_str()
         .expect("preview");
-    assert_eq!(preview.chars().count(), 160, "preview is bounded by scalars");
+    assert_eq!(
+        preview.chars().count(),
+        160,
+        "preview is bounded by scalars"
+    );
     assert_eq!(data[0]["unread_count"], 1, "incoming only");
-    assert!(data[0]["last_message"]["sender_public_id"].as_str().is_some());
+    assert!(data[0]["last_message"]["sender_public_id"]
+        .as_str()
+        .is_some());
     let serialized = page.to_string();
     assert!(!serialized.contains("+9891"), "no phone numbers leak");
     assert!(!serialized.contains("last_read_message_id"));
@@ -1497,7 +1775,10 @@ async fn inbox_pages_unread_previews_and_sync_cursor() {
     let rest = next["data"].as_array().expect("data").cloned();
     assert_eq!(rest.len(), 5);
     assert_eq!(next["page"]["has_more_older"], false);
-    let first_page: Vec<&str> = data.iter().filter_map(|item| item["public_id"].as_str()).collect();
+    let first_page: Vec<&str> = data
+        .iter()
+        .filter_map(|item| item["public_id"].as_str())
+        .collect();
     for item in &rest {
         let id = item["public_id"].as_str().expect("id");
         assert!(!first_page.contains(&id), "Inbox pages stay disjoint");
@@ -1633,7 +1914,8 @@ async fn inbox_forward_pages_and_read_sync_without_reorder() {
     );
 
     // A Read advances synchronization but never Inbox recency order.
-    let (status, _, receipt) = mark_read(&setup.app, &viewer, &target, &first_message_public_id).await;
+    let (status, _, receipt) =
+        mark_read(&setup.app, &viewer, &target, &first_message_public_id).await;
     assert_eq!(status, StatusCode::OK, "{receipt}");
     assert_eq!(receipt["unread_count"], 0);
     let (_, _, page) = get_as(&setup.app, "/api/v1/me/conversations?limit=50", &viewer).await;
@@ -1707,8 +1989,15 @@ async fn inbox_requires_auth_and_rejects_conflicting_cursors() {
     let Some(setup) = setup().await else {
         return;
     };
-    let (status, headers, body) =
-        call(&setup.app, Method::GET, "/api/v1/me/conversations", None, None, None).await;
+    let (status, headers, body) = call(
+        &setup.app,
+        Method::GET,
+        "/api/v1/me/conversations",
+        None,
+        None,
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
     assert_private(&headers);
 
@@ -1721,7 +2010,11 @@ async fn inbox_requires_auth_and_rejects_conflicting_cursors() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
     assert_private(&headers);
-    let (status, _, _) =
-        get_as(&setup.app, "/api/v1/me/conversations?before=garbage", &viewer).await;
+    let (status, _, _) = get_as(
+        &setup.app,
+        "/api/v1/me/conversations?before=garbage",
+        &viewer,
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }

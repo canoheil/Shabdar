@@ -1054,13 +1054,14 @@ async fn chat_tables_apply_on_empty_database() {
     assert_eq!(unique_indexes, 2);
 
     // Second application is a no-op and keeps the national seed intact.
-    run_migrations(&pool).await.expect("second apply must be a no-op");
-    let counts: (i64, i64) = sqlx::query_as(
-        "SELECT (SELECT COUNT(*) FROM provinces), (SELECT COUNT(*) FROM cities)",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("national counts");
+    run_migrations(&pool)
+        .await
+        .expect("second apply must be a no-op");
+    let counts: (i64, i64) =
+        sqlx::query_as("SELECT (SELECT COUNT(*) FROM provinces), (SELECT COUNT(*) FROM cities)")
+            .fetch_one(&pool)
+            .await
+            .expect("national counts");
     assert_eq!(counts, (31, 1547));
 }
 
@@ -1140,14 +1141,12 @@ async fn chat_constraints_and_repeat_reset_are_safe() {
 
     // Both participant read rows start with NULL high-water state.
     for user in [low, high] {
-        sqlx::query(
-            "INSERT INTO conversation_reads (conversation_id, user_id) VALUES (?, ?)",
-        )
-        .bind(conversation_id)
-        .bind(user)
-        .execute(&pool)
-        .await
-        .expect("initial read row");
+        sqlx::query("INSERT INTO conversation_reads (conversation_id, user_id) VALUES (?, ?)")
+            .bind(conversation_id)
+            .bind(user)
+            .execute(&pool)
+            .await
+            .expect("initial read row");
     }
 
     // A partial last-message pair is rejected.

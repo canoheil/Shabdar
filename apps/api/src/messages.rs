@@ -83,8 +83,9 @@ impl SendBody {
     /// rejects them as `invalid_json`.
     pub fn validate(self) -> Result<ValidatedSend, ApiError> {
         let client_message_id = match self.client_message_id {
-            Some(raw) => canonical_uuid(&raw)
-                .ok_or_else(|| validation("client_message_id", "invalid"))?,
+            Some(raw) => {
+                canonical_uuid(&raw).ok_or_else(|| validation("client_message_id", "invalid"))?
+            }
             None => return Err(validation("client_message_id", "required")),
         };
         let body = self
@@ -251,9 +252,7 @@ async fn send_once(
     .map_err(crate::error::database_error)?
     .ok_or(ApiError::NotFound)?;
     let conversation_id: u64 = pre.try_get("id").map_err(|_| ApiError::Internal)?;
-    let low: u64 = pre
-        .try_get("user_low_id")
-        .map_err(|_| ApiError::Internal)?;
+    let low: u64 = pre.try_get("user_low_id").map_err(|_| ApiError::Internal)?;
     let high: u64 = pre
         .try_get("user_high_id")
         .map_err(|_| ApiError::Internal)?;
@@ -261,7 +260,8 @@ async fn send_once(
 
     // 2. User locks in ascending id order, then the conversation row.
     crate::db::lock_user_pair(&mut tx, viewer_id, other_id).await?;
-    let conversation = conversations::lock_conversation(&mut tx, viewer_id, conversation_id).await?;
+    let conversation =
+        conversations::lock_conversation(&mut tx, viewer_id, conversation_id).await?;
     let other_active = conversations::participant_is_active(&mut tx, other_id).await?;
 
     // 3. Listing reference: only the other participant's listing is valid, and
@@ -279,7 +279,10 @@ async fn send_once(
             if seller_id != other_id {
                 return Err(validation("listing_slug", "invalid"));
             }
-            Some(row.try_get::<u64, _>("id").map_err(|_| ApiError::Internal)?)
+            Some(
+                row.try_get::<u64, _>("id")
+                    .map_err(|_| ApiError::Internal)?,
+            )
         }
     };
 
@@ -289,12 +292,12 @@ async fn send_once(
         "WHERE m.conversation_id = ? AND m.sender_id = ? AND m.client_message_id = ?",
     );
     let stored = sqlx::query(&stored_sql)
-    .bind(conversation_id)
-    .bind(viewer_id)
-    .bind(&input.client_message_id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(crate::error::database_error)?;
+        .bind(conversation_id)
+        .bind(viewer_id)
+        .bind(&input.client_message_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(crate::error::database_error)?;
     let (_, other_read_id) =
         conversations::read_state_tx(&mut tx, conversation.id, viewer_id, other_id).await?;
     if let Some(stored) = stored {
@@ -498,14 +501,13 @@ pub async fn mark_read(
     let conversation = conversations::participant_conversation(pool, viewer_id, public_id).await?;
     let other_id = conversation.other_id(viewer_id);
     let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
-    let target: Option<u64> = sqlx::query_scalar(
-        "SELECT id FROM messages WHERE public_id = ? AND conversation_id = ?",
-    )
-    .bind(through_message_id)
-    .bind(conversation.id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|_| ApiError::Internal)?;
+    let target: Option<u64> =
+        sqlx::query_scalar("SELECT id FROM messages WHERE public_id = ? AND conversation_id = ?")
+            .bind(through_message_id)
+            .bind(conversation.id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|_| ApiError::Internal)?;
     let target = target.ok_or_else(|| validation("through_message_id", "invalid"))?;
     conversations::lock_conversation(&mut tx, viewer_id, conversation.id).await?;
     let current: Option<u64> = sqlx::query_scalar::<_, Option<u64>>(

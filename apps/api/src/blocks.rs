@@ -62,20 +62,22 @@ async fn put_once(pool: &MySqlPool, user_id: u64, public_id: &str) -> Result<(),
         .await
         .map_err(crate::error::database_error)?;
     let status: String = target.try_get("status").map_err(|_| ApiError::Internal)?;
-    let deleted_at: Option<chrono::DateTime<Utc>> =
-        target.try_get("deleted_at").map_err(|_| ApiError::Internal)?;
+    let deleted_at: Option<chrono::DateTime<Utc>> = target
+        .try_get("deleted_at")
+        .map_err(|_| ApiError::Internal)?;
     if status == "deleted" || deleted_at.is_some() {
         return Err(ApiError::NotFound);
     }
 
-    let inserted =
-        sqlx::query("INSERT IGNORE INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)")
-            .bind(user_id)
-            .bind(target_id)
-            .bind(Utc::now())
-            .execute(&mut *tx)
-            .await
-            .map_err(crate::error::database_error)?;
+    let inserted = sqlx::query(
+        "INSERT IGNORE INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)",
+    )
+    .bind(user_id)
+    .bind(target_id)
+    .bind(Utc::now())
+    .execute(&mut *tx)
+    .await
+    .map_err(crate::error::database_error)?;
     let (low, high) = crate::db::canonical_pair(user_id, target_id);
     crate::conversations::sync_pair_block_state(&mut tx, low, high, inserted.rows_affected() == 1)
         .await?;
