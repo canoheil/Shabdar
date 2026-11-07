@@ -129,34 +129,7 @@ static WRITE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// Drop everything the migrations own (same child-first order as
 /// tests/db_migrations.rs) and re-apply, so each test starts clean.
 async fn reset_db(pool: &sqlx::MySqlPool) {
-    for table in [
-        "advertising_requests",
-        "advertising_slots",
-        "comment_moderation_cases",
-        "moderation_rules",
-        "moderation_settings",
-        "reports",
-        "blocks",
-        "listing_comments",
-        "listing_ratings",
-        "favorites",
-        "listing_images",
-        "listings",
-        "admin_audit_logs",
-        "sessions",
-        "otp_challenges",
-        "cities",
-        "categories",
-        "provinces",
-        "users",
-        "_sqlx_migrations",
-    ] {
-        let sql = format!("DROP TABLE IF EXISTS {table}"); // fixed literals
-        sqlx::query(&sql).execute(pool).await.expect("drop failed");
-    }
-    shabdar_api::db::run_migrations(pool)
-        .await
-        .expect("migrations apply");
+    common::reset_database(pool).await;
 }
 
 /// Build a challenge with a KNOWN code via the service (same construction as
