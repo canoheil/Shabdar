@@ -118,18 +118,17 @@ async fn create_bare_user(pool: &MySqlPool, phone: &str, name: &str) -> TestUser
 async fn create_listing(pool: &MySqlPool, seller_id: u64, status: &str) -> ListingFixture {
     let public_id = ulid::Ulid::new().to_string();
     let slug = format!("chat-{}", ulid::Ulid::new());
+    // No images, and therefore no image review: `chk_listings_image_review`
+    // only accepts all-NULL or all-set review columns.
     let result = sqlx::query(
         "INSERT INTO listings (public_id, seller_id, category_id, city_id, title, slug, \
-         description, price_toman, price_type, status, published_at, created_at, updated_at, \
-         image_reviewed_by, image_reviewed_at) \
-         VALUES (?, ?, 1, 1, 'آگهی گفتگو', ?, 'توضیحات', 1000, 'fixed', ?, NOW(3), NOW(3), \
-         NOW(3), ?, NOW(3))",
+         description, price_toman, price_type, status, published_at, created_at, updated_at) \
+         VALUES (?, ?, 1, 1, 'آگهی گفتگو', ?, 'توضیحات', 1000, 'fixed', ?, NOW(3), NOW(3), NOW(3))",
     )
     .bind(&public_id)
     .bind(seller_id)
     .bind(&slug)
     .bind(status)
-    .bind(seller_id)
     .execute(pool)
     .await
     .expect("listing fixture");
@@ -1914,20 +1913,24 @@ async fn inbox_forward_pages_and_read_sync_without_reorder() {
         "a same-timestamp change must still be returned by the next poll: {after}"
     );
 
-    // A Read advances synchronization but never Inbox recency order.
+    // A Read advances synchronization but never Inbox recency order. The read
+    // target has to be inside the newest 50 (it is index 50 of 55 seeds) and
+    // must not be the newest, so a promotion to the top would be visible.
+    let (read_conversation_id, read_message_public_id, _) = seeded[50].clone();
+    let read_target = conversation_public_id(&setup.pool, read_conversation_id).await;
     let (status, _, receipt) =
-        mark_read(&setup.app, &viewer, &target, &first_message_public_id).await;
+        mark_read(&setup.app, &viewer, &read_target, &read_message_public_id).await;
     assert_eq!(status, StatusCode::OK, "{receipt}");
     assert_eq!(receipt["unread_count"], 0);
     let (_, _, page) = get_as(&setup.app, "/api/v1/me/conversations?limit=50", &viewer).await;
     let items = page["data"].as_array().expect("data").clone();
     let position = items
         .iter()
-        .position(|item| item["public_id"] == target.as_str())
+        .position(|item| item["public_id"] == read_target.as_str())
         .expect("conversation present");
     assert_ne!(
         items[0]["public_id"],
-        target.as_str(),
+        read_target.as_str(),
         "a Read must not promote the conversation to the top"
     );
     assert!(position > 0);

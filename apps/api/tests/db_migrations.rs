@@ -973,15 +973,17 @@ async fn chat_tables_apply_on_empty_database() {
     common::drop_owned_tables(&pool).await;
     run_migrations(&pool).await.expect("first apply");
 
-    let tables: Vec<String> = sqlx::query_scalar(
+    let mut tables: Vec<String> = sqlx::query_scalar(
         "SELECT TABLE_NAME FROM information_schema.TABLES \
          WHERE TABLE_SCHEMA = DATABASE() \
-           AND TABLE_NAME IN ('conversations','messages','conversation_reads') \
-         ORDER BY TABLE_NAME",
+           AND TABLE_NAME IN ('conversations','messages','conversation_reads')",
     )
     .fetch_all(&pool)
     .await
     .expect("chat table metadata");
+    // `information_schema` ordering follows the server collation, which treats
+    // the underscore differently across versions; sort in Rust and compare.
+    tables.sort();
     assert_eq!(
         tables,
         vec![
@@ -1105,10 +1107,18 @@ async fn chat_constraints_and_repeat_reset_are_safe() {
     .bind(buyer)
     .execute(&pool)
     .await;
-    assert!(unordered
-        .expect_err("an unordered pair must violate the CHECK")
-        .to_string()
-        .contains("chk_conversations_ordered_pair"));
+    // MariaDB reports a CHECK violation as `CONSTRAINT ... failed` (4025) and
+    // MySQL as error 3819; both are constraint failures, never a plain insert.
+    let unordered_error = format!(
+        "{:?}",
+        unordered.expect_err("an unordered pair must violate the CHECK")
+    );
+    assert!(
+        unordered_error.contains("chk_conversations_ordered_pair")
+            || unordered_error.contains("4025")
+            || unordered_error.contains("3819"),
+        "an unordered pair must be rejected by the ordered-pair CHECK: {unordered_error}"
+    );
 
     let conversation_id: u64 = {
         let result = sqlx::query(
