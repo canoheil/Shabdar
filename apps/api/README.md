@@ -18,8 +18,11 @@ blocks, blocker-only comment filtering, and the admin report/user/filter
 moderation surfaces. The Nuxt frontend lives in `apps/web` and talks to this
 API through its same-origin `/api` proxy. Reports never automatically hide
 content; automatic comment review is an independent path and never deletes or
-suspends by itself. Chat, notifications, semantic/fuzzy moderation, and other
-launch checks remain later phases.
+suspends by itself. Direct two-user chat is implemented here too: canonical
+buyer/seller pairs, idempotent sends, high-water Read receipts, block
+enforcement, and Inbox recency/synchronization cursors. Notifications,
+semantic/fuzzy moderation, and other launch checks remain later phases; chat is
+poll-only and has no push transport.
 
 Development happens on Termux (Android). No Docker; MariaDB runs as a native
 service on the phone.

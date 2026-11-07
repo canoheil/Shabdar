@@ -10,7 +10,7 @@
     "test:e2e": "playwright test",
     "test:fixtures": "playwright test --grep @fixture-smoke",
     "measure:client": "npm run test:fixtures && node scripts/measure-client-js.mjs",
-    "test:client-budget": "node --test scripts/compare-client-js.test.mjs && node scripts/compare-client-js.mjs ../../docs/performance/phase7-client-baseline.json test-results/client-js.json",
+    "test:client-budget": "node --test scripts/compare-client-js.test.mjs scripts/assert-route-chunks.test.mjs && node scripts/compare-client-js.mjs ../../docs/performance/phase7-client-baseline.json test-results/client-js.json && node scripts/assert-route-chunks.mjs --report test-results/client-js.json --public .output/public",
     "measure:lighthouse": "npm run test:fixtures && lhci collect --config=./lighthouserc.cjs && lhci upload --config=./lighthouserc.cjs",
     "test:lighthouse": "npm run test:fixtures && lhci autorun --config=./lighthouserc.cjs"
   },

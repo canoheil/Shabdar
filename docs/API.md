@@ -264,7 +264,7 @@ Report targets use the listing **slug**, comment **public_id**, or user **public
 
 The default report creation allowance is 20 validated submissions per user per 600 seconds, including idempotent duplicates. `REPORT_USER_LIMIT` and `REPORT_USER_WINDOW_SECS` override it; 429 includes `Retry-After`. Like the rating/comment windows, this limiter is process-local and must move to shared storage before multiple API replicas.
 
-Blocks are directed and idempotent; self-block is `400 validation_error` with `fields.public_id = "self_block"`, and an unknown or deleted target is 404 (suspended users remain valid block targets). Blocking has exactly one content effect: the blocker's authenticated comment reads exclude that author's comments. It does not alter anonymous SSR, global `comment_count`, other viewers, favorites, ratings, conversations, or any other interaction. Chat/block enforcement is deferred with the chat domain.
+Blocks are directed and idempotent; self-block is `400 validation_error` with `fields.public_id = "self_block"`, and an unknown or deleted target is 404 (suspended users remain valid block targets). Blocking has two content effects: the blocker's authenticated comment reads exclude that author's comments, and a blocked user pair cannot exchange messages (§10). It does not alter anonymous SSR, global `comment_count`, other viewers, favorites, ratings, or conversation history. Blocking and unblocking only advance a pair conversation's synchronization clock when the state really changed, so the Inbox is never reordered by a block.
 
 The block list defaults to 20 and clamps `limit` to 1–50. Its keyset order is `(created_at, blocked_id) DESC`; send the opaque cursor unchanged. Unblocking the user referenced by an anchor does not invalidate the next page. Browser SSR deliberately reads the first comment page without credentials, then privately revalidates it after hydration; failed private reads preserve the confirmed public items and cursor.
 
@@ -285,15 +285,120 @@ curl -s -X DELETE "$API/me/blocks/$USER_ID" \
 
 ## 10. Conversations and messages
 
+A conversation belongs to one **canonical unordered pair of users**, not to a
+listing. Every pair has at most one conversation for its lifetime, even if the
+buyer/seller roles later reverse. A listing is only an entry point and an
+optional per-message reference, so contacting the same seller from another
+listing returns the same conversation and creates no second "system" message.
+Existing conversations keep working after their listing is sold, archived, or
+removed; a removed listing's reference renders as non-clickable text.
+
+Every response in this section — success or error — is
+`Cache-Control: private, no-store` with `Vary: Cookie`. Message text is never
+logged. A non-participant receives the same `404 not_found` as an unknown
+conversation.
+
 | Method | Path | Auth | Summary |
 |---|---|---|---|
-| POST | `/listings/{slug}/conversations` | User | Starts or returns the buyer's thread on this listing. Rejects if the user is the seller, if either party is blocked, or if the listing is not `active`. |
-| GET | `/me/conversations?cursor=…` | User | Conversation list with listing title, other party, last message, unread flag. |
-| GET | `/conversations/{public_id}/messages?before=…&limit=…` | Participant | Messages, newest first in pages. |
-| POST | `/conversations/{public_id}/messages` | Participant | Body: `{ body }` (max 1000 characters). Returns the message. Rate-limited per user. |
-| POST | `/conversations/{public_id}/read` | Participant | Marks messages from the other party as read. |
+| POST | `/listings/{slug}/conversations` | User | Starts or returns the pair conversation. |
+| GET | `/me/conversations?before=…&after=…&limit=…` | User | Inbox: recency pages plus forward synchronization. |
+| GET | `/conversations/{public_id}` | Participant | Conversation metadata. |
+| GET | `/conversations/{public_id}/messages?before=…&after=…&limit=…` | Participant | Keyset history. |
+| POST | `/conversations/{public_id}/messages` | Participant | Idempotent text send. |
+| POST | `/conversations/{public_id}/read` | Participant | Forward-only high-water Read. |
 
-MVP uses polling for new messages. WebSocket or SSE is deferred.
+**Start.** Requires an `active`, public listing with no pending image review and
+a caller who is not the seller. A listing removed or deleted in the meantime is
+`410 gone`; a non-active listing, a seller whose account is not active, or a
+listing whose images await review is `404 not_found`; a directed block in either
+direction is `403 conversation_blocked`. Repeated calls are idempotent and
+return the same `public_id` without writing a message. The response is the
+conversation metadata object:
+
+```json
+{
+  "public_id": "01JC…",
+  "other_party": { "public_id": "01JA…", "display_name": "…" },
+  "can_message": true,
+  "viewer_blocked_other": false,
+  "last_message_at": "2026-11-04T10:15:30.123Z",
+  "created_at": "2026-11-04T10:15:30.123Z"
+}
+```
+
+`can_message` is false when either participant is blocked or the other account
+is no longer active; history and Read stay available.
+
+**Send.** Body `{ client_message_id, body, listing_slug? }`. `body` is trimmed,
+rejected when empty, and bounded at 1000 Unicode scalars; `client_message_id`
+must be a canonical UUID (the browser mints it with `crypto.randomUUID()`); an
+optional `listing_slug` must resolve to a listing that was public, active, and
+not the sender's own at send time. The unique
+`(conversation_id, sender_id, client_message_id)` key is the idempotency
+boundary: a replay with the identical body returns the confirmed row with `200`,
+and a replay with a different body is `400 validation_error` with
+`fields.client_message_id = "conflict"`. Sends inside a blocked pair are `403
+conversation_blocked`; validation happens before authorization, so a blocked
+request never spends rate allowance. The response is
+`{ message, conversation }`, where `message.seen` appears only on the caller's
+own messages.
+
+Messages are ordered by internal id inside the authorized conversation and page
+with `limit` 1–50 (default 30). `before` reads one older page (`has_more_older`),
+`after` reads one newer page (`has_more_newer`); `data` is always oldest →
+newest. Cursors look like `m:<public_id>` and are resolved inside the
+conversation, so a foreign or unknown cursor is a `400 invalid_cursor` and never
+a peek. Every page returns
+`{ data, page: { older_cursor, newer_cursor, has_more_older, has_more_newer },
+conversation, read_state: { viewer_read_through, other_read_through } }`.
+
+**Read.** Body `{ through_message_id }`; the value must belong to the
+conversation. The stored high-water mark only moves forward and only bumps the
+conversation `updated_at`, never `last_message_at`, so a Read cannot reorder the
+Inbox. The response is `{ read_through, read_at, unread_count }`. The browser
+claims Read through the latest message it actually rendered while at the latest
+position; a message that arrives afterwards stays above the mark and is never
+falsely Seen.
+
+**Inbox.** Two cursors with different jobs. `before` pages by recency
+`(last_message_at, id) DESC` and returns `older_cursor`/`has_more_older`;
+`after` follows the synchronization clock `(updated_at, id) ASC` and returns
+`next_sync_cursor`/`has_more_after`. Both are mutually exclusive. `sync_cursor`
+is the maximum `conversations.updated_at` for **all** of the viewer's pairs
+(including empty ones) sampled before the scan, encoded with tie id `0`, so the
+next `after` sees every later change and every change that shares the boundary
+timestamp. Items carry conversation metadata, `unread_count` (incoming messages
+above the viewer's mark) and a `last_message` preview bounded at 160 Unicode
+scalars with an optional listing reference `{ slug, title, available }`. Pairs
+without any message are not listed.
+
+**Rate limit.** `MESSAGE_USER_LIMIT` (default 60) per
+`MESSAGE_USER_WINDOW_SECS` (default 600) per user, keyed
+`message:user:{id}`, spent once per HTTP request — including whole-transaction
+retries and idempotent replays — and only after validation and authorization.
+429 responses carry `Retry-After`. The limiter is process-local, exactly like
+the rating/comment/report windows, and must move to shared storage before more
+than one API replica serves chat traffic.
+
+**Polling.** The MVP is poll-only: the thread polls every 10 seconds and the
+Inbox every 30 seconds while the document is visible and the browser is online.
+There is no WebSocket, SSE, push provider, or background worker, and no
+notification is delivered anywhere else. Message content is not moderated by admins
+and no report workflow targets messages in this release.
+
+```sh
+curl -s -X POST "$API/listings/$SLUG/conversations" -H "$AUTH" -H "x-csrf-token: $CSRF"
+curl -s "$API/me/conversations?limit=20" -H "cookie: shabdar_session=$SESSION"
+curl -s "$API/me/conversations?after=$SYNC_CURSOR" -H "cookie: shabdar_session=$SESSION"
+curl -s "$API/conversations/$CONVERSATION/messages?limit=30" \
+  -H "cookie: shabdar_session=$SESSION"
+curl -s -X POST "$API/conversations/$CONVERSATION/messages" \
+  -H "$AUTH" -H "x-csrf-token: $CSRF" -H 'content-type: application/json' \
+  -d '{"client_message_id":"123e4567-e89b-42d3-a456-426614174000","body":"سلام"}'
+curl -s -X POST "$API/conversations/$CONVERSATION/read" \
+  -H "$AUTH" -H "x-csrf-token: $CSRF" -H 'content-type: application/json' \
+  -d '{"through_message_id":"'$MESSAGE_ID'"}'
+```
 
 ## 11. Notifications
 

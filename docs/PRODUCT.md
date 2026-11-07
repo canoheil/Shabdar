@@ -48,7 +48,7 @@ The previous version is not available. The feature list from the user's screensh
 - **Ratings:** logged-in users rate a listing from 1 to 5 stars. One rating per user per listing; cannot rate own listing; can change their rating.
 - **Comments:** logged-in users comment on a listing. Clean comments publish immediately; a deterministic rule match makes the comment non-public pending admin review (see section 6).
 - **Reports:** any logged-in user can report a listing, a comment, or a user. Reported content is reviewed by an admin.
-- **Chat:** one conversation per listing between one buyer and one seller. Text messages only, unread marker.
+- **Chat:** one conversation per buyer/seller **user pair**, not per listing. A listing is the entry point and an optional per-message reference, so contacting the same seller from another listing continues the same thread. Text messages only, RTL bubbles with Persian day separators and timestamps, listing-reference cards, unread counts, sender Seen, block enforcement, idempotent sending, and polling (10 seconds in a thread, 30 seconds in the Inbox).
 
 ### Dashboard (seller)
 - Counts: active listings, favorites, sold.
@@ -79,7 +79,7 @@ The previous version is not available. The feature list from the user's screensh
 - Seller reviews separate from ratings (text reviews with eligibility rules).
 - Full support ticket system. v1 has a simple contact form only if needed.
 - Dashboard views counter and weekly activity chart (needs a defined event model).
-- Push notifications, real-time chat (WebSocket/SSE), rich media chat.
+- Push notifications, real-time transport (WebSocket/SSE), typing/online presence, reply/edit/delete, attachments, end-to-end encryption, message moderation, and automatic deletion.
 - Recommendations and personalized ranking.
 - S3-compatible storage and multiple storage backends.
 
@@ -126,7 +126,7 @@ The previous version is not available. The feature list from the user's screensh
   - `m` = average rating across all listings (updated periodically)
   - `C` = minimum ratings before a listing is treated as reliable (start with 5)
   - Listings with no ratings use `m` as their score.
-- **Blocks:** the blocker’s authenticated comment view excludes the blocked author’s comments. Blocking does not change anonymous SSR, global counters, or another viewer’s page; chat enforcement remains with the separately scoped chat domain.
+- **Blocks:** the blocker’s authenticated comment view excludes the blocked author’s comments, and a blocked user pair cannot exchange new messages in either direction while both sides keep their read-only history. Blocking does not change anonymous SSR, global counters, or another viewer’s page; unblocking restores sending only when no reverse block remains.
 - **Location:** province and city are required for every listing. The additive national migration supplies 31 provinces and 1,547 cities while preserving existing city IDs, slugs, and listing relationships. Exact coordinates are not collected in v1.
 - **Moderation rollout:** migration does not claim that old comments were reviewed. Before using this filter to clear the launch blocker for the existing corpus, an admin must complete one full rescan and review the initial pending backlog. Later rule changes need another full rescan to affect existing visible comments; deactivation never auto-restores.
 

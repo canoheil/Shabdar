@@ -1889,7 +1889,7 @@ async fn inbox_forward_pages_and_read_sync_without_reorder() {
         .expect("sync_cursor")
         .to_string();
     let snapshot_at = micros_of(&snapshot);
-    let (conversation_id, first_message_public_id, counterpart_public_id) = seeded[0].clone();
+    let (conversation_id, _first_message_public_id, counterpart_public_id) = seeded[0].clone();
     sqlx::query("UPDATE conversations SET updated_at = ? WHERE id = ?")
         .bind(snapshot_at)
         .bind(conversation_id)

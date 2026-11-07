@@ -95,6 +95,35 @@ Dependencies to start with (final list checked on Termux): `axum`, `tokio`, `sql
 
 Phase 11 adds exactly `image = "=0.25.9"` with default features disabled and only `jpeg`, `png`, and `webp`. This avoids native libraries, external moderation services, unrelated format decoders, and the direct crate's later Rust floor. The 18 resolved new entries (17 unique packages) declare no `rust_version` above 1.85 in the crates.io index; CI still tests stable Rust, so this declaration audit is not represented as a separate 1.85 compile certificate. Exact-version license expressions are recorded in `THIRD_PARTY_NOTICES.md`: all are permissive, none is copyleft, and no crate source is vendored. Compiled release artifacts still need a complete generated notice bundle, including applicable copyright and upstream `NOTICE` files.
 
+### Chat boundary (Phase 13)
+
+- `conversations.rs` owns the canonical pair conversation, entry validation,
+  Inbox recency/synchronization pages, and metadata; `messages.rs` owns sends,
+  keyset history, and Read receipts; `blocks.rs` keeps the same user-pair lock
+  order so a send and a block can only be observable as "message first" or
+  "block first".
+- One conversation per unordered user pair. A listing is an entry point and an
+  optional per-message reference; it never owns the thread, and its later
+  lifecycle never freezes an existing conversation.
+- Reads are per-participant high-water marks in `conversation_reads`, not a
+  `read_at` column. A Read moves forward only, never reorders the Inbox, and the
+  browser claims it only through the latest message it actually rendered.
+- Sends are idempotent by `(conversation_id, sender_id, client_message_id)`.
+  The browser mints the key with `crypto.randomUUID()`, keeps draft, key, and
+  pending listing reference in `sessionStorage` scoped to viewer + conversation,
+  and clears them only after a confirmed response. Every mutation is
+  confirmed-response-only: no optimistic bubble exists.
+- Chat HTTP responses are `private, no-store` with `Vary: Cookie` on success and
+  error alike. Private pages are `noindex, nofollow, noarchive`, render only a
+  public shell during SSR, and load viewer data after authentication on the
+  client. Chat components/composables are excluded from the shared `shell`
+  chunk and load only with the two chat routes; the contact control on Detail is
+  a dynamically imported module that ordinary Detail visits never download.
+- Polling only: 10 seconds for an open thread, 30 seconds for the Inbox, paused
+  while the document is hidden or the browser is offline, with one request in
+  flight at a time and every forward page followed before a synchronization
+  snapshot is adopted. No WebSocket, SSE, push provider, or background worker.
+
 ## 6. Moderation and content rules (v1)
 
 - **Listing moderation:** every listing is reviewed by an admin before it becomes public. Automated checks never approve or reject. In v1 there is no automated filter.
