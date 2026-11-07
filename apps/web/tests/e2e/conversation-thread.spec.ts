@@ -83,14 +83,15 @@ test('@chat-thread a failed poll keeps confirmed history, cursors and recovers o
       body: JSON.stringify({ error: { code: 'internal', message: 'boom' }, request_id: 'e2e' }),
     })
   })
-  await expect(page.getByText('به‌روزرسانی گفتگو ممکن نشد؛ دوباره تلاش می‌کنیم.', { exact: true }))
-    .toBeVisible({ timeout: 25_000 })
+  // The notice shares its element with the retry button, so the text is matched
+  // as a substring instead of an exact node.
+  const staleNotice = page.getByText('به‌روزرسانی گفتگو ممکن نشد؛ دوباره تلاش می‌کنیم.')
+  await expect(staleNotice).toBeVisible({ timeout: 25_000 })
   // Confirmed history is never dropped by a failed synchronization.
   await expect(bubbles(page)).toHaveCount(1)
 
   await page.unroute(failingPoll)
-  await expect(page.getByText('به‌روزرسانی گفتگو ممکن نشد؛ دوباره تلاش می‌کنیم.', { exact: true }))
-    .toHaveCount(0, { timeout: 25_000 })
+  await expect(staleNotice).toHaveCount(0, { timeout: 25_000 })
 })
 
 test('@chat-thread real 10-second polling appends one ascending bubble with a Persian time', async ({ page }) => {
