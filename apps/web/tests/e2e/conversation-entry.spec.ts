@@ -95,10 +95,28 @@ test('@chat-entry anonymous contact continues through real login and resumes exa
 
   const api = await apiAs('buyer')
   try {
+    // A started but empty conversation is not an Inbox row yet.
+    const empty = await api.get('/api/v1/me/conversations')
+    expect(empty.ok()).toBe(true)
+    expect(((await empty.json()) as { data: unknown[] }).data).toHaveLength(0)
+
+    const conversationId = new URL(page.url()).pathname.split('/').pop() as string
+    const metadata = await api.get(`/api/v1/conversations/${conversationId}`)
+    expect(metadata.ok()).toBe(true)
+    const conversation = await metadata.json() as { public_id: string, can_message: boolean }
+    expect(conversation.public_id).toBe(conversationId)
+    expect(conversation.can_message).toBe(true)
+
+    // One real message makes exactly one Inbox row for this pair.
+    await composerInput(page).fill('سلام، این آگهی موجود است؟')
+    await composerInput(page).press('Enter')
+    await expect(bubbles(page)).toHaveCount(1)
+
     const inbox = await api.get('/api/v1/me/conversations')
     expect(inbox.ok()).toBe(true)
     const body = await inbox.json() as { data: Array<{ public_id: string }> }
     expect(body.data).toHaveLength(1)
+    expect(body.data[0]?.public_id).toBe(conversationId)
   } finally {
     await api.dispose()
   }

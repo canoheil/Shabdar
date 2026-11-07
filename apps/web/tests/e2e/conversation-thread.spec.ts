@@ -69,7 +69,14 @@ test('@chat-thread a failed poll keeps confirmed history, cursors and recovers o
   await expect(bubbles(page).first()).toContainText('پیام پایدار')
   await expect(page.locator('.thread__day')).toHaveCount(1)
 
-  await page.route(/\/api\/v1\/conversations\/.+\/messages\?[^#]*\bafter=/, async (route) => {
+  // A poll without a newer cursor sends no `after` parameter, so the failure is
+  // injected on every thread read installed after the initial load.
+  const failingPoll = /\/api\/v1\/conversations\/.+\/messages(\?.*)?$/
+  await page.route(failingPoll, async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue()
+      return
+    }
     await route.fulfill({
       status: 500,
       contentType: 'application/json',
@@ -81,7 +88,7 @@ test('@chat-thread a failed poll keeps confirmed history, cursors and recovers o
   // Confirmed history is never dropped by a failed synchronization.
   await expect(bubbles(page)).toHaveCount(1)
 
-  await page.unroute(/\/api\/v1\/conversations\/.+\/messages\?[^#]*\bafter=/)
+  await page.unroute(failingPoll)
   await expect(page.getByText('به‌روزرسانی گفتگو ممکن نشد؛ دوباره تلاش می‌کنیم.', { exact: true }))
     .toHaveCount(0, { timeout: 25_000 })
 })

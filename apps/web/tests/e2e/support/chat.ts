@@ -125,9 +125,25 @@ export async function loginViaUi(
   const phoneField = page.getByLabel('شمارهٔ موبایل', { exact: true })
   const codeField = page.getByLabel('کد تأیید', { exact: true })
   await phoneField.fill(phone)
-  const offset = apiLogSize()
-  await page.getByRole('button', { name: 'ارسال کد', exact: true }).click()
-  await expect(codeField).toBeVisible()
+  const requestCode = page.getByRole('button', { name: 'ارسال کد', exact: true })
+  // Back-to-back logins can land inside the configured resend cooldown, so a
+  // rejected request is retried instead of failing an unrelated assertion.
+  let offset = apiLogSize()
+  let codeRequested = false
+  for (let attempt = 0; attempt < 3 && !codeRequested; attempt += 1) {
+    if (await codeField.isVisible().catch(() => false)) {
+      codeRequested = true
+      break
+    }
+    offset = apiLogSize()
+    await requestCode.click()
+    codeRequested = await codeField
+      .waitFor({ state: 'visible', timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false)
+    if (!codeRequested) await page.waitForTimeout(2_500)
+  }
+  expect(codeRequested).toBe(true)
   const code = await devOtp(offset, phone)
   await codeField.fill(code)
   await page.getByRole('button', { name: 'تأیید', exact: true }).click()
