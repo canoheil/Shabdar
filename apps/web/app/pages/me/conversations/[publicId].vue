@@ -182,6 +182,9 @@ const {
   stopPolling,
 } = thread
 
+// The block control belongs to the authenticated actions below the thread, not
+// to the first paint of the conversation.
+const BlockControl = defineAsyncComponent(() => import('~/components/BlockControl.vue'))
 const scroller = ref<HTMLElement | null>(null)
 const composer = ref<{ startFreshMessage: () => void; focus: () => void } | null>(null)
 const clientReady = ref(false)

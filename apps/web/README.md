@@ -50,9 +50,11 @@ All private chat traffic goes through `app/utils/chatApi.ts`
 (`apiFetch = $fetch.create({ retry: 0, cache: 'no-store' })`). An implicit ofetch
 retry would duplicate a poll, spend a second slice of the server's rate
 allowance, and turn a visible failure into a silent double request; every chat
-screen owns an explicit retry action instead. `chatFormat.ts` holds the
-chat-only formatters (the character counter never groups digits), so public
-route chunks never load either module.
+screen owns an explicit retry action instead. `chatFormat.ts` holds every
+chat-only formatter — the character counter that never groups digits plus the
+local wall-clock time and day labels — so public route chunks never load either
+module. Chat-only code never sits in a shared utility: `format.ts` stays
+number/price presentation for public pages.
 
 `useMessageSend` keeps the draft, the client UUID, and the pending listing
 reference in `sessionStorage` under `shabdar:chat:{viewer}:{conversation}`

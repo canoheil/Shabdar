@@ -181,6 +181,11 @@ interface AlertControl {
   focus: () => void
 }
 
+// Blocking is authenticated-only and secondary to reading comments, so the
+// control is fetched when it can actually render instead of being part of the
+// public Detail payload every anonymous visitor downloads.
+const BlockControl = defineAsyncComponent(() => import('~/components/BlockControl.vue'))
+
 const props = defineProps<{
   slug: string
   count: number
