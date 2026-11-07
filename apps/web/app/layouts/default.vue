@@ -31,13 +31,34 @@
           <li class="shell__nav-item">
             <NuxtLink to="/post" class="shell__nav-action">
               <PhPlusCircle :size="22" aria-hidden="true" />
-              <span>ثبت آگهی</span>
+              <span>ثبت</span>
+            </NuxtLink>
+          </li>
+          <li class="shell__nav-item">
+            <NuxtLink to="/me/conversations" class="shell__nav-action">
+              <!-- Inline bubble: the sixth action must not add an icon-package
+                   import to the shell chunk every public page loads. -->
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.6 9.6 0 0 1-3.2-.5L3 21l1.6-4.3A8.2 8.2 0 0 1 3 11.5 8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z" />
+              </svg>
+              <span>پیام‌ها</span>
             </NuxtLink>
           </li>
           <li class="shell__nav-item">
             <NuxtLink to="/me/favorites" class="shell__nav-action">
               <PhHeart :size="22" aria-hidden="true" />
-              <span>علاقه‌مندی‌ها</span>
+              <span>ذخیره‌ها</span>
             </NuxtLink>
           </li>
           <li class="shell__nav-item">

@@ -40,6 +40,42 @@
             </div>
           </div>
 
+          <div
+            v-if="hydrated && !mePending && authStatus !== 'unavailable' && me?.public_id !== listing.seller.public_id"
+            class="detail__contact"
+          >
+            <p class="detail__contact-title">گفت‌وگو با فروشنده</p>
+            <NuxtLink
+              v-if="authStatus !== 'authenticated' || contactAuthExpired"
+              :to="contactLoginHref"
+              class="btn"
+            >
+              ورود برای گفت‌وگو
+            </NuxtLink>
+            <template v-else-if="contactQuery">
+              <AppButton :loading="contactPending" :disabled="contactPending" @click="contactSeller">
+                {{ contactPending ? 'در حال باز کردن گفت‌وگو…' : 'ادامهٔ گفت‌وگو' }}
+              </AppButton>
+            </template>
+            <template v-else>
+              <AppButton :disabled="contactPending" @click="contactSeller">
+                {{ contactPending ? 'در حال باز کردن گفت‌وگو…' : 'گفت‌وگو با فروشنده' }}
+              </AppButton>
+            </template>
+            <AppAlert v-if="contactError" tone="error">
+              <div class="detail__contact-state">
+                <span>{{ contactError }}</span>
+                <AppButton variant="secondary" :disabled="contactPending" @click="contactSeller">
+                  تلاش دوباره
+                </AppButton>
+              </div>
+            </AppAlert>
+            <p v-if="contactQuery && authStatus !== 'authenticated'" class="meta">
+              برای ادامهٔ گفت‌وگو ابتدا وارد شوید؛ پس از ورود همین آگهی باز می‌ماند.
+            </p>
+            <p class="meta" role="status" aria-live="polite" aria-atomic="true">{{ contactNotice }}</p>
+          </div>
+
           <div v-if="!mePending" class="detail__favorite">
             <NuxtLink
               v-if="authStatus === 'anonymous' || favoriteAuthExpired"
@@ -188,6 +224,48 @@ const favoriteError = ref('')
 const favoriteNotice = ref('')
 const hydrated = ref(false)
 
+// Contact entry (chat MVP). The chat module itself is imported dynamically so
+// ordinary Detail visits never download conversation code.
+const contactPending = ref(false)
+const contactError = ref('')
+const contactNotice = ref('')
+const contactAuthExpired = ref(false)
+const contactQuery = computed(() => route.query.contact === '1')
+const contactLoginHref = computed(() => {
+  const params = new URLSearchParams()
+  params.set('contact', '1')
+  return `/login?next=${encodeURIComponent(`${route.path}?${params.toString()}`)}`
+})
+let contactResumeAttempted = false
+
+async function contactSeller(): Promise<void> {
+  if (contactPending.value || !listing.value) return
+  contactPending.value = true
+  contactError.value = ''
+  contactNotice.value = ''
+  try {
+    const { startListingConversation } = await import('~/utils/contactSeller')
+    const conversation = await startListingConversation(listing.value.slug)
+    await navigateTo(`/me/conversations/${conversation.public_id}?listing=${encodeURIComponent(listing.value.slug)}`)
+  } catch (requestError) {
+    const status = statusOf(requestError)
+    if (status === 401) {
+      contactAuthExpired.value = true
+      contactError.value = 'نشست شما منقضی شده است؛ برای گفت‌وگو دوباره وارد شوید.'
+    } else if (status === 403) {
+      contactError.value = 'گفت‌وگو با این فروشنده ممکن نیست.'
+    } else if (status === 410) {
+      contactError.value = 'این آگهی حذف شده است و گفت‌وگو آغاز نمی‌شود.'
+    } else if (status === 404) {
+      contactError.value = 'این آگهی در دسترس نیست.'
+    } else {
+      contactError.value = 'آغاز گفت‌وگو انجام نشد؛ دوباره تلاش کنید.'
+    }
+  } finally {
+    contactPending.value = false
+  }
+}
+
 function requestStatus(error: unknown): number | undefined {
   const candidate = error as {
     status?: unknown
@@ -273,6 +351,19 @@ function applyRatingState(state: ApiRatingState): void {
 onMounted(() => {
   hydrated.value = true
   if (authStatus.value === 'authenticated' && me.value && listing.value) void loadFavoriteState()
+  // Exactly one automatic resume after a login continuation; a failure keeps a
+  // manual retry on this page instead of looping.
+  if (
+    contactQuery.value
+    && !contactResumeAttempted
+    && authStatus.value === 'authenticated'
+    && me.value
+    && listing.value
+    && me.value.public_id !== listing.value.seller.public_id
+  ) {
+    contactResumeAttempted = true
+    void contactSeller()
+  }
 })
 
 useHead(() => {
@@ -500,6 +591,27 @@ useHead(() => {
   gap: var(--space-3);
   padding-block-start: var(--space-4);
   border-block-start: 1px solid var(--color-border);
+}
+
+.detail__contact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--color-border);
+}
+
+.detail__contact-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.detail__contact-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .detail__reports-title {

@@ -63,6 +63,7 @@ jobs:
       RATING_USER_LIMIT: '1000'
       COMMENT_USER_LIMIT: '1000'
       REPORT_USER_LIMIT: '1000'
+      MESSAGE_USER_LIMIT: '1000'
       PORT: '3000'
       HOST: 127.0.0.1
     steps:

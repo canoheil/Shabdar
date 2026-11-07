@@ -38,6 +38,12 @@ export default defineNuxtConfig({
               // Detail-only engagement stays in the existing detail route chunk;
               // putting its mutation UI in the shell penalizes every Home visit.
               if (/\/app\/components\/(?:Listing(?:Rating|Comments)|BlockControl|ReportControl)\.vue/.test(id)) return
+              // Private chat UI and its composables belong to the two chat
+              // routes only; the generic shell rule below would otherwise ship
+              // conversation, message and composer code to every public page.
+              if (/\/app\/components\/(?:MessageBubble|ListingReferenceCard|ConversationComposer|ConversationListItem)\.vue/.test(id)) return
+              if (/\/app\/composables\/(?:useInboxSync|useConversationThread|useMessageSend)\.ts/.test(id)) return
+              if (/\/app\/utils\/contactSeller\.ts/.test(id)) return
               if (/\/app\/(components|layouts|composables)\//.test(id)) return 'shell'
             },
           },

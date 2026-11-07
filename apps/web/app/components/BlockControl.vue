@@ -5,7 +5,7 @@
       :loading="pending"
       @click="mutate"
     >
-      {{ pending ? 'در حال به‌روزرسانی…' : blocked ? 'رفع مسدودسازی' : 'مسدود کردن نویسنده' }}
+      {{ pending ? 'در حال به‌روزرسانی…' : blocked ? 'رفع مسدودسازی' : `مسدود کردن ${targetNoun}` }}
     </AppButton>
     <AppAlert v-if="error" ref="errorAlert" tone="error">{{ error }}</AppAlert>
     <AppButton v-if="error" variant="secondary" :disabled="pending" @click="mutate">
@@ -20,8 +20,11 @@ const props = withDefaults(defineProps<{
   targetPublicId: string
   viewerPublicId: string
   initiallyBlocked?: boolean
+  /// Detail/comment surfaces block a "نویسنده"; the chat thread blocks a "کاربر".
+  targetNoun?: string
 }>(), {
   initiallyBlocked: false,
+  targetNoun: 'نویسنده',
 })
 
 const emit = defineEmits<{

@@ -8,7 +8,14 @@ import {
 } from 'node:fs'
 import { basename, resolve } from 'node:path'
 import { request, type APIRequestContext } from '@playwright/test'
-import type { ApiCategory, ApiCity, ApiListingOut } from '../../../app/types'
+import type {
+  ApiCategory,
+  ApiCity,
+  ApiConversation,
+  ApiInboxPage,
+  ApiListingOut,
+  ApiSendMessageResult,
+} from '../../../app/types'
 import { promoteAdmin, resetDynamicRows, runSql } from './database'
 
 const ARTIFACTS_DIR = resolve(process.cwd(), 'tests/e2e/.artifacts')
@@ -57,6 +64,22 @@ async function responseError(response: { status(): number; text(): Promise<strin
   const body = await response.text()
   return new Error(`${action} failed (${response.status()}): ${body.slice(0, 500)}`)
 }
+
+export function apiLogSize(): number {
+  const logPath = requiredEnv('E2E_API_LOG')
+  return existsSync(logPath) ? statSync(logPath).size : 0
+}
+
+export async function devOtp(offset: number, phone: string): Promise<string> {
+  return await waitForOtp(offset, phone.slice(-4))
+}
+
+export const FIXTURE_PHONES = {
+  seller: SELLER_PHONE,
+  admin: ADMIN_PHONE,
+  buyer: BUYER_PHONE,
+  buyerTwo: BUYER_TWO_PHONE,
+} as const
 
 async function waitForOtp(offset: number, lastFour: string): Promise<string> {
   const logPath = requiredEnv('E2E_API_LOG')
@@ -259,6 +282,144 @@ export async function removeImagesForFixture(publicId: string): Promise<void> {
   await runSql(
     `DELETE FROM listing_images WHERE listing_id = (SELECT id FROM listings WHERE public_id = '${escaped}')`,
   )
+}
+
+// --- Chat fixtures (real API calls, never UI shortcuts) --------------------
+
+// Extra registered accounts for Inbox pagination (>20 pairs) and for
+// multi-partner threading. They go through the real OTP registration flow and
+// are created lazily, so only the specs that need them pay the cost.
+const CHAT_PARTNER_PHONE_PREFIX = '+9890000002'
+
+export function chatPartnerPhone(index: number): string {
+  if (!Number.isInteger(index) || index < 1 || index > 99) {
+    throw new Error('chat partner index must be 1..99')
+  }
+  return `${CHAT_PARTNER_PHONE_PREFIX}${String(index).padStart(2, '0')}`
+}
+
+export function chatPartnerStoragePath(index: number): string {
+  return resolve(ARTIFACTS_DIR, `chat-partner-${index}.json`)
+}
+
+export async function ensureChatPartner(index: number): Promise<string> {
+  const path = chatPartnerStoragePath(index)
+  if (!existsSync(path)) await registerAndStore(chatPartnerPhone(index), path)
+  return path
+}
+
+export async function partnerApi(index: number): Promise<APIRequestContext> {
+  return request.newContext({
+    baseURL: baseURL(),
+    storageState: await ensureChatPartner(index),
+  })
+}
+
+export async function partnerStartsConversation(
+  index: number,
+  slug: string,
+): Promise<ApiConversation> {
+  const api = await partnerApi(index)
+  try {
+    const response = await api.post(`/api/v1/listings/${encodeURIComponent(slug)}/conversations`)
+    if (!response.ok()) throw await responseError(response, `partner ${index} starts conversation`)
+    return await response.json() as ApiConversation
+  } finally {
+    await api.dispose()
+  }
+}
+
+export async function partnerSendsMessage(
+  index: number,
+  conversationPublicId: string,
+  body: string,
+  listingSlug?: string,
+): Promise<ApiSendMessageResult> {
+  const api = await partnerApi(index)
+  try {
+    const response = await api.post(
+      `/api/v1/conversations/${encodeURIComponent(conversationPublicId)}/messages`,
+      { data: { client_message_id: crypto.randomUUID(), body, ...(listingSlug ? { listing_slug: listingSlug } : {}) } },
+    )
+    if (!response.ok()) throw await responseError(response, `partner ${index} sends message`)
+    return await response.json() as ApiSendMessageResult
+  } finally {
+    await api.dispose()
+  }
+}
+
+
+
+export interface SendMessageInput {
+  client_message_id: string
+  body: string
+  listing_slug?: string
+}
+
+export function clientMessageId(): string {
+  return crypto.randomUUID()
+}
+
+export async function startConversation(
+  role: FixtureRole,
+  slug: string,
+): Promise<ApiConversation> {
+  const api = await apiAs(role)
+  try {
+    const response = await api.post(`/api/v1/listings/${encodeURIComponent(slug)}/conversations`)
+    if (!response.ok()) throw await responseError(response, `${role} starts conversation`)
+    return await response.json() as ApiConversation
+  } finally {
+    await api.dispose()
+  }
+}
+
+export async function sendMessage(
+  role: FixtureRole,
+  conversationPublicId: string,
+  input: SendMessageInput,
+): Promise<ApiSendMessageResult> {
+  const api = await apiAs(role)
+  try {
+    const response = await api.post(
+      `/api/v1/conversations/${encodeURIComponent(conversationPublicId)}/messages`,
+      { data: input },
+    )
+    if (!response.ok()) throw await responseError(response, `${role} sends message`)
+    return await response.json() as ApiSendMessageResult
+  } finally {
+    await api.dispose()
+  }
+}
+
+export async function inboxAs(role: FixtureRole, query = ''): Promise<ApiInboxPage> {
+  const api = await apiAs(role)
+  try {
+    const response = await api.get(`/api/v1/me/conversations${query}`)
+    if (!response.ok()) throw await responseError(response, `${role} reads inbox`)
+    return await response.json() as ApiInboxPage
+  } finally {
+    await api.dispose()
+  }
+}
+
+export async function setBlock(
+  role: FixtureRole,
+  targetPublicId: string,
+  blocked: boolean,
+): Promise<boolean> {
+  const api = await apiAs(role)
+  try {
+    const response = await api.fetch(
+      `/api/v1/me/blocks/${encodeURIComponent(targetPublicId)}`,
+      { method: blocked ? 'PUT' : 'DELETE' },
+    )
+    if (!response.ok()) throw await responseError(response, `${role} sets block`)
+    const body = await response.json() as { blocked: boolean }
+    return body.blocked
+  } finally {
+    await api.dispose()
+  }
 }
 
 // Backlog fixtures have real uploaded media but pre-Phase-11 review state.
