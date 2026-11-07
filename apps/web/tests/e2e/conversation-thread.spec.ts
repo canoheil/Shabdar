@@ -69,7 +69,7 @@ test('@chat-thread a failed poll keeps confirmed history, cursors and recovers o
   await expect(bubbles(page).first()).toContainText('پیام پایدار')
   await expect(page.locator('.thread__day')).toHaveCount(1)
 
-  await page.route(/\/api\/v1\/conversations\/.+\/messages\?after=/, async (route) => {
+  await page.route(/\/api\/v1\/conversations\/.+\/messages\?[^#]*\bafter=/, async (route) => {
     await route.fulfill({
       status: 500,
       contentType: 'application/json',
@@ -81,7 +81,7 @@ test('@chat-thread a failed poll keeps confirmed history, cursors and recovers o
   // Confirmed history is never dropped by a failed synchronization.
   await expect(bubbles(page)).toHaveCount(1)
 
-  await page.unroute(/\/api\/v1\/conversations\/.+\/messages\?after=/)
+  await page.unroute(/\/api\/v1\/conversations\/.+\/messages\?[^#]*\bafter=/)
   await expect(page.getByText('به‌روزرسانی گفتگو ممکن نشد؛ دوباره تلاش می‌کنیم.', { exact: true }))
     .toHaveCount(0, { timeout: 25_000 })
 })
@@ -113,9 +113,11 @@ test('@chat-thread a real Read produces Seen only after the other side polls', a
     // Unseen is an explicit `false`, not a missing field.
     expect(sent.message.seen).toBe(false)
 
+    // Track Read from the very first render: opening a thread claims Read for
+    // the latest rendered message, which happens during the initial load.
+    const reads = readRequests(page)
     await openBuyerThread(page, conversation)
     await expect(bubbles(page)).toHaveCount(1)
-    const reads = readRequests(page)
     await expect.poll(() => reads.length, { timeout: 20_000 }).toBeGreaterThan(0)
 
     // The seller sees Seen only after a later real poll of the same thread.
@@ -225,16 +227,28 @@ test('@chat-thread loading older history keeps the anchor, and arrivals need an 
 
   const reads = readRequests(page)
   const readsBefore = reads.length
-  await sendMessage('buyer', conversation, { client_message_id: clientMessageId(), body: 'پیام تازه هنگام خواندن گذشته' })
+  const scrollTop = async (): Promise<number> =>
+    await page.evaluate(() => document.querySelector('.thread__scroller')?.scrollTop ?? 0)
+  const scrollBefore = await scrollTop()
+
+  // The arrival is an incoming message: only the other party's confirmed rows
+  // raise the "new messages" control.
+  await sendMessage('seller', conversation, {
+    client_message_id: clientMessageId(),
+    body: 'پیام تازه هنگام خواندن گذشته',
+  })
   const jump = page.locator('.thread__jump')
   await expect(jump).toContainText('۱ پیام تازه', { timeout: 30_000 })
-  // Reading older history must not claim the unseen arrival as read.
+
+  // A poll while the reader is in older history neither scrolls nor marks the
+  // arrival as read.
   expect(reads.length).toBe(readsBefore)
-  await expect(page.getByText('پیام تازه هنگام خواندن گذشته', { exact: true })).toHaveCount(0)
+  expect(Math.abs((await scrollTop()) - scrollBefore)).toBeLessThanOrEqual(1)
 
   await jump.click()
-  await expect(page.locator('.thread__scroller .bubble__body').last())
-    .toHaveText('پیام تازه هنگام خواندن گذشته')
+  const newest = page.locator('.thread__scroller .bubble__body').last()
+  await expect(newest).toHaveText('پیام تازه هنگام خواندن گذشته')
+  await expect(newest).toBeInViewport()
   await expect.poll(() => reads.length, { timeout: 20_000 }).toBeGreaterThan(readsBefore)
 })
 
@@ -248,7 +262,7 @@ test('@chat-thread a failed older page keeps the anchor and reuses the identical
   }
 
   const olderRequests: string[] = []
-  await page.route(/\/api\/v1\/conversations\/.+\/messages\?before=/, async (route) => {
+  await page.route(/\/api\/v1\/conversations\/.+\/messages\?[^#]*\bbefore=/, async (route) => {
     olderRequests.push(route.request().url())
     if (olderRequests.length === 1) {
       await route.fulfill({

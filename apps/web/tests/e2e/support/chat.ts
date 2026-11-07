@@ -122,20 +122,11 @@ export async function loginViaUi(
 ): Promise<void> {
   const phone = FIXTURE_PHONES[role]
   await expect(page).toHaveURL(/\/login(\?|$)/)
-  const phoneField = page.getByLabel('شمارهٔ موبایل')
-  const codeField = page.getByLabel('کد تأیید')
-  const sendCode = page.getByRole('button', { name: 'ارسال کد', exact: true })
+  const phoneField = page.getByLabel('شمارهٔ موبایل', { exact: true })
+  const codeField = page.getByLabel('کد تأیید', { exact: true })
   await phoneField.fill(phone)
-  let offset = apiLogSize()
-  await sendCode.click()
-  if (!(await codeField.isVisible({ timeout: 3_000 }).catch(() => false))) {
-    // The API enforces a per-phone resend cooldown; a user who asks again after
-    // the wait gets the challenge. Re-reading the log offset keeps the code
-    // lookup anchored to the request that actually succeeded.
-    await waitForDelay(3_000)
-    offset = apiLogSize()
-    await sendCode.click()
-  }
+  const offset = apiLogSize()
+  await page.getByRole('button', { name: 'ارسال کد', exact: true }).click()
   await expect(codeField).toBeVisible()
   const code = await devOtp(offset, phone)
   await codeField.fill(code)
