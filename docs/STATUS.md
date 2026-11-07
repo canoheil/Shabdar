@@ -1,8 +1,54 @@
-# Status — National locations and historical phases
+# Status — Direct chat, national locations and historical phases
 
-Updated 2026-11-03 on Arena.ai Agent Mode. The current nationwide-location
+Updated 2026-11-07 on Arena.ai Agent Mode. The current private-chat
 implementation is on branch `arena/c2c8a31c-shabdar`; no production rollout or
 pull-request merge is implied.
+
+## Current direct-chat scope
+
+- **Contract:** [approved design](superpowers/specs/2026-11-04-chat-mvp-design.md)
+  and [implementation plan](superpowers/plans/2026-11-04-chat-mvp.md).
+- One persistent conversation per canonical user pair (`user_low_id <
+  user_high_id`, unique pair constraint), not per listing. A listing is the entry
+  point and optional per-message context; contacting the same seller from another
+  listing reuses the thread and creates no duplicate or system message. Existing
+  threads keep working after the listing is sold, archived, or removed, and a
+  removed reference renders as a non-clickable card.
+- `0014_direct_chat.sql` adds `conversations`, `messages`, and
+  `conversation_reads`. Read state is a per-participant forward-only high-water
+  mark, so opening a thread never mass-updates message rows, and the browser
+  claims Read only through the latest message it actually rendered.
+- Sending is idempotent through `(conversation_id, sender_id,
+  client_message_id)`; a replayed key returns the stored row and a reused key with
+  a different body is an explicit conflict instead of a silent second message.
+  Blocks stop new messages in both directions and prevent new conversations while
+  both participants keep read-only history.
+- Web: `/me/conversations` and `/me/conversations/[publicId]` are private,
+  client-only reads (`noindex`, no payload in SSR HTML), poll every 30s and 10s
+  while visible and online, keep drafts and the client idempotency key in
+  `sessionStorage`, and never render a message optimistically. Chat code is
+  route-split out of Home/Detail, and the six-item navigation is the approved
+  entry point.
+- MVP boundary: no WebSocket/SSE, push, typing/presence, attachments,
+  edit/delete/forward, search, E2EE, automatic deletion, or external provider.
+- **Verification: PASS for `bec6a97`.** CI run `42414778274` passed Rust
+  formatting/lint, the full real API/MariaDB suite (including the chat schema,
+  constraint, idempotency, block and read-state tests), Nuxt typecheck/build,
+  real-stack startup, all **147/147 Playwright tests** — including two-context
+  polling, block, idempotency, pagination/deduplication, unread/Seen, failure and
+  listing-lifecycle journeys — three-run Lighthouse medians, client measurement,
+  and the client-JS budget with the new private-chunk guard.
+- Lighthouse mobile medians on that run: Home FCP **753.035ms**, LCP
+  **2403.02ms**, CLS **0.076**, TBT **107ms**, Accessibility **100**; Detail FCP
+  **744.178ms**, LCP **2482.195ms**, CLS **0.002**, TBT **87.5ms**,
+  Accessibility **100**. Initial client JS: Home **99,244 gzip bytes / 5
+  scripts**, Detail **99,942 / 4**, both under the unchanged 100,000-byte
+  ceiling; fonts 80,832 bytes. Authenticated-only panels (block control, report
+  form) and chat-only formatters were moved out of the public payload to keep
+  that ceiling unchanged; Detail now has little headroom, so the next Detail
+  addition must arrive with its own split.
+- Production rollout is not claimed: apply migration `0014_direct_chat.sql`
+  through the normal startup migrator after backup.
 
 ## Current nationwide-location scope
 
@@ -33,8 +79,7 @@ pull-request merge is implied.
   now select the same visible Persian city labels without weakening any
   downstream create/upload assertions; final run `41643876582` is authoritative.
 - Production rollout is not claimed: apply migration 0013 through the normal
-  startup migrator after backup. Chat remains absent and requires its separate
-  approved design/implementation cycle.
+  startup migrator after backup.
 
 ## Historical Phase 11 record
 
@@ -369,8 +414,9 @@ Actions gate on the real Axum/Nuxt/MariaDB stack.
   a distributed abuse-control system.
 - Phase 9 deliberately excluded automated profanity filtering; Phase 10 above
   now implements the deterministic comment domain and its rollout boundary.
-  Blocking still filters comments only; chat/message enforcement belongs to
-  the separately scoped chat domain.
+  Blocking filtered comments only until the chat domain shipped; blocking now
+  also stops new chat messages in both directions (see the current direct-chat
+  scope above).
 - Admin report targets are current summaries, not immutable historical
   snapshots. A deleted target renders unavailable; audit history retains the
   decision but not a full former target payload.
