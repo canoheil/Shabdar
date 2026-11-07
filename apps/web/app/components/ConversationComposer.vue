@@ -32,14 +32,14 @@
 
     <div class="composer__meta">
       <span id="composer-count" class="composer__counter" :class="{ 'composer__counter--over': length > maxChars }">
-        {{ formatNumber(length) }} از {{ formatNumber(maxChars) }}
+        {{ formatCount(length) }} از {{ formatCount(maxChars) }}
       </span>
       <AppButton
         type="submit"
         :loading="sending"
         :disabled="!canSubmit"
       >
-        {{ sending ? 'در حال ارسال…' : waitSeconds > 0 ? `${formatNumber(waitSeconds)} ثانیه` : 'ارسال' }}
+        {{ sending ? 'در حال ارسال…' : waitSeconds > 0 ? `${formatCount(waitSeconds)} ثانیه` : 'ارسال' }}
       </AppButton>
     </div>
 
@@ -64,6 +64,7 @@
 
 <script setup lang="ts">
 import type { ApiSendMessageResult } from '~/types'
+import { formatCount } from '~/utils/chatFormat'
 
 const props = withDefaults(defineProps<{
   viewerPublicId: string

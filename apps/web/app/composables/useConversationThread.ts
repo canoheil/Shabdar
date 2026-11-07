@@ -1,5 +1,6 @@
 import type { Ref } from 'vue'
 import { statusOf } from '~/utils/http'
+import { apiFetch } from '~/utils/chatApi'
 import type {
   ApiConversation,
   ApiMessage,
@@ -97,7 +98,7 @@ export function useConversationThread(publicId: Ref<string>): ConversationThread
     error.value = ''
     staleError.value = ''
     try {
-      const page = await $fetch<ApiMessagePage>(`${endpoint()}/messages`, {
+      const page = await apiFetch<ApiMessagePage>(`${endpoint()}/messages`, {
         query: { limit: 30 },
       })
       if (token !== generation) return
@@ -126,7 +127,7 @@ export function useConversationThread(publicId: Ref<string>): ConversationThread
     pending.value = true
     olderError.value = ''
     try {
-      const page = await $fetch<ApiMessagePage>(`${endpoint()}/messages`, {
+      const page = await apiFetch<ApiMessagePage>(`${endpoint()}/messages`, {
         query: { before: olderCursor.value, limit: 30 },
       })
       if (token !== generation) return
@@ -158,7 +159,7 @@ export function useConversationThread(publicId: Ref<string>): ConversationThread
       for (let pageIndex = 0; pageIndex < MAX_FORWARD_PAGES; pageIndex += 1) {
         const query: Record<string, string | number> = { limit: 30 }
         if (cursor) query.after = cursor
-        const page = await $fetch<ApiMessagePage>(`${endpoint()}/messages`, { query })
+        const page = await apiFetch<ApiMessagePage>(`${endpoint()}/messages`, { query })
         if (token !== generation) return false
         messages.value = mergeMessages(messages.value, page.data)
         applyPage(page)
@@ -199,7 +200,7 @@ export function useConversationThread(publicId: Ref<string>): ConversationThread
     if (readState.value.viewer_read_through === messagePublicId) return
     pendingRead = messagePublicId
     try {
-      const receipt = await $fetch<ApiReadReceipt>(`${endpoint()}/read`, {
+      const receipt = await apiFetch<ApiReadReceipt>(`${endpoint()}/read`, {
         method: 'POST',
         body: { through_message_id: messagePublicId },
       })
@@ -217,7 +218,7 @@ export function useConversationThread(publicId: Ref<string>): ConversationThread
 
   async function refreshMetadata(): Promise<void> {
     try {
-      const metadata = await $fetch<ApiConversation>(endpoint(), { cache: 'no-store' })
+      const metadata = await apiFetch<ApiConversation>(endpoint(), { cache: 'no-store' })
       conversation.value = metadata
     } catch {
       // Keep the last confirmed metadata; the send path reports its own error.

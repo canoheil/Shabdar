@@ -17,7 +17,7 @@ import {
   waitForDelay,
 } from './support/chat'
 
-test.setTimeout(180_000)
+test.describe.configure({ timeout: 180_000 })
 
 test.beforeEach(async () => {
   await resetChatRows()
@@ -85,7 +85,10 @@ test('@chat-entry anonymous contact continues through real login and resumes exa
   await expect(page).toHaveURL(/\/login\?next=/)
   await loginViaUi(page, 'buyer')
 
-  await expect(page).toHaveURL(new RegExp(`/me/conversations/[^/?]+\\?listing=${listing.slug}`))
+  // Browsers percent-encode a Persian slug; compare the decoded address.
+  await expect
+    .poll(() => decodeURIComponent(page.url()))
+    .toMatch(new RegExp(`/me/conversations/[^/?]+\\?listing=${listing.slug}$`))
   await expect(composerInput(page)).toBeVisible()
   // Exactly one start call: the continuation guard prevents a second attempt.
   expect(start).toHaveLength(1)

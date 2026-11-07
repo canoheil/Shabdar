@@ -22,7 +22,7 @@ import {
 
 // A real 30-second Inbox interval plus a real 10-second thread interval cannot
 // fit the default timeout; the interval itself is never shortened or faked.
-test.setTimeout(180_000)
+test.describe.configure({ timeout: 180_000 })
 
 test.beforeEach(async () => {
   await resetChatRows()
@@ -157,6 +157,7 @@ test('@chat-inbox a poll held past the interval keeps exactly one request in fli
   })
 
   let forwardRequests = 0
+  let handled = 0
   let release: () => void = () => undefined
   const gate = new Promise<void>((resolveGate) => {
     release = resolveGate
@@ -165,6 +166,7 @@ test('@chat-inbox a poll held past the interval keeps exactly one request in fli
     forwardRequests += 1
     await gate
     await route.continue()
+    handled += 1
   })
 
   await openInbox(page, fixtures.sellerStorage)
@@ -177,6 +179,10 @@ test('@chat-inbox a poll held past the interval keeps exactly one request in fli
   expect(forwardRequests).toBe(1)
 
   release()
+  // Release the held request before dropping the handler: unroute() takes the
+  // pending route over, and continuing it afterwards is a harness error, not a
+  // product failure.
+  await expect.poll(() => handled, { timeout: 10_000 }).toBe(1)
   await page.unroute(/\/api\/v1\/me\/conversations\?after=/)
   await expect(conversationRow(page, conversation.public_id)).toBeVisible()
 })
@@ -258,6 +264,9 @@ test('@chat-inbox duplicate rows in one response collapse to one DOM row and the
   })
 
   await openInbox(page, fixtures.sellerStorage)
+  // Let the first confirmed page land before changing server state, so the
+  // duplicate injection belongs to a real poll rather than to the initial read.
+  await expect(conversationRow(page, conversation.public_id)).toContainText('پیام تکراری')
   await sendMessage('buyer', conversation.public_id, {
     client_message_id: clientMessageId(),
     body: 'پیام پس از پویش تکراری',
@@ -266,7 +275,7 @@ test('@chat-inbox duplicate rows in one response collapse to one DOM row and the
     'پیام پس از پویش تکراری',
     { timeout: 45_000 },
   )
-  expect(served).toBe(true)
+  await expect.poll(() => served, { timeout: 15_000 }).toBe(true)
   await expect(page.locator('.conversation-row')).toHaveCount(1)
 })
 

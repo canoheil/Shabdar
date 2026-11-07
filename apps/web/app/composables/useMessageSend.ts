@@ -1,6 +1,7 @@
 import type { Ref } from 'vue'
 import type { ApiSendMessageResult } from '~/types'
 import { fieldOf, retryAfterOf, statusOf } from '~/utils/http'
+import { apiFetch } from '~/utils/chatApi'
 
 export interface PendingDraft {
   body: string
@@ -65,6 +66,9 @@ export function useMessageSend(
   const retryAfter = ref<number | null>(null)
   const conflict = ref(false)
   const expired = ref(false)
+  // A failed request keeps its pending client id, so the retry/conflict
+  // actions must survive any further editing of the draft.
+  const stickyError = ref(false)
   const canSend = ref(true)
 
   function persist(): void {
@@ -117,8 +121,12 @@ export function useMessageSend(
 
   function updateDraft(value: string): void {
     draft.value = value
-    conflict.value = false
-    error.value = ''
+    // Editing clears only a local validation hint. A transport failure stays
+    // visible because the message is still unconfirmed under the same id.
+    if (!stickyError.value) {
+      conflict.value = false
+      error.value = ''
+    }
     persist()
   }
 
@@ -136,14 +144,17 @@ export function useMessageSend(
     const body = draft.value.trim()
     if (sending.value || !canSend.value) return null
     if (body.length === 0) {
+      stickyError.value = false
       error.value = 'متن پیام خالی است.'
       return null
     }
     if ([...body].length > MAX_BODY_CHARS) {
+      stickyError.value = false
       error.value = 'متن پیام بیش از ۱۰۰۰ نویسه است.'
       return null
     }
     sending.value = true
+    stickyError.value = false
     error.value = ''
     retryAfter.value = null
     try {
@@ -152,7 +163,7 @@ export function useMessageSend(
         body,
       }
       if (pendingListingSlug.value) payload.listing_slug = pendingListingSlug.value
-      const result = await $fetch<ApiSendMessageResult>(
+      const result = await apiFetch<ApiSendMessageResult>(
         `/api/v1/conversations/${encodeURIComponent(conversationPublicId.value)}/messages`,
         { method: 'POST', body: payload },
       )
@@ -161,10 +172,12 @@ export function useMessageSend(
       pendingListingSlug.value = null
       clientMessageId.value = newClientMessageId()
       conflict.value = false
+      stickyError.value = false
       error.value = ''
       clearStorage()
       return result
     } catch (requestError) {
+      stickyError.value = true
       const status = statusOf(requestError)
       if (status === 401) {
         expired.value = true
@@ -199,6 +212,7 @@ export function useMessageSend(
   function startFreshMessage(): void {
     clientMessageId.value = newClientMessageId()
     conflict.value = false
+    stickyError.value = false
     error.value = ''
     persist()
   }

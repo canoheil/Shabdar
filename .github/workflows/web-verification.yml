@@ -210,7 +210,23 @@ jobs:
 
       - name: Run real-stack Playwright
         working-directory: apps/web
-        run: npm run test:e2e
+        run: |
+          set +e
+          npm run test:e2e > /tmp/shabdar-e2e.log 2>&1
+          status=$?
+          tail -n 80 /tmp/shabdar-e2e.log
+          if [ "$status" -ne 0 ]; then
+            python - <<'PY'
+          import base64
+          from pathlib import Path
+
+          payload = Path('/tmp/shabdar-e2e.log').read_bytes()[-64000:]
+          encoded = base64.b64encode(payload).decode()
+          for offset in range(0, len(encoded), 3500):
+              print(f'::error::E2E_LOG_BASE64={encoded[offset:offset + 3500]}')
+          PY
+          fi
+          exit "$status"
 
       - name: Assert three-run Lighthouse mobile medians
         working-directory: apps/web

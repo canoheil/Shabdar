@@ -1,5 +1,6 @@
 import type { Ref } from 'vue'
 import type { ApiInboxItem, ApiInboxPage } from '~/types'
+import { apiFetch } from '~/utils/chatApi'
 
 /// Approved polling cadence (spec §8): the Inbox refreshes every 30 seconds
 /// while the page is visible and online, and follows every forward page.
@@ -78,7 +79,7 @@ export function useInboxSync(): InboxSync {
     error.value = ''
     staleError.value = ''
     try {
-      const page = await $fetch<ApiInboxPage>('/api/v1/me/conversations', {
+      const page = await apiFetch<ApiInboxPage>('/api/v1/me/conversations', {
         query: { limit: 20 },
       })
       items.value = mergeInbox([], page.data)
@@ -99,7 +100,7 @@ export function useInboxSync(): InboxSync {
     pending.value = true
     loadOlderError.value = ''
     try {
-      const page = await $fetch<ApiInboxPage>('/api/v1/me/conversations', {
+      const page = await apiFetch<ApiInboxPage>('/api/v1/me/conversations', {
         query: { before: olderCursor.value, limit: 20 },
       })
       items.value = mergeInbox(items.value, page.data)
@@ -124,7 +125,7 @@ export function useInboxSync(): InboxSync {
     let complete = false
     try {
       for (let pageIndex = 0; pageIndex < MAX_FORWARD_PAGES; pageIndex += 1) {
-        const page = await $fetch<ApiInboxPage>('/api/v1/me/conversations', {
+        const page = await apiFetch<ApiInboxPage>('/api/v1/me/conversations', {
           query: { after: cursor },
         })
         // The first response of the scan owns the snapshot boundary.

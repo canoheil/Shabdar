@@ -46,12 +46,22 @@ request-generation token so a late response cannot write into a newer route.
 Read is claimed only after the latest message is rendered while the reader is at
 the latest position.
 
+All private chat traffic goes through `app/utils/chatApi.ts`
+(`apiFetch = $fetch.create({ retry: 0, cache: 'no-store' })`). An implicit ofetch
+retry would duplicate a poll, spend a second slice of the server's rate
+allowance, and turn a visible failure into a silent double request; every chat
+screen owns an explicit retry action instead. `chatFormat.ts` holds the
+chat-only formatters (the character counter never groups digits), so public
+route chunks never load either module.
+
 `useMessageSend` keeps the draft, the client UUID, and the pending listing
 reference in `sessionStorage` under `shabdar:chat:{viewer}:{conversation}`
 until a confirmed `200`. Nothing is rendered optimistically: a send failure (net
 error, 401, 403, 429, 500) keeps the same key so a retry produces exactly one
 server row, and a changed retry becomes a `client_message_id` conflict that only
-an explicit «ارسال به‌عنوان پیام تازه» resolves. Chat components and
+an explicit «ارسال به‌عنوان پیام تازه» resolves. A failed request keeps its
+banner and its retry action while the participant edits the draft, because the
+unconfirmed key — not the text — decides what the next send means. Chat components and
 composables are excluded from the shared `shell` chunk; `contactSeller.ts` is
 dynamically imported by Detail only for an authenticated click or a `contact=1`
 continuation.

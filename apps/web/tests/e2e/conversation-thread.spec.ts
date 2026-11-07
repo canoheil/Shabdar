@@ -18,7 +18,7 @@ import {
 } from './support/chat'
 
 // Real 10-second thread polling; never shortened, never faked.
-test.setTimeout(180_000)
+test.describe.configure({ timeout: 180_000 })
 
 test.beforeEach(async () => {
   await resetChatRows()
@@ -110,7 +110,8 @@ test('@chat-thread a real Read produces Seen only after the other side polls', a
       client_message_id: clientMessageId(),
       body: 'پیام فروشنده',
     })
-    expect(sent.message.seen).toBeUndefined()
+    // Unseen is an explicit `false`, not a missing field.
+    expect(sent.message.seen).toBe(false)
 
     await openBuyerThread(page, conversation)
     await expect(bubbles(page)).toHaveCount(1)

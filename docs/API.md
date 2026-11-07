@@ -341,7 +341,8 @@ and a replay with a different body is `400 validation_error` with
 conversation_blocked`; validation happens before authorization, so a blocked
 request never spends rate allowance. The response is
 `{ message, conversation }`, where `message.seen` appears only on the caller's
-own messages.
+own messages and is an explicit `false` until the other participant's
+high-water mark reaches that message.
 
 Messages are ordered by internal id inside the authorized conversation and page
 with `limit` 1–50 (default 30). `before` reads one older page (`has_more_older`),
