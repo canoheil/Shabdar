@@ -87,23 +87,31 @@ pub(crate) async fn participant_conversation(
 }
 
 /// True when either directed block exists for the pair.
+///
+/// This is a **locking** read on purpose. MariaDB's default REPEATABLE READ
+/// fixes a consistent snapshot at the transaction's first read; a send that
+/// waited on the pair locks would otherwise still see the pre-block snapshot
+/// and slip a message in after a committed block. A locking read always reads
+/// the latest committed rows, and every caller already holds the pair locks, so
+/// the lock order stays pair-users → blocks → conversation.
 pub async fn has_either_block(
     tx: &mut Transaction<'_, MySql>,
     low: u64,
     high: u64,
 ) -> Result<bool, ApiError> {
-    let blocked: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM blocks \
-         WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?))",
+    let blocked: Option<i64> = sqlx::query_scalar(
+        "SELECT 1 FROM blocks \
+         WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) \
+         FOR UPDATE LIMIT 1",
     )
     .bind(low)
     .bind(high)
     .bind(high)
     .bind(low)
-    .fetch_one(&mut **tx)
+    .fetch_optional(&mut **tx)
     .await
     .map_err(crate::error::database_error)?;
-    Ok(blocked)
+    Ok(blocked.is_some())
 }
 
 /// Advances the pair conversation's synchronization clock for a real change.

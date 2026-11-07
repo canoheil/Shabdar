@@ -1100,7 +1100,7 @@ async fn chat_constraints_and_repeat_reset_are_safe() {
     // Ordered pair: equal or reversed ids are rejected.
     let unordered = sqlx::query(
         "INSERT INTO conversations (public_id, user_low_id, user_high_id, initiator_id, \
-         created_at, updated_at) VALUES ('CHATORDER000000000000000001', ?, ?, ?, NOW(3), NOW(3))",
+         created_at, updated_at) VALUES ('CHATORDER00000000000000001', ?, ?, ?, NOW(3), NOW(3))",
     )
     .bind(high)
     .bind(low)

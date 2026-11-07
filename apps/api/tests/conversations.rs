@@ -1437,7 +1437,7 @@ async fn message_pages_are_disjoint_and_cursors_are_scoped() {
     let (status, _, page) = get_as(
         &setup.app,
         &format!(
-            "/api/v1/conversations/{public_id}/messages?after={}&limit=30",
+            "/api/v1/conversations/{public_id}/messages?after=m:{}&limit=30",
             seeded[5]
         ),
         &buyer,
