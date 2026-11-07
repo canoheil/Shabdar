@@ -102,7 +102,7 @@ pub async fn has_either_block(
     let blocked: Option<i64> = sqlx::query_scalar(
         "SELECT 1 FROM blocks \
          WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) \
-         FOR UPDATE LIMIT 1",
+         LIMIT 1 FOR UPDATE",
     )
     .bind(low)
     .bind(high)
