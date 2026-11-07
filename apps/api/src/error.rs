@@ -41,6 +41,10 @@ pub enum ApiError {
     /// 403 when the caller is not the owner (seller routes) or not an admin
     /// (admin routes). Message names no target (Phase 3, `forbidden`).
     Forbidden,
+    /// 403 for a chat start/send while either participant has a directed block
+    /// (direct chat MVP, `conversation_blocked`). History and Read stay open;
+    /// the message names no participant and no block direction.
+    ConversationBlocked,
     /// 410 for publicly removed or deleted listings (Phase 3, `gone`).
     Gone,
     /// 400 for a request body axum could not accept (Phase 5, `invalid_request`).
@@ -91,7 +95,9 @@ impl ApiError {
             | ApiError::NoAccount
             | ApiError::Unauthorized => StatusCode::UNAUTHORIZED,
             ApiError::NotFound => StatusCode::NOT_FOUND,
-            ApiError::CsrfFailed | ApiError::Forbidden => StatusCode::FORBIDDEN,
+            ApiError::CsrfFailed | ApiError::Forbidden | ApiError::ConversationBlocked => {
+                StatusCode::FORBIDDEN
+            }
             ApiError::Gone => StatusCode::GONE,
             ApiError::Internal | ApiError::RetryableDatabase => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -111,6 +117,7 @@ impl ApiError {
             ApiError::Unauthorized => "unauthorized",
             ApiError::CsrfFailed => "csrf_failed",
             ApiError::Forbidden => "forbidden",
+            ApiError::ConversationBlocked => "conversation_blocked",
             ApiError::Gone => "gone",
             ApiError::InvalidRequest { .. } => "invalid_request",
             ApiError::PayloadTooLarge => "payload_too_large",
@@ -134,6 +141,7 @@ impl ApiError {
             ApiError::Unauthorized => "Not authenticated",
             ApiError::CsrfFailed => "CSRF token missing or invalid",
             ApiError::Forbidden => "Not allowed",
+            ApiError::ConversationBlocked => "Messaging is blocked in this conversation",
             ApiError::Gone => "Listing is no longer available",
             ApiError::InvalidRequest { .. } => "Request body is not valid JSON",
             ApiError::PayloadTooLarge => "Request body is too large",
@@ -208,7 +216,7 @@ mod tests {
     /// variant, plus a non-empty message on every one.
     #[tokio::test]
     async fn status_and_code_match_contract_for_every_variant() {
-        let cases: [(super::ApiError, StatusCode, &str); 17] = [
+        let cases: [(super::ApiError, StatusCode, &str); 18] = [
             (
                 super::ApiError::Validation {
                     fields: fields(&[]),
@@ -285,6 +293,13 @@ mod tests {
                 "forbidden",
             ),
             (super::ApiError::Gone, StatusCode::GONE, "gone"),
+            // Direct chat addition: blocking is a 403, never a 404, so the
+            // participant still learns that history remains readable.
+            (
+                super::ApiError::ConversationBlocked,
+                StatusCode::FORBIDDEN,
+                "conversation_blocked",
+            ),
             // Phase 5 additions (docs/PHASE5_PLAN.md "Contract additions").
             (
                 super::ApiError::InvalidRequest {
