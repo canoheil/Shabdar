@@ -181,6 +181,7 @@ mod tests {
             database_url: "mysql://u:p@127.0.0.1:3306/shabdar_test".to_string(),
             otp_pepper: "test-pepper".to_string(),
             otp_dev_mode: false,
+            otp_dev_code: None,
             otp_ttl_secs: 120,
             otp_resend_secs: 60,
             otp_max_attempts: 5,

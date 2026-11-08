@@ -37,7 +37,8 @@ files**: no `.env` is committed, and credentials are exported in the shell.
 | `DATABASE_URL` | yes | — | `mysql://user:pass@127.0.0.1:3306/shabdar_dev` |
 | `OTP_PEPPER` | yes | — | Secret HMAC key for OTP codes. **Must never change once codes are in use — changing it invalidates every stored code.** |
 | `BIND_ADDR` | no | `127.0.0.1:8080` | Listen address |
-| `OTP_DEV_MODE` | no | `false` | `true` prints OTP codes to the log. Effective only in debug builds (compile-time gated) — never in a release build |
+| `OTP_DEV_MODE` | no | `false` | Local development only. `true` prints OTP codes to the log (debug builds only) and permits `OTP_DEV_CODE`. Startup logs a warning while it is on |
+| `OTP_DEV_CODE` | no | — | Local development only. Six-digit code accepted by `POST /auth/otp/verify` for any challenge, so you can log in without reading the log or sending an SMS. Requires `OTP_DEV_MODE=true`; the process refuses to start otherwise |
 | `OTP_TTL_SECS` | no | `120` | OTP code expiry in seconds |
 | `OTP_RESEND_SECS` | no | `60` | Resend cooldown per phone + purpose |
 | `OTP_MAX_ATTEMPTS` | no | `5` | Wrong-code limit before the challenge locks |
@@ -416,6 +417,22 @@ converter uses `HeaderMap::insert` per pair (insert *replaces*), so returning
 two `Set-Cookie` pairs that way silently drops the session cookie. Both
 `otp/verify` and `logout` build a `HeaderMap` with `append` instead
 (`two_set_cookies` in `src/routes.rs`) — never go back to the array form.
+
+## Local test login without SMS
+
+```
+export OTP_DEV_MODE=true
+export OTP_DEV_CODE=111111
+cargo run          # debug build
+```
+
+Then type `111111` in the login form for any phone number. This works in
+release builds too (unlike the log print), because the code is compared against
+an explicit setting instead of being scraped from the log. Everything else in
+the flow is unchanged: the challenge row must exist, be unexpired, unused, and
+under the attempt limit, and a successful verify creates a real session. The
+setting is inert unless `OTP_DEV_MODE=true`, and `OTP_DEV_CODE` without it is a
+startup configuration error.
 
 ## Smoke test (manual, on the phone)
 

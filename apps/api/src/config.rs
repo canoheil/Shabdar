@@ -16,6 +16,10 @@ pub struct Config {
     pub database_url: String,
     pub otp_pepper: String,
     pub otp_dev_mode: bool,
+    /// Optional fixed code accepted by `/auth/otp/verify` for local testing.
+    /// Only honoured while `otp_dev_mode` is on; `from_env` rejects the
+    /// combination of a code without dev mode.
+    pub otp_dev_code: Option<String>,
     pub otp_ttl_secs: u32,
     pub otp_resend_secs: u32,
     pub otp_max_attempts: u16,
@@ -52,12 +56,16 @@ impl Config {
     /// Reads all settings from the process environment. The first problem
     /// returns Err naming the offending variable.
     pub fn from_env() -> Result<Config, String> {
+        // Parsed first because the dev code is only legal together with it.
+        let otp_dev_mode = parse_bool("OTP_DEV_MODE", false)?;
+        let otp_dev_code = parse_dev_code(otp_dev_mode)?;
         Ok(Config {
             bind_addr: optional_string("BIND_ADDR", "127.0.0.1:8080"),
             trust_proxy: parse_bool("TRUST_PROXY", false)?,
             database_url: required("DATABASE_URL")?,
             otp_pepper: required("OTP_PEPPER")?,
-            otp_dev_mode: parse_bool("OTP_DEV_MODE", false)?,
+            otp_dev_mode,
+            otp_dev_code,
             otp_ttl_secs: parse_u32("OTP_TTL_SECS", 120)?,
             otp_resend_secs: parse_u32("OTP_RESEND_SECS", 60)?,
             // u16 per the contract; reject values above u16::MAX, never wrap.
@@ -99,6 +107,26 @@ fn optional_string(name: &str, default: &str) -> String {
     std::env::var(name).unwrap_or_else(|_| default.to_string())
 }
 
+/// Local-testing code (`OTP_DEV_CODE`). Not a secret, so it lives in config
+/// rather than the pepper, but it must be exactly six digits and only exists
+/// while `OTP_DEV_MODE` is on: a stray variable can never create a silent
+/// login bypass in a real deployment.
+fn parse_dev_code(otp_dev_mode: bool) -> Result<Option<String>, String> {
+    let Ok(value) = std::env::var("OTP_DEV_CODE") else {
+        return Ok(None);
+    };
+    let trimmed = value.trim();
+    if trimmed.len() != 6 || !trimmed.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(format!(
+            "OTP_DEV_CODE must be exactly 6 digits, got {value:?}"
+        ));
+    }
+    if !otp_dev_mode {
+        return Err("OTP_DEV_CODE requires OTP_DEV_MODE=true".to_string());
+    }
+    Ok(Some(trimmed.to_string()))
+}
+
 /// Strict on purpose: a typo must not silently disable dev-mode or Secure cookies.
 fn parse_bool(name: &str, default: bool) -> Result<bool, String> {
     match std::env::var(name) {
@@ -138,12 +166,13 @@ mod tests {
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     /// Every variable Config reads (keep in sync with from_env).
-    const VARS: [&str; 30] = [
+    const VARS: [&str; 31] = [
         "DATABASE_URL",
         "OTP_PEPPER",
         "BIND_ADDR",
         "TRUST_PROXY",
         "OTP_DEV_MODE",
+        "OTP_DEV_CODE",
         "OTP_TTL_SECS",
         "OTP_RESEND_SECS",
         "OTP_MAX_ATTEMPTS",
@@ -225,6 +254,7 @@ mod tests {
         );
         assert_eq!(cfg.otp_pepper, "test-pepper");
         assert!(!cfg.otp_dev_mode);
+        assert!(cfg.otp_dev_code.is_none());
         assert_eq!(cfg.otp_ttl_secs, 120);
         assert_eq!(cfg.otp_resend_secs, 60);
         assert_eq!(cfg.otp_max_attempts, 5);
@@ -257,6 +287,7 @@ mod tests {
         let (_lock, env) = locked_required_env();
         env.set("BIND_ADDR", "0.0.0.0:9000");
         env.set("OTP_DEV_MODE", "true");
+        env.set("OTP_DEV_CODE", "111111");
         env.set("OTP_TTL_SECS", "90"); // plan's example: 90 must land in otp_ttl_secs
         env.set("OTP_RESEND_SECS", "30");
         env.set("OTP_MAX_ATTEMPTS", "3");
@@ -286,6 +317,7 @@ mod tests {
         let cfg = super::Config::from_env().expect("valid env");
         assert_eq!(cfg.bind_addr, "0.0.0.0:9000");
         assert!(cfg.otp_dev_mode);
+        assert_eq!(cfg.otp_dev_code.as_deref(), Some("111111"));
         assert_eq!(cfg.otp_ttl_secs, 90);
         assert_eq!(cfg.otp_resend_secs, 30);
         assert_eq!(cfg.otp_max_attempts, 3);
@@ -383,5 +415,34 @@ mod tests {
                 "error must name the variable, got: {e}"
             ),
         }
+    }
+
+    #[test]
+    fn dev_code_without_dev_mode_is_rejected() {
+        let (_lock, env) = locked_required_env();
+        env.set("OTP_DEV_CODE", "111111");
+        let error = super::Config::from_env().expect_err("code without dev mode");
+        assert!(error.contains("OTP_DEV_CODE"), "{error}");
+        assert!(error.contains("OTP_DEV_MODE"), "{error}");
+    }
+
+    #[test]
+    fn dev_code_must_be_six_digits() {
+        let (_lock, env) = locked_required_env();
+        env.set("OTP_DEV_MODE", "true");
+        for bad in ["11111", "1111111", "abcdef", "111-11", ""] {
+            env.set("OTP_DEV_CODE", bad);
+            let error = super::Config::from_env().expect_err("invalid dev code");
+            assert!(error.contains("OTP_DEV_CODE"), "{bad}: {error}");
+        }
+    }
+
+    #[test]
+    fn dev_mode_without_a_code_still_works() {
+        let (_lock, env) = locked_required_env();
+        env.set("OTP_DEV_MODE", "true");
+        let cfg = super::Config::from_env().expect("dev mode alone is valid");
+        assert!(cfg.otp_dev_mode);
+        assert!(cfg.otp_dev_code.is_none());
     }
 }

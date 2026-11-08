@@ -22,7 +22,8 @@
 - Keep Termux awake during work (`termux-wake-lock`), or the servers stop.
 - Code is edited in Termux or a GitHub Codespace. Commits are pushed to a feature branch.
 - Test from another device on the same Wi-Fi is possible later by using the phone's IP address. Not needed now.
-- Local dev OTP: the code is printed to the Axum log and never sent to a real SMS provider in development. This flag must be explicit in configuration (`OTP_DEV_MODE=true`) and must be impossible to enable in production builds.
+- Local dev OTP: the code is printed to the Axum log and never sent to a real SMS provider in development. This flag must be explicit in configuration (`OTP_DEV_MODE=true`) and the print is gated to debug builds.
+- Do not weaken auth for local testing. `OTP_DEV_CODE` (six digits, only legal together with `OTP_DEV_MODE=true`, refused at startup otherwise, inert in the verify path unless dev mode is on) exists so local logins never depend on reading release logs. It is compared against the configured value inside the normal verify flow, so challenge existence, expiry, single use and the attempt limit still apply, and success still issues a real session.
 
 ## 3. Runtime shape
 

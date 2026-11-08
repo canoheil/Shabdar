@@ -123,6 +123,7 @@ pub fn test_config() -> Config {
         database_url: std::env::var("TEST_DATABASE_URL").unwrap_or_default(),
         otp_pepper: "test-pepper".to_string(),
         otp_dev_mode: false,
+        otp_dev_code: None,
         otp_ttl_secs: 120,
         otp_resend_secs: 60,
         otp_max_attempts: 5,
