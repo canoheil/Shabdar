@@ -2,8 +2,10 @@ name: Web verification
 
 on:
   push:
+    # Every agent session works on its own arena/* branch; verifying the whole
+    # namespace keeps a new session branch covered without editing this file.
     branches:
-      - arena/c2c8a31c-shabdar
+      - 'arena/**'
     paths:
       - apps/api/**
       - apps/web/**
