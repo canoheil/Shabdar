@@ -42,6 +42,26 @@ pub fn verify_code(code: &str, pepper: &str, hash: &[u8]) -> bool {
     mac.verify_slice(hash).is_ok()
 }
 
+/// Local-testing code check (`OTP_DEV_CODE`, docs/ARCHITECTURE.md §7).
+///
+/// Returns false unless the operator configured a code. The caller must also
+/// require `OTP_DEV_MODE`, so this helper can never activate a bypass alone.
+/// Comparison folds every byte instead of short-circuiting on the first
+/// mismatch, matching the constant-time habit of `verify_code`.
+pub fn dev_code_matches(dev_code: Option<&str>, code: &str) -> bool {
+    let Some(expected) = dev_code else {
+        return false;
+    };
+    if expected.len() != code.len() {
+        return false;
+    }
+    let mut difference = 0u8;
+    for (a, b) in expected.bytes().zip(code.bytes()) {
+        difference |= a ^ b;
+    }
+    difference == 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,5 +127,20 @@ mod tests {
         let hash = hash_code("123456", "pepper");
         assert!(!verify_code("123457", "pepper", &hash));
         assert!(!verify_code("123456", "other-pepper", &hash));
+    }
+
+    #[test]
+    fn dev_code_is_ignored_when_not_configured() {
+        assert!(!dev_code_matches(None, "111111"));
+        assert!(!dev_code_matches(None, ""));
+    }
+
+    #[test]
+    fn dev_code_accepts_only_the_configured_value() {
+        assert!(dev_code_matches(Some("111111"), "111111"));
+        assert!(!dev_code_matches(Some("111111"), "111112"));
+        assert!(!dev_code_matches(Some("111111"), "11111"));
+        assert!(!dev_code_matches(Some("111111"), "1111111"));
+        assert!(!dev_code_matches(Some("111111"), ""));
     }
 }

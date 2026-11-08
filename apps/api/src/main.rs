@@ -25,6 +25,14 @@ async fn main() {
         std::process::exit(2);
     });
 
+    // Local development only: make an enabled test login impossible to miss.
+    if cfg.otp_dev_mode {
+        tracing::warn!(
+            fixed_dev_code = cfg.otp_dev_code.is_some(),
+            "OTP_DEV_MODE is on: codes are logged and OTP_DEV_CODE is accepted. Never set this outside local development"
+        );
+    }
+
     // The pool connects lazily; migrations are the first real database contact.
     // Startup fails here when the database is unreachable or a migration errors.
     let pool = db::create_pool(&cfg);

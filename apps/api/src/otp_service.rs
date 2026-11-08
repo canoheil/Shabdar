@@ -212,8 +212,12 @@ pub async fn verify_challenge(
     if attempt_count >= cfg.otp_max_attempts {
         return Err(ApiError::ChallengeLocked);
     }
-    // 4. Constant-time HMAC check; a wrong code burns one attempt.
-    if !otp::verify_code(code, &cfg.otp_pepper, &code_hash) {
+    // 4. Constant-time HMAC check; a wrong code burns one attempt. A local
+    //    testing code is accepted only while OTP_DEV_MODE is explicitly on, so
+    //    the bypass cannot exist in a real deployment.
+    let code_ok = otp::verify_code(code, &cfg.otp_pepper, &code_hash)
+        || (cfg.otp_dev_mode && otp::dev_code_matches(cfg.otp_dev_code.as_deref(), code));
+    if !code_ok {
         sqlx::query(
             "UPDATE otp_challenges SET attempt_count = attempt_count + 1 WHERE public_id = ?",
         )

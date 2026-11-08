@@ -49,6 +49,9 @@ pull-request merge is implied.
   addition must arrive with its own split.
 - Production rollout is not claimed: apply migration `0014_direct_chat.sql`
   through the normal startup migrator after backup.
+- Local testing: `OTP_DEV_MODE=true` with `OTP_DEV_CODE=<6 digits>` lets a developer log in
+  without SMS or log scraping. It is opt-in, inert unless dev mode is on, refused at startup
+  when set alone, and must never be set on a deployment.
 
 ## Current nationwide-location scope
 

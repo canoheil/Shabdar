@@ -178,6 +178,21 @@ export OTP_PHONE_DAILY_LIMIT=1000 OTP_SMS_GLOBAL_LIMIT=1000
 export RATING_USER_LIMIT=1000 COMMENT_USER_LIMIT=1000
 ```
 
+### Logging in locally without SMS
+
+Run the API with a fixed development code:
+
+```sh
+export OTP_DEV_MODE=true OTP_DEV_CODE=111111
+```
+
+Type `111111` for any phone number in the login form. This works in release
+builds too, because the code comes from configuration rather than the log;
+`OTP_DEV_CODE` without `OTP_DEV_MODE=true` is a startup error, and dev mode logs
+a warning. The challenge still has to exist, be unexpired and unused, so the
+flow you test is the real one — use two browser profiles (or one incognito
+window) to act as both participants in a conversation.
+
 The MariaDB CLI must be installed. Run Axum from `apps/api` so it finds the
 migrations and writes its log to `$E2E_API_LOG`, then run:
 

@@ -617,3 +617,103 @@ async fn verify_persian_digit_phone_creates_the_e164_user() {
         "+989123456789"
     );
 }
+
+// --- Local testing login (OTP_DEV_CODE) ------------------------------------
+
+#[tokio::test]
+async fn verify_dev_code_logs_in_and_the_challenge_stays_single_use() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config_with(|config| {
+        config.otp_dev_mode = true;
+        config.otp_dev_code = Some("111111".to_string());
+    });
+    let app = common::spawn_app(cfg.clone()).await;
+    // The challenge still carries a real random code; the dev code replaces
+    // only the comparison, so hashing, expiry and attempts stay in the path.
+    let phone = "+989123456789";
+    let (challenge_id, real_code) = challenge_with_code(&pool, &cfg, phone, "register").await;
+    assert_ne!(real_code, "111111");
+
+    let resp = post_json(
+        app.clone(),
+        "/api/v1/auth/otp/verify",
+        verify_body(&challenge_id, "111111"),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let cookie = resp.headers().get(axum::http::header::SET_COOKIE);
+    assert!(cookie.is_some(), "dev login must create a real session");
+
+    // Consumed once: the same challenge cannot log in twice, even with the
+    // fixed code.
+    let replay = post_json(
+        app,
+        "/api/v1/auth/otp/verify",
+        verify_body(&challenge_id, "111111"),
+    )
+    .await;
+    assert_eq!(replay.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(error_code(&json_body(replay).await), "invalid_code");
+}
+
+#[tokio::test]
+async fn verify_dev_code_is_inert_when_dev_mode_is_off() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    // `from_env` rejects this pairing; the service must reject it too, so a
+    // hand-built config can never open a production login bypass.
+    let cfg = common::test_config_with(|config| {
+        config.otp_dev_code = Some("111111".to_string());
+    });
+    let app = common::spawn_app(cfg.clone()).await;
+    let phone = "+989123456789";
+    let (challenge_id, _real_code) = challenge_with_code(&pool, &cfg, phone, "register").await;
+
+    let resp = post_json(
+        app,
+        "/api/v1/auth/otp/verify",
+        verify_body(&challenge_id, "111111"),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(error_code(&json_body(resp).await), "invalid_code");
+}
+
+#[tokio::test]
+async fn verify_dev_code_still_burns_an_attempt_for_a_wrong_code() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return;
+    };
+    reset_db(&pool).await;
+    let cfg = common::test_config_with(|config| {
+        config.otp_dev_mode = true;
+        config.otp_dev_code = Some("111111".to_string());
+    });
+    let app = common::spawn_app(cfg.clone()).await;
+    let phone = "+989123456789";
+    let (challenge_id, real_code) = challenge_with_code(&pool, &cfg, phone, "register").await;
+
+    // Neither the real code nor the fixed dev code: the leading digit changes
+    // to '9' (or '8' when it already is), so the result is never "111111".
+    let mut wrong = "9".to_string();
+    wrong.push_str(&real_code[1..]);
+    if wrong == real_code {
+        wrong = format!("8{}", &real_code[1..]);
+    }
+    let resp = post_json(
+        app,
+        "/api/v1/auth/otp/verify",
+        verify_body(&challenge_id, &wrong),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(error_code(&json_body(resp).await), "invalid_code");
+}
