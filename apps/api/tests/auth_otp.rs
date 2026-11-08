@@ -701,13 +701,13 @@ async fn verify_dev_code_still_burns_an_attempt_for_a_wrong_code() {
     let phone = "+989123456789";
     let (challenge_id, real_code) = challenge_with_code(&pool, &cfg, phone, "register").await;
 
-    // Neither the real code nor the fixed dev code: only the first digit
-    // changes, so the result can never be "111111".
-    let wrong = if real_code.starts_with('5') {
-        format!("6{}", &real_code[1..])
-    } else {
-        format!("5{}", &real_code[1..])
-    };
+    // Neither the real code nor the fixed dev code: the leading digit changes
+    // to '9' (or '8' when it already is), so the result is never "111111".
+    let mut wrong = "9".to_string();
+    wrong.push_str(&real_code[1..]);
+    if wrong == real_code {
+        wrong = format!("8{}", &real_code[1..]);
+    }
     let resp = post_json(
         app,
         "/api/v1/auth/otp/verify",
