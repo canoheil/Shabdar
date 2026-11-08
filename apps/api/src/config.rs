@@ -421,7 +421,7 @@ mod tests {
     fn dev_code_without_dev_mode_is_rejected() {
         let (_lock, env) = locked_required_env();
         env.set("OTP_DEV_CODE", "111111");
-        let error = super::Config::from_env().expect_err("code without dev mode");
+        let error = super::Config::from_env().err().expect("code without dev mode");
         assert!(error.contains("OTP_DEV_CODE"), "{error}");
         assert!(error.contains("OTP_DEV_MODE"), "{error}");
     }
@@ -432,7 +432,7 @@ mod tests {
         env.set("OTP_DEV_MODE", "true");
         for bad in ["11111", "1111111", "abcdef", "111-11", ""] {
             env.set("OTP_DEV_CODE", bad);
-            let error = super::Config::from_env().expect_err("invalid dev code");
+            let error = super::Config::from_env().err().expect("invalid dev code");
             assert!(error.contains("OTP_DEV_CODE"), "{bad}: {error}");
         }
     }
