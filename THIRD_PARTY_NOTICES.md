@@ -62,3 +62,46 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## National province and city reference data
+
+The additive seed in `apps/api/migrations/0013_national_locations.sql` was
+normalized from the root CSV snapshot of:
+
+- Project: https://github.com/masterking32/iran-states-cities-districts
+- Pinned commit: `ef80f5bab604ece1cb5fa35da4d2f169f79f2ead`
+- Source files: `data_provinces.csv` and `data_cities_all_in_one.csv`
+- Source description: reference data fetched from Iranian Post
+- License file: `LICENSE` (MIT)
+
+The source snapshot contains 31 provinces and 1,547 cities. Source province IDs
+are not reused as database IDs. The migration preserves existing Shabdar IDs
+and listing relationships, retains the established Rasht `rasht` slug, and
+normalizes only the necessary within-province slug collisions. No upstream
+code or executable package is included.
+
+The upstream MIT license is reproduced in full below.
+
+---
+
+MIT License
+
+Copyright (c) 2024 Amin Mahmoudi
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

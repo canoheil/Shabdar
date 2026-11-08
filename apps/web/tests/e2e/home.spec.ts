@@ -29,10 +29,82 @@ test('@home search-led hierarchy and visible categories work at mobile and deskt
   const desktopFilters = page.locator('.home__desktop-filters')
   await expect(desktopFilters).toBeVisible()
   await expect(desktopFilters.getByLabel('دسته', { exact: true })).toBeVisible()
+  await expect(desktopFilters.getByLabel('استان', { exact: true })).toBeVisible()
   await expect(desktopFilters.getByLabel('شهر', { exact: true })).toBeVisible()
   await expect(desktopFilters.getByLabel('مرتب‌سازی', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'فیلترها', exact: true })).toHaveCount(0)
   await expectNoOverflow(page)
+})
+
+test('@home national province and city filters load real locations and survive reload', async ({ page }) => {
+  const title = 'آگهی سراسری در تهران'
+  await createListing({
+    title,
+    imageCount: 0,
+    state: 'active',
+    provinceSlug: 'tehran',
+    citySlug: 'tehran',
+  })
+  await page.setViewportSize({ width: 1024, height: 900 })
+  await page.goto('/')
+  await expect(page.locator('.home__intro')).not.toContainText('گیلان')
+  await expect(page.locator('.home__intro')).not.toContainText('رشت')
+
+  const filters = page.locator('.home__desktop-filters')
+  const province = filters.getByLabel('استان', { exact: true })
+  const city = filters.getByLabel('شهر', { exact: true })
+  await expect(province.locator('option')).toHaveCount(32)
+  await province.selectOption('tehran')
+  await expect(city).toBeEnabled()
+  await expect(city.locator('option')).toHaveCount(53)
+  await city.selectOption('tehran')
+  await expect(page).toHaveURL(/[?&]province=tehran(?:&|$)/)
+  await expect(page).toHaveURL(/[?&]city=tehran(?:&|$)/)
+  const cards = page.locator('.listing-card')
+  await expect(cards).toHaveCount(1)
+  await expect(cards.first()).toContainText(title)
+  await expect(cards.first()).toContainText('تهران')
+
+  await page.reload()
+  await expect(province).toHaveValue('tehran')
+  await expect(city).toBeEnabled()
+  await expect(city).toHaveValue('tehran')
+  await expect(cards).toHaveCount(1)
+
+  await province.selectOption('gilan')
+  await expect(city).toHaveValue('')
+  await expect(page).toHaveURL(/[?&]province=gilan(?:&|$)/)
+  await expect(page).not.toHaveURL(/[?&]city=/)
+  await expect(city).toBeEnabled()
+  await expect(city.locator('option')).toHaveCount(55)
+})
+
+test('@home city-loading failure keeps the selected province and retries real options', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 900 })
+  await page.goto('/')
+  const filters = page.locator('.home__desktop-filters')
+  const province = filters.getByLabel('استان', { exact: true })
+  const city = filters.getByLabel('شهر', { exact: true })
+  let fail = true
+  await page.route('**/api/v1/locations/provinces/tehran/cities', async (route) => {
+    if (fail) {
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: '{"error":{"code":"internal","message":"fixture"}}',
+      })
+      return
+    }
+    await route.continue()
+  })
+  await province.selectOption('tehran')
+  await expect(filters.getByText('بارگذاری شهرها ممکن نشد.', { exact: true })).toBeVisible()
+  await expect(city).toBeDisabled()
+  fail = false
+  await filters.getByRole('button', { name: 'تلاش دوباره برای دریافت شهرها', exact: true }).click()
+  await expect(city).toBeEnabled()
+  await expect(city.locator('option')).toHaveCount(53)
+  await expect(province).toHaveValue('tehran')
 })
 
 test('@home search debounce, URL state and Back restore controls', async ({ page }) => {
@@ -73,7 +145,9 @@ test('@home mobile filter dialog applies once, discards Cancel/Escape and return
   await filterButton.click()
   await expect(dialog).toBeVisible()
   await dialog.getByLabel('دسته', { exact: true }).selectOption({ index: 1 })
-  await dialog.getByLabel('شهر', { exact: true }).selectOption({ index: 1 })
+  await dialog.getByLabel('استان', { exact: true }).selectOption('gilan')
+  await expect(dialog.getByLabel('شهر', { exact: true })).toBeEnabled()
+  await dialog.getByLabel('شهر', { exact: true }).selectOption('rasht')
   await dialog.getByLabel('کمترین قیمت (تومان)', { exact: true }).fill('1000000')
   await dialog.getByLabel('بیشترین قیمت (تومان)', { exact: true }).fill('2000000')
   await dialog.getByLabel('مرتب‌سازی', { exact: true }).selectOption('price_asc')
@@ -84,6 +158,8 @@ test('@home mobile filter dialog applies once, discards Cancel/Escape and return
 
   await filterButton.click()
   await expect(dialog.getByLabel('دسته', { exact: true })).toHaveValue('')
+  await expect(dialog.getByLabel('استان', { exact: true })).toHaveValue('')
+  await expect(dialog.getByLabel('شهر', { exact: true })).toHaveValue('')
   await expect(dialog.getByLabel('کمترین قیمت (تومان)', { exact: true })).toHaveValue('')
   await expect(dialog.getByLabel('بیشترین قیمت (تومان)', { exact: true })).toHaveValue('')
   await expect(dialog.getByLabel('مرتب‌سازی', { exact: true })).toHaveValue('newest')
@@ -97,7 +173,9 @@ test('@home mobile filter dialog applies once, discards Cancel/Escape and return
 
   await filterButton.click()
   await dialog.getByLabel('دسته', { exact: true }).selectOption({ index: 1 })
-  await dialog.getByLabel('شهر', { exact: true }).selectOption({ index: 1 })
+  await dialog.getByLabel('استان', { exact: true }).selectOption('gilan')
+  await expect(dialog.getByLabel('شهر', { exact: true })).toBeEnabled()
+  await dialog.getByLabel('شهر', { exact: true }).selectOption('rasht')
   await dialog.getByLabel('کمترین قیمت (تومان)', { exact: true }).fill('1000000')
   await dialog.getByLabel('بیشترین قیمت (تومان)', { exact: true }).fill('2000000')
   await dialog.getByLabel('مرتب‌سازی', { exact: true }).selectOption('price_asc')
@@ -107,7 +185,8 @@ test('@home mobile filter dialog applies once, discards Cancel/Escape and return
   await expect.poll(() => feedRequests.length).toBe(1)
   const query = new URL(page.url()).searchParams
   expect(query.get('category')).toBeTruthy()
-  expect(query.get('city')).toBeTruthy()
+  expect(query.get('province')).toBe('gilan')
+  expect(query.get('city')).toBe('rasht')
   expect(query.get('min_price')).toBe('1000000')
   expect(query.get('max_price')).toBe('2000000')
   expect(query.get('sort')).toBe('price_asc')

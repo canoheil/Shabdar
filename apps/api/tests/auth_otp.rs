@@ -21,34 +21,7 @@ static DB_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// Phase 3 tables drop first: listings/images/audit reference users, cities
 /// reference provinces (dropping users first fails with error 1451/3730).
 async fn reset_db(pool: &sqlx::MySqlPool) {
-    for table in [
-        "advertising_requests",
-        "advertising_slots",
-        "comment_moderation_cases",
-        "moderation_rules",
-        "moderation_settings",
-        "reports",
-        "blocks",
-        "listing_comments",
-        "listing_ratings",
-        "favorites",
-        "listing_images",
-        "listings",
-        "admin_audit_logs",
-        "sessions",
-        "otp_challenges",
-        "cities",
-        "categories",
-        "provinces",
-        "users",
-        "_sqlx_migrations",
-    ] {
-        let sql = format!("DROP TABLE IF EXISTS {table}"); // fixed literals, not user input
-        sqlx::query(&sql).execute(pool).await.expect("drop failed");
-    }
-    shabdar_api::db::run_migrations(pool)
-        .await
-        .expect("migrations apply");
+    common::reset_database(pool).await;
 }
 
 /// POST a JSON body; returns the raw response (headers + body).

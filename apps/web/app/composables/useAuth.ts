@@ -22,15 +22,24 @@ function errorStatus(error: unknown): number | undefined {
   return undefined
 }
 
-export async function useAuth(): Promise<AuthState> {
+export interface UseAuthOptions {
+  /// `false` keeps the auth read on the client only, which private chat pages
+  /// need: their SSR shell must never carry viewer-specific payload.
+  server?: boolean
+}
+
+export async function useAuth(options: UseAuthOptions = {}): Promise<AuthState> {
   const {
     data,
     pending: fetchPending,
     error,
     refresh: refreshFetch,
   } = await useFetch<{ user: ApiUser }>('/api/v1/me', {
-    key: 'auth:me',
+    // A client-only read needs its own key: sharing `auth:me` with the shell
+    // would let the shell's server payload satisfy the private page during SSR.
+    key: options.server === false ? 'auth:me:client' : 'auth:me',
     headers: useRequestHeaders(['cookie']),
+    ...(options.server === false ? { server: false } : {}),
   })
 
   const user = computed(() => data.value?.user ?? null)

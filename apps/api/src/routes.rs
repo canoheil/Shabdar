@@ -4,7 +4,8 @@
 //! POST /api/v1/auth/otp/verify, GET/PATCH /api/v1/me,
 //! POST /api/v1/auth/logout, GET /api/v1/categories,
 //! GET /api/v1/locations/provinces,
-//! GET /api/v1/locations/provinces/{slug}/cities.
+//! GET /api/v1/locations/provinces/{slug}/cities, and the direct-chat routes
+//! under /api/v1/conversations and /api/v1/me/conversations.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -35,6 +36,29 @@ pub fn router(state: AppState) -> Router {
     // the API JSON extractor's independent 2 MiB/413 contract is unchanged.
     let max_body_bytes = usize::try_from(state.config.max_image_bytes.saturating_add(64 * 1024))
         .unwrap_or(usize::MAX);
+    // Private chat routes carry `private, no-store` + `Vary: Cookie` on every
+    // response, including the error envelopes. `route_layer` wraps only these
+    // matched routes, so public/fallback responses are untouched.
+    let chat = Router::new()
+        .route(
+            "/api/v1/listings/{slug}/conversations",
+            post(start_conversation),
+        )
+        .route("/api/v1/me/conversations", get(my_conversations))
+        .route(
+            "/api/v1/conversations/{public_id}",
+            get(conversation_metadata),
+        )
+        .route(
+            "/api/v1/conversations/{public_id}/messages",
+            get(conversation_messages).post(send_message),
+        )
+        .route(
+            "/api/v1/conversations/{public_id}/read",
+            post(mark_conversation_read),
+        )
+        .route_layer(middleware::from_fn(private_chat_response));
+
     Router::new()
         .route("/api/v1/health", get(health))
         .route("/api/v1/advertising/slot", get(public_advertising_slot))
@@ -176,6 +200,7 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/locations/provinces/{slug}/cities",
             get(province_cities),
         )
+        .merge(chat)
         // Unknown paths: 404 in the documented envelope (plan Task 4).
         .fallback(not_found)
         // Request IDs wrap every route, fallback included.
@@ -212,6 +237,121 @@ fn mark_private_viewer(response: &mut axum::response::Response) {
         axum::http::header::VARY,
         axum::http::HeaderValue::from_static("Cookie"),
     );
+}
+
+/// Route-layer middleware for the private chat subrouter: success and error
+/// responses both become `private, no-store` with `Vary: Cookie`, so no
+/// intermediary can cache participant or message data.
+async fn private_chat_response(
+    request: axum::extract::Request,
+    next: middleware::Next,
+) -> axum::response::Response {
+    let mut response = next.run(request).await;
+    mark_private_viewer(&mut response);
+    response
+}
+
+/// POST /api/v1/listings/{slug}/conversations — start or return the pair.
+async fn start_conversation(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(slug): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    Ok(Json(
+        crate::conversations::start(&state.pool, user.user_id, &slug).await?,
+    ))
+}
+
+/// GET /api/v1/me/conversations — recency pages and forward synchronization.
+async fn my_conversations(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(
+        crate::conversations::inbox(
+            &state.pool,
+            user.user_id,
+            params.get("before").map(String::as_str),
+            params.get("after").map(String::as_str),
+            params.get("limit").map(String::as_str),
+        )
+        .await?,
+    ))
+}
+
+/// GET /api/v1/conversations/{public_id} — participant metadata.
+async fn conversation_metadata(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(public_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(
+        crate::conversations::metadata(&state.pool, user.user_id, &public_id).await?,
+    ))
+}
+
+/// GET /api/v1/conversations/{public_id}/messages — keyset history.
+async fn conversation_messages(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(public_id): Path<String>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(
+        crate::messages::list(
+            &state.pool,
+            user.user_id,
+            &public_id,
+            params.get("before").map(String::as_str),
+            params.get("after").map(String::as_str),
+            params.get("limit").map(String::as_str),
+        )
+        .await?,
+    ))
+}
+
+/// POST /api/v1/conversations/{public_id}/messages — idempotent text send.
+/// Field validation happens here; authorization, block checks, and the
+/// validated-send allowance all happen inside the send transaction, so an
+/// unauthorized or blocked request never spends allowance.
+async fn send_message(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    ApiJson(body): ApiJson<crate::messages::SendBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    let input = body.validate()?;
+    Ok(Json(
+        crate::messages::send(
+            &state.pool,
+            &state.limiter,
+            &state.config,
+            user.user_id,
+            &public_id,
+            &input,
+        )
+        .await?,
+    ))
+}
+
+/// POST /api/v1/conversations/{public_id}/read — forward-only high-water Read.
+async fn mark_conversation_read(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(public_id): Path<String>,
+    ApiJson(body): ApiJson<crate::messages::ReadBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    crate::csrf::check_csrf(&headers)?;
+    let through = body.validate()?;
+    Ok(Json(
+        crate::messages::mark_read(&state.pool, user.user_id, &public_id, &through).await?,
+    ))
 }
 
 /// Fallback: unknown paths get 404 `not_found` in the documented envelope

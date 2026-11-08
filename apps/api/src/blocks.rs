@@ -1,12 +1,24 @@
-//! Private user blocks (Phase 9).
+//! Private user blocks (Phase 9) with direct-chat enforcement.
 //!
-//! A block is one directed `(blocker, blocked)` row. It has no global target
-//! effect: only the blocker's optional-viewer comment query reads these rows.
+//! A block is one directed `(blocker, blocked)` row. It keeps its original
+//! comment-filtering meaning and additionally closes chat in both directions:
+//! one directed row is enough to stop starts and new sends, while history and
+//! Read stay available to both participants.
+//!
+//! Both mutations take the canonical user-pair locks in ascending id order —
+//! the same locks chat start/send take — so a block and a send can only
+//! interleave as "message committed first" or "block committed first". A real
+//! change also advances the pair conversation's synchronization clock; an
+//! idempotent repeat never does.
 
 use chrono::Utc;
 use sqlx::{MySqlPool, Row};
 
 use crate::error::ApiError;
+
+/// Matches the established moderation-rescan rule: three retries after the
+/// first attempt, then the retryable conflict is reported as `Internal`.
+const MAX_RETRIES: u8 = 3;
 
 fn self_block() -> ApiError {
     let mut fields = std::collections::BTreeMap::new();
@@ -15,20 +27,40 @@ fn self_block() -> ApiError {
 }
 
 /// Idempotently block another existing, non-deleted user. Suspended users
-/// remain valid targets; duplicate writes retain the original timestamp.
+/// remain valid targets; duplicate writes retain the original timestamp and do
+/// not advance chat synchronization.
 pub async fn put(pool: &MySqlPool, user_id: u64, public_id: &str) -> Result<(), ApiError> {
-    let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
-    let target =
-        sqlx::query("SELECT id, status, deleted_at FROM users WHERE public_id = ? FOR UPDATE")
-            .bind(public_id)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(|_| ApiError::Internal)?
-            .ok_or(ApiError::NotFound)?;
-    let target_id: u64 = target.try_get("id").map_err(|_| ApiError::Internal)?;
+    let mut remaining_retries = MAX_RETRIES;
+    loop {
+        match put_once(pool, user_id, public_id).await {
+            Err(ApiError::RetryableDatabase) if remaining_retries > 0 => {
+                remaining_retries -= 1;
+            }
+            Err(ApiError::RetryableDatabase) => return Err(ApiError::Internal),
+            result => return result,
+        }
+    }
+}
+
+async fn put_once(pool: &MySqlPool, user_id: u64, public_id: &str) -> Result<(), ApiError> {
+    // Resolve without a lock only to learn which pair to lock.
+    let target_id: u64 = sqlx::query_scalar("SELECT id FROM users WHERE public_id = ?")
+        .bind(public_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| ApiError::Internal)?
+        .ok_or(ApiError::NotFound)?;
     if target_id == user_id {
         return Err(self_block());
     }
+
+    let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
+    crate::db::lock_user_pair(&mut tx, user_id, target_id).await?;
+    let target = sqlx::query("SELECT status, deleted_at FROM users WHERE id = ?")
+        .bind(target_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(crate::error::database_error)?;
     let status: String = target.try_get("status").map_err(|_| ApiError::Internal)?;
     let deleted_at: Option<chrono::DateTime<Utc>> = target
         .try_get("deleted_at")
@@ -37,32 +69,56 @@ pub async fn put(pool: &MySqlPool, user_id: u64, public_id: &str) -> Result<(), 
         return Err(ApiError::NotFound);
     }
 
-    sqlx::query("INSERT IGNORE INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)")
-        .bind(user_id)
-        .bind(target_id)
-        .bind(Utc::now())
-        .execute(&mut *tx)
-        .await
-        .map_err(|_| ApiError::Internal)?;
+    let inserted = sqlx::query(
+        "INSERT IGNORE INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)",
+    )
+    .bind(user_id)
+    .bind(target_id)
+    .bind(Utc::now())
+    .execute(&mut *tx)
+    .await
+    .map_err(crate::error::database_error)?;
+    let (low, high) = crate::db::canonical_pair(user_id, target_id);
+    crate::conversations::sync_pair_block_state(&mut tx, low, high, inserted.rows_affected() == 1)
+        .await?;
     tx.commit().await.map_err(|_| ApiError::Internal)
 }
 
 /// Idempotently remove the viewer's directed row for any known user, including
 /// a suspended or deleted target. The reverse relationship is untouched.
 pub async fn delete(pool: &MySqlPool, user_id: u64, public_id: &str) -> Result<(), ApiError> {
+    let mut remaining_retries = MAX_RETRIES;
+    loop {
+        match delete_once(pool, user_id, public_id).await {
+            Err(ApiError::RetryableDatabase) if remaining_retries > 0 => {
+                remaining_retries -= 1;
+            }
+            Err(ApiError::RetryableDatabase) => return Err(ApiError::Internal),
+            result => return result,
+        }
+    }
+}
+
+async fn delete_once(pool: &MySqlPool, user_id: u64, public_id: &str) -> Result<(), ApiError> {
     let target_id: u64 = sqlx::query_scalar("SELECT id FROM users WHERE public_id = ?")
         .bind(public_id)
         .fetch_optional(pool)
         .await
         .map_err(|_| ApiError::Internal)?
         .ok_or(ApiError::NotFound)?;
-    sqlx::query("DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?")
+
+    let mut tx = pool.begin().await.map_err(|_| ApiError::Internal)?;
+    crate::db::lock_user_pair(&mut tx, user_id, target_id).await?;
+    let deleted = sqlx::query("DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?")
         .bind(user_id)
         .bind(target_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await
-        .map_err(|_| ApiError::Internal)?;
-    Ok(())
+        .map_err(crate::error::database_error)?;
+    let (low, high) = crate::db::canonical_pair(user_id, target_id);
+    crate::conversations::sync_pair_block_state(&mut tx, low, high, deleted.rows_affected() == 1)
+        .await?;
+    tx.commit().await.map_err(|_| ApiError::Internal)
 }
 
 /// Newest-first private keyset page. Cursor values are bound directly so an

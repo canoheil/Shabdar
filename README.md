@@ -4,6 +4,8 @@ Shabdar is a Persian, RTL local marketplace built with Rust/Axum, MariaDB, and N
 
 ## Current delivery
 
+The national-location phase adds additive reference data for all 31 provinces and 1,547 cities, province → city selectors on Home and Post, coherent URL filters, and neutral Iran-wide product copy. Existing city IDs, slugs, and listing relationships are preserved. Apply `0013_national_locations.sql` through the normal startup migrator during rollout; the pinned source and MIT notice are in `THIRD_PARTY_NOTICES.md`.
+
 Phase 11 adds image moderation and launch-safety controls:
 
 - bounded, fully local JPEG/PNG/WebP decoding before durable upload publication;

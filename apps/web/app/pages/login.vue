@@ -104,6 +104,7 @@ type Step = 'phone' | 'code'
 type Purpose = 'login' | 'register'
 
 const { refresh: refreshAuth } = await useAuth()
+const route = useRoute()
 
 const purpose = ref<Purpose>('login')
 const step = ref<Step>('phone')
@@ -212,7 +213,10 @@ async function verifyCode() {
       body: { challenge_id: challengeId.value, code: code.value },
     })
     await refreshAuth()
-    await navigateTo('/')
+    // Only an internal single-slash path survives `safeInternalNext`; every
+    // external, protocol-relative, backslash, control or credential form
+    // falls back to Home instead of navigating off-site.
+    await navigateTo(safeInternalNext(route.query.next))
   } catch (err) {
     showError(err)
   } finally {

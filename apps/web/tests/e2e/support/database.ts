@@ -44,6 +44,12 @@ export async function runSql(sql: string): Promise<string> {
 
 export async function resetDynamicRows(): Promise<void> {
   await runSql(`
+    -- Chat tables reference each other through conversations.last_message_id
+    -- and messages.conversation_id, so clear the pointer before deleting rows.
+    UPDATE conversations SET last_message_id = NULL, last_message_at = NULL;
+    DELETE FROM conversation_reads;
+    DELETE FROM messages;
+    DELETE FROM conversations;
     DELETE FROM comment_moderation_cases;
     DELETE FROM moderation_rules WHERE phrase LIKE 'e2e%';
     DELETE FROM reports;

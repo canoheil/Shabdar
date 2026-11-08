@@ -36,6 +36,10 @@ pub struct Config {
     /// Phase 9 per-user abuse-report creation window.
     pub report_user_limit: u32,
     pub report_user_window_secs: u32,
+    /// Direct chat validated-send window (spec §5.4). Replays count so retries
+    /// cannot bypass it; malformed/unauthorized/blocked requests do not.
+    pub message_user_limit: u32,
+    pub message_user_window_secs: u32,
     pub session_ttl_secs: u32,
     pub cookie_name: String,
     pub cookie_secure: bool,
@@ -73,6 +77,8 @@ impl Config {
             comment_user_window_secs: parse_u32("COMMENT_USER_WINDOW_SECS", 600)?,
             report_user_limit: parse_u32("REPORT_USER_LIMIT", 20)?,
             report_user_window_secs: parse_u32("REPORT_USER_WINDOW_SECS", 600)?,
+            message_user_limit: parse_u32("MESSAGE_USER_LIMIT", 60)?,
+            message_user_window_secs: parse_u32("MESSAGE_USER_WINDOW_SECS", 600)?,
             session_ttl_secs: parse_u32("SESSION_TTL_SECS", 2_592_000)?,
             cookie_name: optional_string("COOKIE_NAME", "shabdar_session"),
             cookie_secure: parse_bool("COOKIE_SECURE", false)?,
@@ -132,7 +138,7 @@ mod tests {
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     /// Every variable Config reads (keep in sync with from_env).
-    const VARS: [&str; 28] = [
+    const VARS: [&str; 30] = [
         "DATABASE_URL",
         "OTP_PEPPER",
         "BIND_ADDR",
@@ -155,6 +161,8 @@ mod tests {
         "COMMENT_USER_WINDOW_SECS",
         "REPORT_USER_LIMIT",
         "REPORT_USER_WINDOW_SECS",
+        "MESSAGE_USER_LIMIT",
+        "MESSAGE_USER_WINDOW_SECS",
         "SESSION_TTL_SECS",
         "COOKIE_NAME",
         "COOKIE_SECURE",
@@ -234,6 +242,8 @@ mod tests {
         assert_eq!(cfg.comment_user_window_secs, 600);
         assert_eq!(cfg.report_user_limit, 20);
         assert_eq!(cfg.report_user_window_secs, 600);
+        assert_eq!(cfg.message_user_limit, 60);
+        assert_eq!(cfg.message_user_window_secs, 600);
         assert_eq!(cfg.session_ttl_secs, 2_592_000);
         assert_eq!(cfg.cookie_name, "shabdar_session");
         assert!(!cfg.cookie_secure);
@@ -265,6 +275,8 @@ mod tests {
         env.set("COMMENT_USER_WINDOW_SECS", "602");
         env.set("REPORT_USER_LIMIT", "22");
         env.set("REPORT_USER_WINDOW_SECS", "603");
+        env.set("MESSAGE_USER_LIMIT", "23");
+        env.set("MESSAGE_USER_WINDOW_SECS", "604");
         env.set("SESSION_TTL_SECS", "3600");
         env.set("COOKIE_NAME", "test_cookie");
         env.set("COOKIE_SECURE", "1");
@@ -292,6 +304,8 @@ mod tests {
         assert_eq!(cfg.comment_user_window_secs, 602);
         assert_eq!(cfg.report_user_limit, 22);
         assert_eq!(cfg.report_user_window_secs, 603);
+        assert_eq!(cfg.message_user_limit, 23);
+        assert_eq!(cfg.message_user_window_secs, 604);
         assert_eq!(cfg.session_ttl_secs, 3600);
         assert_eq!(cfg.cookie_name, "test_cookie");
         assert!(cfg.cookie_secure);

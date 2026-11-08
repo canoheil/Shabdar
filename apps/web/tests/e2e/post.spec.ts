@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
-import { apiAs, readFixtures } from './support/stack'
+import { apiAs, createListing, readFixtures } from './support/stack'
 
 async function applyStorage(page: Page, storagePath: string): Promise<void> {
   const state = JSON.parse(readFileSync(storagePath, 'utf8')) as {
@@ -81,7 +81,9 @@ test('@post server validation and failure preserve fields and previews without f
   await applyStorage(page, readFixtures().sellerStorage)
   await page.goto('/post')
   await page.getByLabel('دسته', { exact: true }).selectOption({ index: 1 })
-  await page.getByLabel('شهر', { exact: true }).selectOption({ index: 1 })
+  await page.getByLabel('استان', { exact: true }).selectOption('gilan')
+  await expect(page.getByLabel('شهر', { exact: true })).toBeEnabled()
+  await page.getByLabel('شهر', { exact: true }).selectOption({ label: 'رشت' })
   await page.getByLabel('عنوان', { exact: true }).fill('عنوان حفظ‌شده')
   await page.getByLabel('توضیحات', { exact: true }).fill('توضیحات واردشده پس از خطا باید باقی بماند.')
   await page.getByLabel('تصاویر آگهی', { exact: true }).setInputFiles(file('preserve.png'))
@@ -126,7 +128,9 @@ test('@post invalid real images receive Persian feedback without clearing form o
   await applyStorage(page, readFixtures().sellerStorage)
   await page.goto('/post')
   await page.getByLabel('دسته', { exact: true }).selectOption({ index: 1 })
-  await page.getByLabel('شهر', { exact: true }).selectOption({ index: 1 })
+  await page.getByLabel('استان', { exact: true }).selectOption('gilan')
+  await expect(page.getByLabel('شهر', { exact: true })).toBeEnabled()
+  await page.getByLabel('شهر', { exact: true }).selectOption({ label: 'رشت' })
   await page.getByLabel('عنوان', { exact: true }).fill('عنوان پس از خطای تصویر حفظ می‌شود')
   await page.getByLabel('توضیحات', { exact: true }).fill('توضیحات و هر دو پیش‌نمایش پس از رد فایل خراب باقی می‌مانند.')
   await page.getByLabel('قیمت (تومان)', { exact: true }).fill('12500000')
@@ -158,7 +162,9 @@ test('@post real create upload submit exposes distinct draft and review states',
   })
   const title = 'آگهی واقعی فرم شبدر'
   await page.getByLabel('دسته', { exact: true }).selectOption({ index: 1 })
-  await page.getByLabel('شهر', { exact: true }).selectOption({ index: 1 })
+  await page.getByLabel('استان', { exact: true }).selectOption('tehran')
+  await expect(page.getByLabel('شهر', { exact: true })).toBeEnabled()
+  await page.getByLabel('شهر', { exact: true }).selectOption({ label: 'تهران' })
   await page.getByLabel('عنوان', { exact: true }).fill(title)
   await page.getByLabel('توضیحات', { exact: true }).fill('توضیحات آگهی‌ای که با آپلود واقعی به بررسی ارسال می‌شود.')
   await page.getByLabel('قیمت (تومان)', { exact: true }).fill('12500000')
@@ -178,9 +184,32 @@ test('@post real create upload submit exposes distinct draft and review states',
   const seller = await apiAs('seller')
   const response = await seller.get('/api/v1/me/listings?status=all')
   expect(response.ok()).toBe(true)
-  const body = await response.json() as { data: Array<{ title: string; status: string }> }
+  const body = await response.json() as {
+    data: Array<{ title: string; status: string; province_slug: string }>
+  }
   const matchingListings = body.data.filter((listing) => listing.title === title)
   expect(matchingListings).toHaveLength(1)
   expect(matchingListings[0]?.status).toBe('pending')
+  expect(matchingListings[0]?.province_slug).toBe('tehran')
   await seller.dispose()
+})
+
+test('@post editing restores a national province and city before saving', async ({ page }) => {
+  const listing = await createListing({
+    title: 'پیش‌نویس سراسری در تهران',
+    imageCount: 0,
+    state: 'draft',
+    provinceSlug: 'tehran',
+    citySlug: 'tehran',
+  })
+  await applyStorage(page, readFixtures().sellerStorage)
+  await page.goto(`/post?edit=${listing.publicId}`)
+  await expect(page.getByLabel('استان', { exact: true })).toHaveValue('tehran')
+  const city = page.getByLabel('شهر', { exact: true })
+  await expect(city).toBeEnabled()
+  await expect(city.locator('option:checked')).toHaveText('تهران')
+  await page.getByLabel('استان', { exact: true }).selectOption('gilan')
+  await expect(city).toHaveValue('')
+  await expect(city).toBeEnabled()
+  await expect(city.locator('option')).toHaveCount(55)
 })

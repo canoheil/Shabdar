@@ -51,6 +51,71 @@ pub async fn test_pool() -> Option<MySqlPool> {
     Some(pool)
 }
 
+/// Every table the migrations own, children first. The three chat tables lead
+/// because `conversations.last_message_id` and `messages.conversation_id` form
+/// an intentional cycle: a plain ordered DROP cannot resolve it.
+pub const OWNED_TABLES: [&str; 23] = [
+    "conversation_reads",
+    "messages",
+    "conversations",
+    "advertising_requests",
+    "advertising_slots",
+    "comment_moderation_cases",
+    "moderation_rules",
+    "moderation_settings",
+    "reports",
+    "blocks",
+    "listing_comments",
+    "listing_ratings",
+    "favorites",
+    "listing_images",
+    "listings",
+    "admin_audit_logs",
+    "sessions",
+    "otp_challenges",
+    "cities",
+    "categories",
+    "provinces",
+    "users",
+    "_sqlx_migrations",
+];
+
+/// Drops every owned table on ONE pinned connection with
+/// `FOREIGN_KEY_CHECKS=0`, then restores the setting before the connection
+/// returns to the pool. Pinning the connection matters: the setting is
+/// per-session, so a pooled DROP could otherwise run on a connection where
+/// checks are still enabled and fail on the circular chat keys.
+///
+/// Destructive: callers reach this only through `test_pool()`, which refuses
+/// every database whose name does not end in `_test`.
+pub async fn drop_owned_tables(pool: &MySqlPool) {
+    let mut conn = pool.acquire().await.expect("scratch reset connection");
+    sqlx::query("SET FOREIGN_KEY_CHECKS = 0")
+        .execute(&mut *conn)
+        .await
+        .expect("disable foreign key checks");
+    for table in OWNED_TABLES {
+        let sql = format!("DROP TABLE IF EXISTS {table}"); // fixed literals, not user input
+        sqlx::query(&sql)
+            .execute(&mut *conn)
+            .await
+            .expect("drop failed");
+    }
+    sqlx::query("SET FOREIGN_KEY_CHECKS = 1")
+        .execute(&mut *conn)
+        .await
+        .expect("restore foreign key checks");
+}
+
+/// Empty scratch schema restored by the real migrations. Every full-schema
+/// fixture uses this single implementation so chat tables cannot be forgotten.
+pub async fn reset_database(pool: &MySqlPool) {
+    drop_owned_tables(pool).await;
+    shabdar_api::db::run_migrations(pool)
+        .await
+        .expect("migrations apply");
+}
+
 /// Config with throwaway values for tests (defaults per the config contract).
 pub fn test_config() -> Config {
     Config {
@@ -78,6 +143,9 @@ pub fn test_config() -> Config {
         comment_user_window_secs: 600,
         report_user_limit: 1000,
         report_user_window_secs: 600,
+        // Generous by default; chat tests lower exactly the window they probe.
+        message_user_limit: 1000,
+        message_user_window_secs: 600,
         session_ttl_secs: 2_592_000,
         cookie_name: "shabdar_session".to_string(),
         cookie_secure: false,

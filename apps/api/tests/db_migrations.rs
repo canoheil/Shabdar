@@ -12,40 +12,12 @@ use shabdar_api::moderation::{normalize_rule, MatchMode};
 /// Both DB tests share one database; run them one at a time.
 static DB_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-/// Drop everything the migrations own (plus sqlx's bookkeeping table, so the
-/// run truly starts at zero), in FK dependency order — child tables first:
-/// `sessions.user_id` references `users.id` (fk_sessions_user), so dropping
-/// `users` before `sessions` fails with error 1451. Phase 3 adds grandchildren:
-/// `listing_images`/`listings`/`admin_audit_logs` reference `users`, `listings`
-/// references `cities`/`categories`, `cities` references `provinces`. Callers
-/// run through common::test_pool(), which already refused every database not
-/// named *_test.
+/// Thin alias over the single centralized reset. Chat tables carry an
+/// intentional conversation/message cycle, so the helper pins one connection,
+/// disables foreign-key checks while dropping, and restores them before it
+/// returns the connection to the pool.
 async fn drop_owned_tables(pool: &sqlx::MySqlPool) {
-    for table in [
-        "advertising_requests",
-        "advertising_slots",
-        "comment_moderation_cases",
-        "moderation_rules",
-        "moderation_settings",
-        "reports",
-        "blocks",
-        "listing_comments",
-        "listing_ratings",
-        "favorites",
-        "listing_images",
-        "listings",
-        "admin_audit_logs",
-        "sessions",
-        "otp_challenges",
-        "cities",
-        "categories",
-        "provinces",
-        "users",
-        "_sqlx_migrations",
-    ] {
-        let sql = format!("DROP TABLE IF EXISTS {table}"); // fixed literals, not user input
-        sqlx::query(&sql).execute(pool).await.expect("drop failed");
-    }
+    common::drop_owned_tables(pool).await;
 }
 
 #[tokio::test]
@@ -80,6 +52,9 @@ async fn migrations_apply_on_empty_database() {
         "moderation_settings",
         "reports",
         "blocks",
+        "conversations",
+        "messages",
+        "conversation_reads",
         "admin_audit_logs",
     ] {
         let sql = format!("SELECT COUNT(*) AS c FROM {table}"); // fixed literals
@@ -124,7 +99,7 @@ async fn users_and_otp_challenges_have_the_approved_public_id_char26() {
 }
 
 #[tokio::test]
-async fn reference_tables_are_seeded_for_launch() {
+async fn reference_tables_are_seeded_for_national_coverage() {
     let _lock = DB_LOCK.lock().await;
     let Some(pool) = common::test_pool().await else {
         return; // skipped
@@ -138,23 +113,55 @@ async fn reference_tables_are_seeded_for_launch() {
         .await
         .unwrap();
     let provinces: i64 = row.try_get("c").unwrap();
-    assert_eq!(provinces, 1, "seed: exactly Gilan province");
+    assert_eq!(provinces, 31, "seed: every Iranian province");
+
+    let row = sqlx::query("SELECT COUNT(*) AS c FROM cities")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let cities: i64 = row.try_get("c").unwrap();
+    assert_eq!(cities, 1547, "seed: the pinned national city data");
 
     let row = sqlx::query(
-        "SELECT COUNT(*) AS c FROM cities WHERE slug = 'rasht' AND is_launch_city = TRUE",
+        "SELECT c.id FROM cities c JOIN provinces p ON p.id = c.province_id \
+         WHERE p.slug = 'gilan' AND c.slug = 'rasht'",
     )
     .fetch_one(&pool)
     .await
     .unwrap();
-    let rasht: i64 = row.try_get("c").unwrap();
-    assert_eq!(rasht, 1, "seed: Rasht is the launch city");
+    let rasht_id: u32 = row.try_get("id").unwrap();
+    assert_eq!(rasht_id, 1, "the established Rasht identity is preserved");
 
     let row = sqlx::query("SELECT COUNT(*) AS c FROM categories WHERE is_active = TRUE")
         .fetch_one(&pool)
         .await
         .unwrap();
     let categories: i64 = row.try_get("c").unwrap();
-    assert_eq!(categories, 7, "seed: the 7 launch categories");
+    assert_eq!(categories, 7, "seed: the 7 established categories");
+
+    // Replaying the additive seed directly must not duplicate rows or replace
+    // identities, even though the normal migrator records it only once.
+    let national_sql = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/migrations/0013_national_locations.sql"
+    ))
+    .expect("national location migration");
+    sqlx::raw_sql(&national_sql)
+        .execute(&pool)
+        .await
+        .expect("national seed replay");
+    let row = sqlx::query(
+        "SELECT \
+         (SELECT COUNT(*) FROM provinces) AS provinces, \
+         (SELECT COUNT(*) FROM cities) AS cities, \
+         (SELECT id FROM cities WHERE slug = 'rasht') AS rasht_id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row.try_get::<i64, _>("provinces").unwrap(), 31);
+    assert_eq!(row.try_get::<i64, _>("cities").unwrap(), 1547);
+    assert_eq!(row.try_get::<u32, _>("rasht_id").unwrap(), 1);
 }
 
 #[tokio::test]
@@ -920,6 +927,334 @@ fn moderation_seed_has_complete_upstream_notice() {
     ] {
         assert!(notice.contains(required), "notice is missing: {required}");
     }
+}
+
+// --- Direct chat schema (migration 0014) --------------------------------
+
+/// Inserts one user row and returns its internal id. Public IDs are fixed
+/// literals so a failure names the exact fixture.
+async fn chat_user(pool: &sqlx::MySqlPool, public_id: &str, phone: &str) -> u64 {
+    let result = sqlx::query(
+        "INSERT INTO users (public_id, phone_e164, display_name, created_at, updated_at) \
+         VALUES (?, ?, 'کاربر آزمون', NOW(3), NOW(3))",
+    )
+    .bind(public_id)
+    .bind(phone)
+    .execute(pool)
+    .await
+    .expect("chat user fixture");
+    result.last_insert_id()
+}
+
+async fn chat_listing(pool: &sqlx::MySqlPool, seller_id: u64, slug: &str) -> u64 {
+    let public_id = ulid::Ulid::new().to_string();
+    let result = sqlx::query(
+        "INSERT INTO listings (public_id, seller_id, category_id, city_id, title, slug, \
+         description, price_toman, price_type, status, published_at, created_at, updated_at) \
+         VALUES (?, ?, 1, 1, 'chat fixture', ?, 'description', 1000, 'fixed', 'active', \
+         NOW(3), NOW(3), NOW(3))",
+    )
+    .bind(public_id)
+    .bind(seller_id)
+    .bind(slug)
+    .execute(pool)
+    .await
+    .expect("chat listing fixture");
+    result.last_insert_id()
+}
+
+#[tokio::test]
+async fn chat_tables_apply_on_empty_database() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return; // skipped
+    };
+
+    common::drop_owned_tables(&pool).await;
+    run_migrations(&pool).await.expect("first apply");
+
+    let mut tables: Vec<String> = sqlx::query_scalar(
+        "SELECT TABLE_NAME FROM information_schema.TABLES \
+         WHERE TABLE_SCHEMA = DATABASE() \
+           AND TABLE_NAME IN ('conversations','messages','conversation_reads')",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("chat table metadata");
+    // `information_schema` ordering follows the server collation, which treats
+    // the underscore differently across versions; sort in Rust and compare.
+    tables.sort();
+    assert_eq!(
+        tables,
+        vec![
+            "conversation_reads".to_string(),
+            "conversations".to_string(),
+            "messages".to_string()
+        ],
+        "migration 0014 must create exactly the three chat tables"
+    );
+
+    let public_ids: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM information_schema.COLUMNS \
+         WHERE TABLE_SCHEMA = DATABASE() \
+           AND TABLE_NAME IN ('conversations','messages') \
+           AND COLUMN_NAME = 'public_id' AND COLUMN_TYPE = 'char(26)'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("public_id metadata");
+    assert_eq!(public_ids, 2, "both chat tables expose public_id char(26)");
+
+    for index in [
+        "public_id",
+        "uq_conversations_pair",
+        "idx_conversations_low_recency",
+        "idx_conversations_high_recency",
+        "idx_conversations_low_sync",
+        "idx_conversations_high_sync",
+    ] {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(DISTINCT INDEX_NAME) FROM information_schema.STATISTICS \
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'conversations' \
+               AND INDEX_NAME = ?",
+        )
+        .bind(index)
+        .fetch_one(&pool)
+        .await
+        .expect("conversation index metadata");
+        assert_eq!(count, 1, "missing conversations index {index}");
+    }
+    for index in [
+        "public_id",
+        "uq_messages_client_id",
+        "idx_messages_conversation_order",
+        "idx_messages_listing",
+    ] {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(DISTINCT INDEX_NAME) FROM information_schema.STATISTICS \
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'messages' \
+               AND INDEX_NAME = ?",
+        )
+        .bind(index)
+        .fetch_one(&pool)
+        .await
+        .expect("message index metadata");
+        assert_eq!(count, 1, "missing messages index {index}");
+    }
+
+    // The unique pair and client-ID boundaries are real database constraints.
+    let unique_indexes: i64 = sqlx::query_scalar(
+        "SELECT COUNT(DISTINCT INDEX_NAME) FROM information_schema.STATISTICS \
+         WHERE TABLE_SCHEMA = DATABASE() \
+           AND ((TABLE_NAME = 'conversations' AND INDEX_NAME = 'uq_conversations_pair') \
+             OR (TABLE_NAME = 'messages' AND INDEX_NAME = 'uq_messages_client_id')) \
+           AND NON_UNIQUE = 0",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("unique index metadata");
+    assert_eq!(unique_indexes, 2);
+
+    // Second application is a no-op and keeps the national seed intact.
+    run_migrations(&pool)
+        .await
+        .expect("second apply must be a no-op");
+    let counts: (i64, i64) =
+        sqlx::query_as("SELECT (SELECT COUNT(*) FROM provinces), (SELECT COUNT(*) FROM cities)")
+            .fetch_one(&pool)
+            .await
+            .expect("national counts");
+    assert_eq!(counts, (31, 1547));
+}
+
+#[tokio::test]
+async fn chat_constraints_and_repeat_reset_are_safe() {
+    let _lock = DB_LOCK.lock().await;
+    let Some(pool) = common::test_pool().await else {
+        return; // skipped
+    };
+
+    for round in 0..2 {
+        common::reset_database(&pool).await;
+        let restored: bool = sqlx::query_scalar("SELECT @@FOREIGN_KEY_CHECKS = 1")
+            .fetch_one(&pool)
+            .await
+            .expect("foreign key check state");
+        assert!(restored, "FK checks must be restored after reset {round}");
+        let rasht: u32 = sqlx::query_scalar("SELECT id FROM cities WHERE slug = 'rasht'")
+            .fetch_one(&pool)
+            .await
+            .expect("Rasht identity after reset");
+        assert_eq!(rasht, 1);
+    }
+
+    let seller = chat_user(&pool, "CHATSCHEMA0000000000000001", "+989120000001").await;
+    let buyer = chat_user(&pool, "CHATSCHEMA0000000000000002", "+989120000002").await;
+    let listing = chat_listing(&pool, seller, "chat-schema-listing").await;
+    let (low, high) = if seller < buyer {
+        (seller, buyer)
+    } else {
+        (buyer, seller)
+    };
+
+    // Ordered pair: equal or reversed ids are rejected.
+    let unordered = sqlx::query(
+        "INSERT INTO conversations (public_id, user_low_id, user_high_id, initiator_id, \
+         created_at, updated_at) VALUES ('CHATORDER00000000000000001', ?, ?, ?, NOW(3), NOW(3))",
+    )
+    .bind(high)
+    .bind(low)
+    .bind(buyer)
+    .execute(&pool)
+    .await;
+    // MariaDB reports a CHECK violation as `CONSTRAINT ... failed` (4025) and
+    // MySQL as error 3819; both are constraint failures, never a plain insert.
+    let unordered_error = format!(
+        "{:?}",
+        unordered.expect_err("an unordered pair must violate the CHECK")
+    );
+    assert!(
+        unordered_error.contains("chk_conversations_ordered_pair")
+            || unordered_error.contains("4025")
+            || unordered_error.contains("3819"),
+        "an unordered pair must be rejected by the ordered-pair CHECK: {unordered_error}"
+    );
+
+    let conversation_id: u64 = {
+        let result = sqlx::query(
+            "INSERT INTO conversations (public_id, user_low_id, user_high_id, initiator_id, \
+             created_at, updated_at) VALUES ('CHATPAIR000000000000000001', ?, ?, ?, NOW(3), NOW(3))",
+        )
+        .bind(low)
+        .bind(high)
+        .bind(buyer)
+        .execute(&pool)
+        .await
+        .expect("canonical conversation");
+        result.last_insert_id()
+    };
+
+    // Duplicate pair in either initiation order is impossible.
+    let duplicate = sqlx::query(
+        "INSERT INTO conversations (public_id, user_low_id, user_high_id, initiator_id, \
+         created_at, updated_at) VALUES ('CHATPAIR000000000000000002', ?, ?, ?, NOW(3), NOW(3))",
+    )
+    .bind(low)
+    .bind(high)
+    .bind(seller)
+    .execute(&pool)
+    .await;
+    assert!(duplicate
+        .expect_err("duplicate canonical pair must fail")
+        .to_string()
+        .contains("uq_conversations_pair"));
+
+    // Both participant read rows start with NULL high-water state.
+    for user in [low, high] {
+        sqlx::query("INSERT INTO conversation_reads (conversation_id, user_id) VALUES (?, ?)")
+            .bind(conversation_id)
+            .bind(user)
+            .execute(&pool)
+            .await
+            .expect("initial read row");
+    }
+
+    // A partial last-message pair is rejected.
+    let partial_last = sqlx::query(
+        "UPDATE conversations SET last_message_at = NOW(3) \
+         WHERE public_id = 'CHATPAIR000000000000000001'",
+    )
+    .execute(&pool)
+    .await;
+    assert!(partial_last
+        .expect_err("last_message_id without timestamp must fail")
+        .to_string()
+        .contains("chk_conversations_last_message_pair"));
+
+    let message_id: u64 = {
+        let result = sqlx::query(
+            "INSERT INTO messages (public_id, conversation_id, sender_id, listing_id, \
+             client_message_id, body, created_at) VALUES \
+             ('CHATMESSAGE000000000000001', ?, ?, ?, \
+             '123e4567-e89b-42d3-a456-426614174000', 'سلام', NOW(3))",
+        )
+        .bind(conversation_id)
+        .bind(buyer)
+        .bind(listing)
+        .execute(&pool)
+        .await
+        .expect("first message");
+        result.last_insert_id()
+    };
+    sqlx::query(
+        "UPDATE conversations SET last_message_id = ?, last_message_at = NOW(3) \
+         WHERE id = ?",
+    )
+    .bind(message_id)
+    .bind(conversation_id)
+    .execute(&pool)
+    .await
+    .expect("last message pointer");
+
+    // The same client ID is unique per conversation + sender and reusable by
+    // the other participant (the stated idempotency scope).
+    let duplicate_client = sqlx::query(
+        "INSERT INTO messages (public_id, conversation_id, sender_id, client_message_id, \
+         body, created_at) VALUES ('CHATMESSAGE000000000000002', ?, ?, \
+         '123e4567-e89b-42d3-a456-426614174000', 'دوباره', NOW(3))",
+    )
+    .bind(conversation_id)
+    .bind(buyer)
+    .execute(&pool)
+    .await;
+    assert!(duplicate_client
+        .expect_err("duplicate client ID must fail for the same sender")
+        .to_string()
+        .contains("uq_messages_client_id"));
+    sqlx::query(
+        "INSERT INTO messages (public_id, conversation_id, sender_id, client_message_id, \
+         body, created_at) VALUES ('CHATMESSAGE000000000000003', ?, ?, \
+         '123e4567-e89b-42d3-a456-426614174000', 'طرف دیگر', NOW(3))",
+    )
+    .bind(conversation_id)
+    .bind(seller)
+    .execute(&pool)
+    .await
+    .expect("the other sender may reuse the same UUID");
+
+    // Read state is paired or NULL, never half-set.
+    let partial_read = sqlx::query(
+        "UPDATE conversation_reads SET last_read_at = NOW(3) WHERE conversation_id = ?",
+    )
+    .bind(conversation_id)
+    .execute(&pool)
+    .await;
+    assert!(partial_read
+        .expect_err("read id and timestamp must advance together")
+        .to_string()
+        .contains("chk_conversation_reads_pair"));
+
+    // A further destructive reset clears every chat row even though the two
+    // tables reference each other, and restores the national seed afterwards.
+    common::reset_database(&pool).await;
+    let remaining: i64 = sqlx::query_scalar(
+        "SELECT CAST((SELECT COUNT(*) FROM messages) + (SELECT COUNT(*) FROM conversations) \
+         + (SELECT COUNT(*) FROM conversation_reads) AS SIGNED)",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("chat counts after reset");
+    assert_eq!(remaining, 0, "reset must drop every chat row");
+    let restored: bool = sqlx::query_scalar("SELECT @@FOREIGN_KEY_CHECKS = 1")
+        .fetch_one(&pool)
+        .await
+        .expect("foreign key checks");
+    assert!(restored);
+    let cities: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM cities")
+        .fetch_one(&pool)
+        .await
+        .expect("national seed");
+    assert_eq!(cities, 1547);
 }
 
 // --- Environment-free guard tests: these must pass with no database at all.

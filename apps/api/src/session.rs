@@ -198,6 +198,8 @@ mod tests {
             comment_user_window_secs: 600,
             report_user_limit: 20,
             report_user_window_secs: 600,
+            message_user_limit: 60,
+            message_user_window_secs: 600,
             session_ttl_secs: 2_592_000,
             cookie_name: "shabdar_session".to_string(),
             cookie_secure,

@@ -214,6 +214,8 @@ export interface ApiListingOut {
   status: string
   category_id: number
   city_id: number
+  // Present on owner-list reads so editing can restore the province selector.
+  province_slug?: string
   rejection_reason: string | null
   created_at: string
   updated_at: string
@@ -308,4 +310,93 @@ export interface ApiDashboardSummary {
   sold_count: number
   pending_count: number
   favorite_count: number
+}
+
+// Direct chat contracts (docs/API.md §10, approved 2026-11-04). A conversation
+// belongs to one user pair; `listing` is optional per-message context.
+export interface ApiConversationParty {
+  public_id: string
+  display_name: string | null
+}
+
+export interface ApiListingReference {
+  slug: string | null
+  title: string | null
+  available: boolean
+}
+
+export interface ApiConversation {
+  public_id: string
+  other_party: ApiConversationParty
+  can_message: boolean
+  viewer_blocked_other: boolean
+  last_message_at: string | null
+  created_at: string
+}
+
+export interface ApiMessage {
+  public_id: string
+  sender_public_id: string
+  body: string
+  created_at: string
+  listing: ApiListingReference | null
+  // Present only on the viewer's own messages.
+  seen?: boolean
+}
+
+export interface ApiSendMessageResult {
+  message: ApiMessage
+  conversation: ApiConversation
+}
+
+export interface ApiMessagePageMeta {
+  older_cursor: string | null
+  newer_cursor: string | null
+  has_more_older: boolean
+  has_more_newer: boolean
+}
+
+export interface ApiReadState {
+  viewer_read_through: string | null
+  other_read_through: string | null
+}
+
+export interface ApiMessagePage {
+  data: ApiMessage[]
+  page: ApiMessagePageMeta
+  conversation: ApiConversation
+  read_state: ApiReadState
+}
+
+export interface ApiInboxPreview {
+  public_id: string
+  sender_public_id: string
+  body_preview: string
+  created_at: string
+  listing: ApiListingReference | null
+}
+
+export interface ApiInboxItem extends ApiConversation {
+  last_message_at: string
+  unread_count: number
+  last_message: ApiInboxPreview
+}
+
+export interface ApiInboxPageMeta {
+  older_cursor: string | null
+  sync_cursor: string
+  next_sync_cursor: string | null
+  has_more_older: boolean
+  has_more_after: boolean
+}
+
+export interface ApiInboxPage {
+  data: ApiInboxItem[]
+  page: ApiInboxPageMeta
+}
+
+export interface ApiReadReceipt {
+  read_through: string | null
+  read_at: string | null
+  unread_count: number
 }

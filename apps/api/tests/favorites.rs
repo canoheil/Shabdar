@@ -32,35 +32,8 @@ struct ListingFixture {
     slug: String,
 }
 
-async fn reset_db(pool: &MySqlPool) {
-    for table in [
-        "advertising_requests",
-        "advertising_slots",
-        "comment_moderation_cases",
-        "moderation_rules",
-        "moderation_settings",
-        "reports",
-        "blocks",
-        "listing_comments",
-        "listing_ratings",
-        "favorites",
-        "listing_images",
-        "listings",
-        "admin_audit_logs",
-        "sessions",
-        "otp_challenges",
-        "cities",
-        "categories",
-        "provinces",
-        "users",
-        "_sqlx_migrations",
-    ] {
-        let sql = format!("DROP TABLE IF EXISTS {table}");
-        sqlx::query(&sql).execute(pool).await.expect("drop failed");
-    }
-    shabdar_api::db::run_migrations(pool)
-        .await
-        .expect("migrations apply");
+async fn reset_db(pool: &sqlx::MySqlPool) {
+    common::reset_database(pool).await;
 }
 
 async fn setup() -> Option<Setup> {

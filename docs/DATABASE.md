@@ -12,7 +12,9 @@
 - Soft delete (`deleted_at`) for users and listings. Hard delete only for personal data on request, after a retention review.
 - Uniqueness and check constraints are enforced in the database.
 - This is a logical design, not executable migration SQL. Migrations are written after approval. Each migration is tested on an empty database.
-- Phase 11 status (2026-10-31): migrations 0003–0011 build the launch reference/listing/media/audit tables plus favorites, ratings, comments, reports, blocks, moderation, and exact image-review attribution. Migration `0010_comment_moderation.sql` seeds 143 attributed/deduplicated rules without backfilling comments; `0011_image_moderation.sql` deliberately leaves legacy image review NULL. Reset/drop helpers remain FK-safe. Still deferred: `listing_locations`, `support_tickets`, conversations, messages, and notifications.
+- Phase 11 status (2026-10-31): migrations 0003–0011 build the launch reference/listing/media/audit tables plus favorites, ratings, comments, reports, blocks, moderation, and exact image-review attribution. Migration `0010_comment_moderation.sql` seeds 143 attributed/deduplicated rules without backfilling comments; `0011_image_moderation.sql` deliberately leaves legacy image review NULL. Reset/drop helpers remain FK-safe.
+- National-location status (2026-11-03): additive migration `0013_national_locations.sql` expands the reference data to 31 provinces and 1,547 cities. Existing province/city IDs, slugs, and listing foreign keys are preserved; historical `0003_reference_data.sql` is unchanged.
+- Direct-chat status (2026-11-04): additive migration `0014_direct_chat.sql` creates `conversations`, `messages`, and `conversation_reads` for pair-owned conversations with high-water read state. Nothing from earlier migrations is altered, and no earlier chat table existed to migrate. Still deferred: `listing_locations`, `support_tickets`, `notifications`, and message moderation.
 
 ## 2. Tables
 
@@ -61,11 +63,11 @@ Reasoning: ARCHITECTURE.md §7 requires session records with expiry and revocati
 - `id INT UNSIGNED PK`
 - `province_id SMALLINT UNSIGNED NOT NULL` FK → `provinces.id`
 - `name_fa VARCHAR(120) NOT NULL`, `slug VARCHAR(140) NOT NULL`
-- `is_launch_city BOOLEAN NOT NULL DEFAULT FALSE` (Rasht = true at launch)
+- `is_launch_city BOOLEAN NOT NULL DEFAULT FALSE` (legacy informational flag; it does not restrict national selection)
 - Unique: `(province_id, slug)`
 - Index: `(is_launch_city, name_fa)`
 
-Seed: Gilan province and Rasht at launch. Other cities added as needed.
+Seed: migration `0003_reference_data.sql` originally supplied Gilan/Rasht. Additive migration `0013_national_locations.sql` now supplies all 31 provinces and 1,547 cities, retaining the original Rasht ID and `rasht` slug for compatibility. City slugs are unique within their province; national source attribution is recorded in `THIRD_PARTY_NOTICES.md`.
 
 ### `categories`
 - `id SMALLINT UNSIGNED PK`
@@ -236,26 +238,64 @@ The integration reset/drop helpers include `favorites`, so a fresh test schema a
 - Index: `(blocked_id)`
 - `CHECK (blocker_id <> blocked_id)`
 
-### `conversations`
+### `conversations`, `messages`, `conversation_reads`
+
+**Built in migration `0014_direct_chat.sql`.** A conversation belongs to one
+canonical unordered user pair (`user_low_id < user_high_id`), not to a listing.
+`listing_id` moved out of the conversation and onto each message, where it is
+optional context. There is no `read_at` column on messages: read state is a
+per-participant high-water mark, so a Read never writes one row per message.
+
+#### `conversations`
 - `id BIGINT UNSIGNED PK`
 - `public_id CHAR(26) UNIQUE NOT NULL`
-- `listing_id BIGINT UNSIGNED NOT NULL` FK → `listings.id`
-- `buyer_id BIGINT UNSIGNED NOT NULL` FK → `users.id`
-- `seller_id BIGINT UNSIGNED NOT NULL` FK → `users.id`
-- `last_message_at DATETIME(3) NULL`
-- `created_at DATETIME(3) NOT NULL`
-- Unique: `(listing_id, buyer_id)` (one thread per buyer per listing)
-- Indexes: `(buyer_id, last_message_at)`, `(seller_id, last_message_at)`
+- `user_low_id BIGINT UNSIGNED NOT NULL` FK → `users.id` (CASCADE)
+- `user_high_id BIGINT UNSIGNED NOT NULL` FK → `users.id` (CASCADE)
+- `initiator_id BIGINT UNSIGNED NOT NULL` FK → `users.id` (CASCADE) — who started the pair; never exposed
+- `last_message_id BIGINT UNSIGNED NULL` FK → `messages.id` (no action)
+- `last_message_at DATETIME(3) NULL` — Inbox recency only
+- `created_at`, `updated_at DATETIME(3) NOT NULL` — `updated_at` is the synchronization clock for `after` polls
+- `CHECK (user_low_id < user_high_id)`, `CHECK ((last_message_id IS NULL AND last_message_at IS NULL) OR (last_message_id IS NOT NULL AND last_message_at IS NOT NULL))`
+- Unique: `(user_low_id, user_high_id)` — one conversation per pair, forever
+- Indexes: `(user_low_id, last_message_at, id)`, `(user_high_id, last_message_at, id)`, `(user_low_id, updated_at, id)`, `(user_high_id, updated_at, id)`
 
-### `messages`
+#### `messages`
 - `id BIGINT UNSIGNED PK`
-- `conversation_id BIGINT UNSIGNED NOT NULL` FK → `conversations.id` (ON DELETE CASCADE)
-- `sender_id BIGINT UNSIGNED NOT NULL` FK → `users.id`
-- `body TEXT NOT NULL`
+- `public_id CHAR(26) UNIQUE NOT NULL`
+- `conversation_id BIGINT UNSIGNED NOT NULL` FK → `conversations.id` (CASCADE)
+- `sender_id BIGINT UNSIGNED NOT NULL` FK → `users.id` (CASCADE)
+- `listing_id BIGINT UNSIGNED NULL` FK → `listings.id` (SET NULL) — optional reference; a removed listing keeps `SET NULL` only for hard deletes, while a status change keeps the row and renders a non-clickable card
+- `client_message_id CHAR(36) NOT NULL` — the client's idempotency key
+- `body VARCHAR(1000) NOT NULL`
 - `created_at DATETIME(3) NOT NULL`
-- `read_at DATETIME(3) NULL` (set when the other participant opens the thread)
-- `deleted_at DATETIME(3) NULL`
-- Index: `(conversation_id, id)` for paging
+- Unique: `(conversation_id, sender_id, client_message_id)` — the real idempotency boundary
+- Indexes: `(conversation_id, id)` for keyset paging, `(listing_id)`
+
+#### `conversation_reads`
+- `conversation_id BIGINT UNSIGNED NOT NULL`, `user_id BIGINT UNSIGNED NOT NULL`
+- Primary key `(conversation_id, user_id)`; both participants are inserted when a conversation is created
+- `last_read_message_id BIGINT UNSIGNED NULL` FK → `messages.id` (CASCADE)
+- `last_read_at DATETIME(3) NULL`
+- `CHECK ((last_read_message_id IS NULL AND last_read_at IS NULL) OR (last_read_message_id IS NOT NULL AND last_read_at IS NOT NULL))`
+- Index: `(user_id, conversation_id)`
+
+**Intentional cycle.** `conversations.last_message_id` and
+`messages.conversation_id` reference each other. The migration creates
+`conversations` without its last-message foreign key, creates `messages`, then
+adds the key by `ALTER TABLE`, so the schema can be built from empty. Scratch
+resets therefore disable `FOREIGN_KEY_CHECKS` on one pinned connection, null
+`conversations.last_message_id`/`last_message_at`, delete
+`conversation_reads` → `messages` → `conversations` first, and restore the
+setting before releasing the connection. Individual message deletion is not
+exposed in this MVP, and every chat foreign key is cascade or no-action so no
+path can be blocked by a `RESTRICT` inside the cycle.
+
+**Lock order.** Every chat mutation locks the two user rows in ascending id
+order (`db::lock_user_pair`) and then the conversation row `FOR UPDATE`. Block
+mutations use the same user locks, which is what makes "message first" and
+"block first" the only two observable orders. MariaDB can still return 1020
+(snapshot too old) under load, so a send retries the **whole** transaction at
+most three times.
 
 ### `notifications`
 - `id BIGINT UNSIGNED PK`
@@ -322,7 +362,7 @@ When the nearby feature returns:
 
 - MVP search: simple `LIKE` on title for short queries. `FULLTEXT` on title and description is tested with real Persian queries before it is enabled. Persian normalization (Arabic ي and ك to Persian, removing zero-width characters) is applied to the query and stored text.
 - Feed paging uses keyset pagination on `(published_at, id)` with page size capped at 50.
-- Popular sort uses the Bayesian formula from PRODUCT.md, computed in the query. It is not indexed in v1; that is acceptable at Rasht scale and is re-evaluated when the listing count grows.
+- Popular sort uses the Bayesian formula from PRODUCT.md, computed in the query. It is not indexed in v1; this is re-evaluated as national listing volume grows.
 
 ## 5. Open schema decisions
 
@@ -335,6 +375,6 @@ When the nearby feature returns:
 ## 6. Relations overview
 
 - A user has many listings, favorites, ratings, comments, reports, and blocks; a moderation case optionally references its handling admin.
-- A listing belongs to one seller, one category, one city, and has many images, favorites, ratings, comments, and conversations.
-- A conversation links one listing, one buyer, and one seller, and has many messages.
+- A listing belongs to one seller, one category, one city, and has many images, favorites, ratings, comments, and message references.
+- A conversation links one canonical user pair, has many messages, and two read-state rows; each message may reference one listing.
 - Reports point to a listing, comment, or user through `target_type` and `target_id`. A comment has at most one current moderation case; rules and the singleton settings revision govern automatic matching and rescans.

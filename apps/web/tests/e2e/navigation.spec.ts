@@ -18,15 +18,16 @@ async function applyStorage(page: Page, storagePath: string): Promise<void> {
   await page.context().addCookies(state.cookies)
 }
 
-test('@navigation mobile has five safe bottom actions and one current page', async ({ page }) => {
+test('@navigation mobile has six safe bottom actions and one current page', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 })
   await page.goto('/')
   const nav = navigation(page)
-  await expect(nav.locator('.shell__nav-action:visible')).toHaveCount(5)
-  for (const name of ['خانه', 'جستجو', 'ثبت آگهی', 'علاقه‌مندی‌ها', 'ورود']) {
+  await expect(nav.locator('.shell__nav-action:visible')).toHaveCount(6)
+  for (const name of ['خانه', 'جستجو', 'ثبت', 'پیام‌ها', 'ذخیره‌ها', 'ورود']) {
     await expect(nav.getByText(name, { exact: true })).toBeVisible()
   }
-  await expect(nav.getByText('پیام‌ها', { exact: true })).toHaveCount(0)
+  await expect(nav.getByRole('link', { name: 'پیام‌ها', exact: true }))
+    .toHaveAttribute('href', '/me/conversations')
   await expect(nav.locator('[aria-current="page"]')).toHaveCount(1)
   await expect(nav.locator('[aria-current="page"]')).toHaveText('خانه')
   const inset = await page.evaluate(() => {
@@ -65,7 +66,7 @@ test('@navigation tablet header uses two rows without overflow', async ({ page }
   })
   expect(boxes.position).not.toBe('fixed')
   expect(boxes.navTop).toBeGreaterThanOrEqual(boxes.brandBottom - 1)
-  await expect(navigation(page).locator('.shell__nav-action:visible')).toHaveCount(5)
+  await expect(navigation(page).locator('.shell__nav-action:visible')).toHaveCount(6)
   await expectNoOverflow(page)
 })
 
@@ -106,7 +107,7 @@ test('@navigation Queue is desktop-only and admin-only', async ({ page }) => {
   await expect(nav.getByRole('link', { name: 'داشبورد', exact: true })).toBeVisible()
   await page.setViewportSize({ width: 375, height: 812 })
   await expect(nav.getByRole('link', { name: 'صف بررسی', exact: true })).toHaveCount(0)
-  await expect(nav.locator('.shell__nav-action:visible')).toHaveCount(5)
+  await expect(nav.locator('.shell__nav-action:visible')).toHaveCount(6)
 })
 
 test('@navigation same-Home Search only focuses and preserves feed and filters', async ({ page }) => {

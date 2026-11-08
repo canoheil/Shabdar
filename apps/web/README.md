@@ -18,12 +18,55 @@ Pages: `/` (active feed + search/category/city/sort + auth block), `/login`
 rating summaries/comments, and hydrated rating/comment controls), `/post` (create/edit/submit
 with photo uploads; login-gated), `/me` (seller dashboard: four counts and the
 seller's own listings, login-gated, responsive one-to-four column stat grid),
-`/me/favorites` (the current user's saved active listings), `/admin/queue`
+`/me/favorites` (the current user's saved active listings), `/me/conversations`
+(private Inbox) and `/me/conversations/[publicId]` (one pair thread with
+listing-reference cards, Seen, block enforcement and a confirmed-response-only
+composer), `/admin/queue`
 (pending and legacy image-review queues with reasoned rejection), and
 `/admin/listings/[public_id]` (every image, dimensions, attribution, exact-set
 approval/restoration, and reasoned actions; the API enforces `is_admin`).
 Broken/unloaded images cannot be checked; success follows confirmed responses
 only. Admin code stays route-split out of public Home/Detail chunks.
+
+### Chat (Phase 13)
+
+The Inbox and the thread are client-only private routes: SSR renders the public
+shell with skeleton/empty/login states and never a conversation or message
+payload, and both pages publish `noindex, nofollow, noarchive`. Viewer state is
+read with `useAuth({ server: false })`, which uses its own `auth:me:client` key
+so the shell's server payload cannot satisfy a private page during hydration.
+
+`useInboxSync` polls every 30 seconds, `useConversationThread` every 10 seconds,
+both paused while the document is hidden or the browser is offline and both
+limited to one request in flight. The Inbox keeps recency pagination
+(`before`/`older_cursor`) separate from forward synchronization
+(`after`/`next_sync_cursor`) and adopts a snapshot only after a complete forward
+scan. The thread merges by `public_id`, follows every newer page, and keeps a
+request-generation token so a late response cannot write into a newer route.
+Read is claimed only after the latest message is rendered while the reader is at
+the latest position.
+
+All private chat traffic goes through `app/utils/chatApi.ts`
+(`apiFetch = $fetch.create({ retry: 0, cache: 'no-store' })`). An implicit ofetch
+retry would duplicate a poll, spend a second slice of the server's rate
+allowance, and turn a visible failure into a silent double request; every chat
+screen owns an explicit retry action instead. `chatFormat.ts` holds every
+chat-only formatter — the character counter that never groups digits plus the
+local wall-clock time and day labels — so public route chunks never load either
+module. Chat-only code never sits in a shared utility: `format.ts` stays
+number/price presentation for public pages.
+
+`useMessageSend` keeps the draft, the client UUID, and the pending listing
+reference in `sessionStorage` under `shabdar:chat:{viewer}:{conversation}`
+until a confirmed `200`. Nothing is rendered optimistically: a send failure (net
+error, 401, 403, 429, 500) keeps the same key so a retry produces exactly one
+server row, and a changed retry becomes a `client_message_id` conflict that only
+an explicit «ارسال به‌عنوان پیام تازه» resolves. A failed request keeps its
+banner and its retry action while the participant edits the draft, because the
+unconfirmed key — not the text — decides what the next send means. Chat components and
+composables are excluded from the shared `shell` chunk; `contactSeller.ts` is
+dynamically imported by Detail only for an authenticated click or a `contact=1`
+continuation.
 
 ### Feed state (Phase 4)
 

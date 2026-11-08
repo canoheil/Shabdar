@@ -39,21 +39,54 @@
                 </select>
               </template>
             </AppField>
-            <AppField id="post-city" label="شهر" :error="fieldErrors.city_id">
+            <AppField id="post-province" label="استان">
+              <template #default="{ id, describedBy, ariaInvalid }">
+                <select
+                  :id="id"
+                  v-model="selectedProvince"
+                  class="field__input"
+                  :aria-describedby="describedBy"
+                  :aria-invalid="ariaInvalid"
+                  required
+                  @change="onProvinceChange"
+                >
+                  <option value="">انتخاب کنید</option>
+                  <option v-for="item in provinces?.data ?? []" :key="item.slug" :value="item.slug">
+                    {{ item.name_fa }}
+                  </option>
+                </select>
+              </template>
+            </AppField>
+            <AppField
+              id="post-city"
+              label="شهر"
+              :help="citiesPending ? 'در حال بارگذاری شهرها…' : undefined"
+              :error="fieldErrors.city_id ?? (citiesError ? 'بارگذاری شهرها ممکن نشد.' : undefined)"
+            >
               <template #default="{ id, describedBy, ariaInvalid }">
                 <select
                   :id="id"
                   v-model="form.city_id"
                   class="field__input"
+                  :disabled="!selectedProvince || citiesPending || citiesError"
+                  :aria-busy="citiesPending"
                   :aria-describedby="describedBy"
                   :aria-invalid="ariaInvalid"
                   required
                 >
-                  <option value="">انتخاب کنید</option>
-                  <option v-for="item in cities?.data ?? []" :key="item.slug" :value="item.id">
+                  <option value="">{{ selectedProvince ? 'انتخاب کنید' : 'ابتدا استان را انتخاب کنید' }}</option>
+                  <option v-for="item in cities" :key="item.slug" :value="item.id">
                     {{ item.name_fa }}
                   </option>
                 </select>
+                <button
+                  v-if="citiesError"
+                  type="button"
+                  class="btn btn--secondary"
+                  @click="retryCities()"
+                >
+                  تلاش دوباره برای دریافت شهرها
+                </button>
               </template>
             </AppField>
             <AppField
@@ -208,7 +241,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ApiCategory, ApiCity, ApiErrorBody, ApiListingOut } from '~/types'
+import type { ApiCategory, ApiErrorBody, ApiListingOut, ApiProvince } from '~/types'
 
 interface ImagePreview {
   id: string
@@ -231,6 +264,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const previews = ref<ImagePreview[]>([])
 let previewSequence = 0
 
+const selectedProvince = ref('')
 const form = reactive({
   category_id: '' as number | '',
   city_id: '' as number | '',
@@ -243,25 +277,43 @@ const form = reactive({
 const { status: authStatus, pending: checking } = await useAuth()
 if (authStatus.value === 'anonymous') await navigateTo('/login')
 
-const { data: categories } = await useFetch<{ data: ApiCategory[] }>('/api/v1/categories')
-const { data: cities } = await useFetch<{ data: ApiCity[] }>(
-  '/api/v1/locations/provinces/gilan/cities',
-)
+const [
+  categoriesResult,
+  provincesResult,
+  citiesResult,
+  editResult,
+] = await Promise.all([
+  useFetch<{ data: ApiCategory[] }>('/api/v1/categories'),
+  useFetch<{ data: ApiProvince[] }>('/api/v1/locations/provinces'),
+  useProvinceCities(selectedProvince, 'post:cities'),
+  editingId
+    ? $fetch<{ data: ApiListingOut[] }>('/api/v1/me/listings?status=all', {
+        headers: useRequestHeaders(['cookie']),
+      })
+    : Promise.resolve(null),
+])
+
+const { data: categories } = categoriesResult
+const { data: provinces } = provincesResult
+const {
+  cities,
+  pending: citiesPending,
+  error: citiesError,
+  refresh: retryCities,
+} = citiesResult
 
 if (editingId) {
   try {
-    const mine = await $fetch<{ data: ApiListingOut[] }>(
-      '/api/v1/me/listings?status=all',
-      { headers: useRequestHeaders(['cookie']) },
-    )
-    const found = mine.data.find((item) => item.public_id === editingId)
+    const found = editResult?.data.find((item) => item.public_id === editingId)
     if (found) {
+      selectedProvince.value = found.province_slug ?? ''
       form.category_id = found.category_id
       form.city_id = found.city_id
       form.title = found.title
       form.description = found.description
       form.price_type = found.price_type
       form.price_toman = found.price_toman
+      if (selectedProvince.value) await retryCities()
     } else {
       errorMessage.value = 'آگهی یافت نشد.'
     }
@@ -328,6 +380,12 @@ function showError(err: unknown): void {
     errorMessage.value = 'خطایی رخ داد؛ دوباره تلاش کنید.'
   }
   void nextTick(() => errorBanner.value?.focus())
+}
+
+function onProvinceChange(): void {
+  form.city_id = ''
+  fieldErrors.value = {}
+  errorMessage.value = null
 }
 
 function buildBody() {
