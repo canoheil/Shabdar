@@ -30,7 +30,7 @@
 
     <div v-if="hydrated" class="listing-comments__auth">
       <p v-if="authStatus === 'authenticated'" class="meta">
-        دیدگاه‌های نویسندگان مسدودشده برای شما پنهان می‌شود.
+        دیدگاه‌های کاربران مسدودشده برای شما پنهان می‌شود.
       </p>
       <NuxtLink
         v-if="authStatus === 'anonymous' || authExpired"

@@ -15,32 +15,48 @@
       </button>
     </div>
 
-    <label class="composer__label" for="composer-body">متن پیام</label>
-    <textarea
-      id="composer-body"
-      ref="textarea"
-      class="composer__input"
-      :value="draft"
-      rows="2"
-      :disabled="!canMessage || sending"
-      :aria-describedby="describedBy"
-      :aria-invalid="conflict ? 'true' : undefined"
-      placeholder="پیام خود را بنویسید…"
-      @input="onInput"
-      @keydown="onKeydown"
-    />
+    <label class="sr-only" for="composer-body">متن پیام</label>
+    <div class="composer__row">
+      <textarea
+        id="composer-body"
+        ref="textarea"
+        class="composer__input"
+        :value="draft"
+        rows="1"
+        :disabled="!canMessage || sending"
+        :aria-describedby="describedBy"
+        :aria-invalid="conflict ? 'true' : undefined"
+        placeholder="پیام خود را بنویسید…"
+        @input="onInput"
+        @keydown="onKeydown"
+      />
+      <button
+        class="composer__send"
+        type="submit"
+        :disabled="!canSubmit"
+        :aria-busy="sending ? 'true' : undefined"
+        :aria-label="sendLabel"
+      >
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z" />
+        </svg>
+      </button>
+    </div>
 
     <div class="composer__meta">
       <span id="composer-count" class="composer__counter" :class="{ 'composer__counter--over': length > maxChars }">
         {{ formatCount(length) }} از {{ formatCount(maxChars) }}
       </span>
-      <AppButton
-        type="submit"
-        :loading="sending"
-        :disabled="!canSubmit"
-      >
-        {{ sending ? 'در حال ارسال…' : waitSeconds > 0 ? `${formatCount(waitSeconds)} ثانیه` : 'ارسال' }}
-      </AppButton>
+      <span v-if="waitSeconds > 0" class="composer__wait" role="status">
+        {{ formatCount(waitSeconds) }} ثانیه
+      </span>
     </div>
 
     <p v-if="!canMessage" id="composer-disabled" class="composer__note" role="status">
@@ -124,6 +140,11 @@ const canSubmit = computed(() =>
 )
 const canRetry = computed(() => !conflict.value && !expired.value && canSend.value)
 const listingLabel = computed(() => props.listingTitle?.trim() || 'آگهی انتخاب‌شده')
+const sendLabel = computed(() => {
+  if (sending.value) return 'در حال ارسال…'
+  if (waitSeconds.value > 0) return `ارسال پس از ${formatCount(waitSeconds.value)} ثانیه`
+  return 'ارسال پیام'
+})
 const describedBy = computed(() => {
   const ids = ['composer-count']
   if (!props.canMessage) ids.push('composer-disabled')
@@ -202,26 +223,29 @@ onBeforeUnmount(stopWaitTimer)
 .composer {
   display: flex;
   flex-direction: column;
+  gap: var(--space-1);
+}
+
+.composer__row {
+  display: flex;
+  align-items: flex-end;
   gap: var(--space-2);
 }
 
-.composer__label {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-}
-
 .composer__input {
+  flex: 1 1 auto;
   inline-size: 100%;
-  min-block-size: 3.5rem;
+  min-block-size: 44px;
+  max-block-size: 8rem;
   padding: var(--space-2) var(--space-3);
   font: inherit;
   line-height: 1.7;
   color: var(--color-text);
-  background: var(--color-surface);
+  background: var(--color-surface-muted);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  resize: vertical;
+  border-radius: 22px;
+  resize: none;
+  field-sizing: content;
 }
 
 .composer__input:focus-visible {
@@ -233,12 +257,45 @@ onBeforeUnmount(stopWaitTimer)
   border-color: var(--color-danger);
 }
 
+.composer__send {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  inline-size: 44px;
+  block-size: 44px;
+  padding: 0;
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.composer__send:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+
+.composer__send:disabled {
+  color: var(--color-text-muted);
+  background: var(--color-surface-muted);
+  border-color: var(--color-border);
+  cursor: not-allowed;
+}
+
 .composer__meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
+  padding-inline: var(--space-2);
+}
+
+.composer__wait {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
 }
 
 .composer__counter {

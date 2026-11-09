@@ -1,6 +1,12 @@
 <template>
   <div class="bubble" :class="own ? 'bubble--own' : 'bubble--other'">
+    <span class="bubble__avatar" :class="own ? 'bubble__avatar--own' : ''" aria-hidden="true">
+      {{ initial }}
+    </span>
     <div class="bubble__surface">
+      <!-- Sender is visible through the avatar and the message side; screen
+           readers get it as text instead of a colour or position alone. -->
+      <span class="sr-only">{{ own ? 'شما' : authorName }}:</span>
       <ListingReferenceCard
         v-if="message.listing"
         :reference="message.listing"
@@ -24,21 +30,52 @@ const props = defineProps<{
   // Derived from the conversation's other high-water mark, so a poll that only
   // moves Seen still updates already-rendered own bubbles.
   seen: boolean
+  // Display name of the sender, used for the avatar initial and the
+  // screen-reader-only sender label.
+  authorName: string
 }>()
 
 const time = computed(() => formatChatTime(props.message.created_at))
+const initial = computed(() => {
+  const name = props.authorName.trim()
+  return name ? Array.from(name)[0] ?? 'ش' : 'ش'
+})
 </script>
 
 <style scoped>
 .bubble {
   display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
   justify-content: flex-start;
   margin: 0;
   list-style: none;
 }
 
 .bubble--own {
-  justify-content: flex-end;
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
+
+.bubble__avatar {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 26%, var(--color-border));
+  border-radius: 999px;
+  user-select: none;
+}
+
+.bubble__avatar--own {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-accent) 26%, var(--color-border));
 }
 
 .bubble__surface {
@@ -46,17 +83,23 @@ const time = computed(() => formatChatTime(props.message.created_at))
   flex-direction: column;
   gap: var(--space-1);
   inline-size: fit-content;
-  max-inline-size: min(85%, 34rem);
+  max-inline-size: min(75%, 34rem);
   padding: var(--space-2) var(--space-3);
   color: var(--color-text);
-  background: var(--color-surface);
+  background: var(--color-surface-muted);
   border: 1px solid var(--color-border);
-  border-radius: 14px;
+  /* Tail corner points at the sender, like a standard messenger bubble. */
+  border-start-start-radius: 16px;
+  border-start-end-radius: 16px;
+  border-end-end-radius: 16px;
+  border-end-start-radius: 4px;
 }
 
 .bubble--own .bubble__surface {
-  background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface));
-  border-color: color-mix(in srgb, var(--color-primary) 26%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 15%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-primary) 32%, var(--color-border));
+  border-end-start-radius: 16px;
+  border-end-end-radius: 4px;
 }
 
 .bubble__body {

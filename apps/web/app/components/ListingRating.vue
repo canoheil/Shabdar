@@ -102,9 +102,15 @@ const pending = ref(false)
 const error = ref('')
 const notice = ref('')
 const lastAttempt = ref<RatingAttempt | null>(null)
-const summary = computed(() => props.count === 0
-  ? 'هنوز امتیازی ثبت نشده است'
-  : `${formatNumber(Math.round(props.average * 10) / 10)} از ۵ · ${formatNumber(props.count)} امتیاز`)
+// Count is the number of people who rated, so it is labelled «نظر», not a
+// second «امتیاز» that reads like a duplicate score.
+const summary = computed(() => {
+  if (props.count === 0) return 'هنوز امتیازی ثبت نشده است'
+  if (props.count === 1) {
+    return `امتیاز ${formatNumber(Math.round(props.average * 10) / 10)} از ۵ (بر اساس ۱ نظر)`
+  }
+  return `امتیاز ${formatNumber(Math.round(props.average * 10) / 10)} از ۵ (بر اساس ${formatNumber(props.count)} نظر)`
+})
 
 function requestStatus(requestError: unknown): number | undefined {
   const candidate = requestError as {

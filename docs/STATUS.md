@@ -1,8 +1,33 @@
 # Status — Direct chat, national locations and historical phases
 
-Updated 2026-11-07 on Arena.ai Agent Mode. The current private-chat
-implementation is on branch `arena/c2c8a31c-shabdar`; no production rollout or
+Updated 2026-11-09 on Arena.ai Agent Mode. The current private-chat
+implementation is on branch `arena/a0dc8873-shabdar`; no production rollout or
 pull-request merge is implied.
+
+## Current UI/UX and copy pass (2026-11-09)
+
+- **Chat is a messenger layout:** one bordered card holds a sticky header
+  (back, avatar initial, name, privacy line and a «⋮» overflow menu), the
+  scrollable history and a pinned composer. The «مسدود کردن کاربر» action moved
+  out of the page body into the header menu (`aria-expanded` toggle, closes on
+  outside click and Escape). Sent and received messages sit on opposite sides
+  with different bubble colours, a corner tail, a sender avatar and the send
+  time (plus «دیده شد» on own messages). The composer is an auto-growing
+  rounded field (Enter sends, Shift+Enter keeps the newline) with a round send
+  button; the character counter and retry actions stay available.
+- **Rating summary:** `امتیاز X از ۵ (بر اساس N نظر)` replaces the ambiguous
+  `X از ۵ · N امتیاز`, so the count reads as a number of people.
+- **Comment privacy note:** «دیدگاه‌های کاربران مسدودشده…» replaces
+  «…نویسندگان مسدودشده…».
+- **Home filter placeholders:** «حداقل قیمت» / «حداکثر قیمت» replace
+  «بدون حداقل» / «بدون سقف», and the disabled city select now says
+  «انتخاب شهر» instead of «ابتدا استان را انتخاب کنید».
+- Verified locally: `nuxi typecheck` and `nuxt build` pass. Home's initial
+  client JS is 99,321 gzip bytes (under the unchanged 100,000 ceiling) and no
+  chat marker reaches a public route script. The full real-stack Playwright
+  suite needs MariaDB and the Rust API, which this sandbox cannot run; the
+  affected specs (`conversation-thread`, `conversation-entry`, `ratings`,
+  `blocks`) were updated for the new selectors and copy.
 
 ## Current direct-chat scope
 

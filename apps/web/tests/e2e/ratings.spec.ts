@@ -93,7 +93,7 @@ test('@rating public SSR is viewer-independent and AggregateRating starts at thr
   })
 
   await page.goto(fixtures.detailPath)
-  await expect(page.locator('.listing-rating__summary')).toHaveText('۳ از ۵ · ۳ امتیاز')
+  await expect(page.locator('.listing-rating__summary')).toHaveText('امتیاز ۳ از ۵ (بر اساس ۳ نظر)')
   await expect(page.getByRole('radiogroup')).toHaveCount(0)
   await expect(page.getByRole('link', { name: 'ورود برای امتیازدهی', exact: true })).toBeVisible()
   await clearFixtureRatings()
@@ -111,7 +111,7 @@ test('@rating keyboard create update reload and delete preserve exact summary st
   await four.focus()
   await page.keyboard.press('Enter')
   await expect(four).toHaveAttribute('aria-checked', 'true')
-  await expect(page.locator('.listing-rating__summary')).toHaveText('۴ از ۵ · ۱ امتیاز')
+  await expect(page.locator('.listing-rating__summary')).toHaveText('امتیاز ۴ از ۵ (بر اساس ۱ نظر)')
 
   await page.reload()
   four = page.getByRole('radio', { name: '۴ از ۵ ستاره', exact: true })
@@ -121,7 +121,7 @@ test('@rating keyboard create update reload and delete preserve exact summary st
   await page.keyboard.press('Space')
   await expect(two).toHaveAttribute('aria-checked', 'true')
   await expect(four).toHaveAttribute('aria-checked', 'false')
-  await expect(page.locator('.listing-rating__summary')).toHaveText('۲ از ۵ · ۱ امتیاز')
+  await expect(page.locator('.listing-rating__summary')).toHaveText('امتیاز ۲ از ۵ (بر اساس ۱ نظر)')
 
   await page.getByRole('button', { name: 'حذف امتیاز', exact: true }).click()
   await expect(page.locator('.listing-rating__summary')).toHaveText('هنوز امتیازی ثبت نشده است')
@@ -157,7 +157,7 @@ test('@rating persistent mutation failures keep confirmed state until the same r
   await page.unroute(endpoint)
   await retry.click()
   await expect(five).toHaveAttribute('aria-checked', 'true')
-  await expect(rating.locator('.listing-rating__summary')).toHaveText('۵ از ۵ · ۱ امتیاز')
+  await expect(rating.locator('.listing-rating__summary')).toHaveText('امتیاز ۵ از ۵ (بر اساس ۱ نظر)')
 
   await failMutations()
   await rating.getByRole('button', { name: 'حذف امتیاز', exact: true }).click()

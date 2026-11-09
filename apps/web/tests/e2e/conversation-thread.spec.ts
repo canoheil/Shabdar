@@ -41,6 +41,13 @@ async function openBuyerThread(page: Page, publicId: string): Promise<void> {
   await openThread(page, readFixtures().buyerStorage, publicId)
 }
 
+/// The header overflow menu holds the account-level actions.
+async function openThreadMenu(page: Page): Promise<void> {
+  const trigger = page.getByRole('button', { name: 'گزینه‌های بیشتر', exact: true })
+  if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click()
+  await expect(page.locator('.thread__menu-panel')).toBeVisible()
+}
+
 test('@chat-thread private SSR carries no payload and outsiders get a neutral state', async ({ page }) => {
   const publicId = await buy(slugOf(readFixtures().detailPath))
   const html = await (await page.request.get(await threadUrl(publicId))).text()
@@ -371,6 +378,8 @@ test('@chat-thread blocking keeps read-only history and clears only after confir
     await route.continue()
   })
 
+  // Blocking lives in the header overflow menu, not in the conversation body.
+  await openThreadMenu(page)
   await page.getByRole('button', { name: 'مسدود کردن کاربر', exact: true }).click()
   await expect(page.getByText('مسدودسازی انجام نشد؛ دوباره تلاش کنید.', { exact: true })).toBeVisible()
   await expect(page.locator('#composer-body')).toBeEnabled()
@@ -382,6 +391,7 @@ test('@chat-thread blocking keeps read-only history and clears only after confir
   // History and Read state stay available while blocked.
   await expect(bubbles(page)).toHaveCount(1)
 
+  await openThreadMenu(page)
   await page.getByRole('button', { name: 'رفع مسدودسازی', exact: true }).click()
   await expect(page.locator('#composer-body')).toBeEnabled({ timeout: 20_000 })
 })
