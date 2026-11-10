@@ -30,12 +30,19 @@ test('@home search-led hierarchy and visible categories work at mobile and deskt
   await page.setViewportSize({ width: 1024, height: 900 })
   const desktopFilters = page.locator('.browser__desktop-filters')
   await expect(desktopFilters).toBeVisible()
-  await expect(desktopFilters.getByLabel('دسته', { exact: true })).toBeVisible()
+  // The category is fixed by the /category/{slug} path, so that one control is
+  // intentionally absent; every other filter stays available.
+  await expect(desktopFilters.getByLabel('دسته', { exact: true })).toHaveCount(0)
   await expect(desktopFilters.getByLabel('استان', { exact: true })).toBeVisible()
   await expect(desktopFilters.getByLabel('شهر', { exact: true })).toBeVisible()
   await expect(desktopFilters.getByLabel('مرتب‌سازی', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'فیلترها', exact: true })).toHaveCount(0)
   await expectNoOverflow(page)
+
+  // Home itself still offers every filter, including the category select.
+  await page.goto('/')
+  await expect(desktopFilters.getByLabel('دسته', { exact: true })).toBeVisible()
+  await expect(desktopFilters.getByLabel('استان', { exact: true })).toBeVisible()
 })
 
 test('@home national province and city filters load real locations and survive reload', async ({ page }) => {
