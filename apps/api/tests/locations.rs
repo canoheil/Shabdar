@@ -27,6 +27,12 @@ async fn send(app: axum::Router, method: Method, path: &str) -> (StatusCode, ser
 /// Reference reads need the seeded rows, so this file never drops tables (same
 /// exposure as `listings.rs` and `health.rs`). It only adds and removes its own
 /// uniquely-slugged fixtures.
+
+/// Serializes the one test in this file that writes reference rows. Cargo runs
+/// the tests of a binary in parallel; a lock keeps this file safe if it grows
+/// another writer later, without changing how the read-only tests run.
+#[allow(dead_code)]
+static WRITE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 async fn reference_app() -> Option<axum::Router> {
     let pool = common::test_pool().await?;
     shabdar_api::db::run_migrations(&pool)
@@ -62,6 +68,7 @@ async fn city_by_slug_is_404_for_an_unknown_slug() {
 
 #[tokio::test]
 async fn city_by_slug_picks_the_lowest_id_deterministically() {
+    let _lock = WRITE_LOCK.lock().await;
     let Some(app) = reference_app().await else {
         return; // skipped
     };

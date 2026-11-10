@@ -31,6 +31,11 @@ async fn send(
 
 /// Reference reads need the seeded rows; never drop here (read-only — the
 /// binaries that reset share this database, same exposure as health.rs).
+///
+/// Callers hold `WRITE_LOCK`: cargo runs the tests in this binary in parallel,
+/// and `reset_db` drops and re-creates every table. A read without the lock can
+/// land between the DROP and the migration and fail with a 500 — the race was
+/// observed in CI, not only in theory.
 async fn reference_app() -> Option<axum::Router> {
     let pool = common::test_pool().await?;
     shabdar_api::db::run_migrations(&pool)
@@ -41,6 +46,7 @@ async fn reference_app() -> Option<axum::Router> {
 
 #[tokio::test]
 async fn categories_lists_the_seven_launch_categories() {
+    let _lock = WRITE_LOCK.lock().await;
     let Some(app) = reference_app().await else {
         return; // skipped
     };
@@ -54,6 +60,7 @@ async fn categories_lists_the_seven_launch_categories() {
 
 #[tokio::test]
 async fn provinces_lists_all_31_national_provinces() {
+    let _lock = WRITE_LOCK.lock().await;
     let Some(app) = reference_app().await else {
         return; // skipped
     };
@@ -71,6 +78,7 @@ async fn provinces_lists_all_31_national_provinces() {
 
 #[tokio::test]
 async fn cities_cover_multiple_provinces_and_preserve_rasht_identity() {
+    let _lock = WRITE_LOCK.lock().await;
     let Some(app) = reference_app().await else {
         return; // skipped
     };
@@ -107,6 +115,7 @@ async fn cities_cover_multiple_provinces_and_preserve_rasht_identity() {
 
 #[tokio::test]
 async fn cities_of_unknown_province_is_not_found() {
+    let _lock = WRITE_LOCK.lock().await;
     let Some(app) = reference_app().await else {
         return; // skipped
     };
