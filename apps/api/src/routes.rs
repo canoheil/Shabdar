@@ -1588,7 +1588,9 @@ async fn city_by_slug(
     let id: u32 = row.try_get("id").map_err(|_| ApiError::Internal)?;
     let name_fa: String = row.try_get("name_fa").map_err(|_| ApiError::Internal)?;
     let city_slug: String = row.try_get("slug").map_err(|_| ApiError::Internal)?;
-    let province_slug: String = row.try_get("province_slug").map_err(|_| ApiError::Internal)?;
+    let province_slug: String = row
+        .try_get("province_slug")
+        .map_err(|_| ApiError::Internal)?;
     let province_name_fa: String = row
         .try_get("province_name_fa")
         .map_err(|_| ApiError::Internal)?;

@@ -12,11 +12,7 @@ use axum::http::{Method, Request, StatusCode};
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-async fn send(
-    app: axum::Router,
-    method: Method,
-    path: &str,
-) -> (StatusCode, serde_json::Value) {
+async fn send(app: axum::Router, method: Method, path: &str) -> (StatusCode, serde_json::Value) {
     let req = Request::builder()
         .method(method)
         .uri(path)
@@ -138,7 +134,10 @@ async fn city_by_slug_picks_the_lowest_id_deterministically() {
     // request, so the rendered page and its canonical always agree.
     assert_eq!(status, StatusCode::OK, "{first}");
     assert_eq!(lowest_id, ids[0].0, "insertion order gives the lowest id");
-    assert_ne!(ids[0].0, ids[1].0, "collision fixtures must have distinct ids");
+    assert_ne!(
+        ids[0].0, ids[1].0,
+        "collision fixtures must have distinct ids"
+    );
     assert_eq!(first["data"]["slug"], "duplicate-city");
     assert_eq!(first["data"]["province_slug"], lowest_province);
     assert_eq!(again["data"]["province_slug"], lowest_province);
