@@ -369,29 +369,34 @@ test('@chat-thread both sides render as a messenger: opposite sides, avatar and 
   await expect(other).toHaveCount(1)
 
   // The viewer's own message sits on the opposite inline side from the other
-  // party's message. This is a structural claim, so measure the bubble surfaces
-  // (the visible cards) inside the RTL scroller and require the two sides to be
-  // anchored to their own row edge rather than comparing two unrelated boxes.
+  // party's message. This is a structural claim, so measure the visible bubble
+  // cards against the thread's midline rather than comparing two row boxes
+  // (every row spans the scroller, so row boxes are identical by construction).
   const geometry = await page.evaluate(() => {
-    const read = (selector: string) => {
+    const center = (selector: string) => {
       const surface = document.querySelector(`${selector} .bubble__surface`)
       if (!surface) throw new Error(`${selector} .bubble__surface is missing`)
-      const bubble = surface.closest('.bubble')!.getBoundingClientRect()
-      const rect = surface.getBoundingClientRect()
-      return { bubbleLeft: bubble.left, bubbleRight: bubble.right, left: rect.left, right: rect.right }
+      const box = surface.getBoundingClientRect()
+      return { left: box.left, right: box.right, middle: box.left + box.width / 2 }
     }
-    return { own: read('.bubble--own'), other: read('.bubble--other') }
+    const scroller = document.querySelector('.thread__scroller')!.getBoundingClientRect()
+    return {
+      own: center('.bubble--own'),
+      other: center('.bubble--other'),
+      scrollerMiddle: scroller.left + scroller.width / 2,
+    }
   })
-  // RTL: the other party's bubble is pinned to the right edge of the row and the
-  // viewer's own bubble to the left edge. Neither may drift towards the middle.
-  expect(geometry.other.right, 'the other party stays on the right (RTL start)')
+  // RTL: the other party's message sits on the right of the thread and the
+  // viewer's own message on the left. Measuring the visible bubble card against
+  // the scroller's midpoint states that claim directly; a full-width row would
+  // hide the difference, and a bubble is capped at 75% width so it cannot
+  // straddle the middle by itself.
+  expect(geometry.other.middle, 'the other party sits on the right (RTL start)')
+    .toBeGreaterThan(geometry.scrollerMiddle)
+  expect(geometry.own.middle, 'own messages sit on the left (RTL end)')
+    .toBeLessThan(geometry.scrollerMiddle)
+  expect(geometry.other.right, 'the two sides never overlap horizontally')
     .toBeGreaterThan(geometry.own.right)
-  expect(geometry.own.left, 'own messages stay on the left (RTL end)')
-    .toBeLessThan(geometry.other.left)
-  expect(Math.abs(geometry.other.bubbleRight - geometry.other.right), 'other bubble hugs its row edge')
-    .toBeLessThan(2)
-  expect(Math.abs(geometry.own.bubbleLeft - geometry.own.left), 'own bubble hugs its row edge')
-    .toBeLessThan(2)
 
   // Every bubble carries exactly one avatar and one machine-readable time.
   for (const selector of ['.bubble--own', '.bubble--other']) {

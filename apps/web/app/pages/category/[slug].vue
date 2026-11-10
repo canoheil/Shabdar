@@ -68,6 +68,8 @@ useHead(() => ({
 .clean-list__breadcrumb a {
   display: inline-flex;
   align-items: center;
+  /* «خانه» is a short label; the site-wide gate needs 44px in both axes. */
+  min-inline-size: 44px;
   min-block-size: 44px;
 }
 

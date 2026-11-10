@@ -208,6 +208,16 @@ useHead({
   line-height: 2;
 }
 
+/* The site-wide touch-target gate applies to these in-page links too, so the
+   anchor itself — not the list row — has to be 44×44. A short label like «تماس»
+   is only ~37px wide on its own, hence the inline minimum as well. */
+.legal a {
+  display: inline-flex;
+  align-items: center;
+  min-inline-size: 44px;
+  min-block-size: 44px;
+}
+
 .legal section {
   display: flex;
   flex-direction: column;

@@ -20,7 +20,8 @@ test('@home search-led hierarchy and visible categories work at mobile and deskt
   const firstCategory = categories.getByRole('link').nth(1)
   await firstCategory.click()
   await expect(firstCategory).toHaveAttribute('aria-current', 'page')
-  await expect(page).toHaveURL(/\/category\/[^/?]+/)
+  // With no other filter active the chip is a clean canonical URL.
+  await expect(page).toHaveURL(/\/category\/[^/?]+$/)
   await expect(page.getByRole('button', { name: 'فیلترها', exact: true })).toBeVisible()
   await expectNoOverflow(page)
   await expectTouchTargets(page)
@@ -122,7 +123,10 @@ test('@home search debounce, URL state and Back restore controls', async ({ page
   const searchUrl = page.url()
   const categories = page.locator('.browser__categories')
   await categories.getByRole('link').nth(1).click()
-  await expect(page).toHaveURL(/\/category\/[^/?]+/)
+  // A search term is still active, so the chip keeps it as `?q=` instead of
+  // dropping the user's query; the category stays in the same query string.
+  await expect(page).toHaveURL(/[?&]category=[^&]+/)
+  await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe('فرش')
   await page.goBack()
   await expect(page).toHaveURL(searchUrl)
   await expect(search).toHaveValue('فرش')
