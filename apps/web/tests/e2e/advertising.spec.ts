@@ -22,7 +22,7 @@ async function applyStorage(page: Page, storagePath: string): Promise<void> {
 async function expectSingleFourthPositionAd(page: Page): Promise<void> {
   const ad = page.locator('[data-advertising-card]')
   await expect(ad).toHaveCount(1)
-  const adIndex = await page.locator('.home__cards > li').evaluateAll((elements) => (
+  const adIndex = await page.locator('.browser__cards > li').evaluateAll((elements) => (
     elements.findIndex((element) => Boolean(element.querySelector('[data-advertising-card]')))
   ))
   expect(adIndex).toBe(4, 'four real listing nodes precede the only advertising node')
@@ -65,8 +65,8 @@ test.describe('advertising inventory and internal requests', () => {
     await expect(cards).toHaveCount(20)
     await expectSingleFourthPositionAd(page)
     await expect(page.locator('[data-advertising-card]')).toContainText('فرصت تبلیغاتی')
-    await expect(page.locator('.home__result-count')).toContainText('۲۰')
-    await expect(page.locator('.home__result-count')).not.toContainText('۲۱')
+    await expect(page.locator('.browser__result-count')).toContainText('۲۰')
+    await expect(page.locator('.browser__result-count')).not.toContainText('۲۱')
 
     await page.getByRole('button', { name: 'بستن فرصت تبلیغاتی', exact: true }).click()
     await expect(page.locator('[data-advertising-card]')).toHaveCount(0)
@@ -88,7 +88,7 @@ test.describe('advertising inventory and internal requests', () => {
     ))
     expect(new Set(initialHrefs).size).toBe(20)
 
-    const more = page.locator('.home__pagination').getByRole('button')
+    const more = page.locator('.browser__pagination').getByRole('button')
     await expect(more).toBeVisible()
     await more.click()
     await expect.poll(() => cards.count()).toBeGreaterThan(20)

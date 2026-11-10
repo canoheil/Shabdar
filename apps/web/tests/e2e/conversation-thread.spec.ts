@@ -368,20 +368,30 @@ test('@chat-thread both sides render as a messenger: opposite sides, avatar and 
   await expect(own).toHaveCount(1)
   await expect(other).toHaveCount(1)
 
-  // The viewer's own message sits on the opposite inline side from the
-  // other party's message; this is the structural claim, not a pixel check.
+  // The viewer's own message sits on the opposite inline side from the other
+  // party's message. This is a structural claim, so measure the bubble surfaces
+  // (the visible cards) inside the RTL scroller and require the two sides to be
+  // anchored to their own row edge rather than comparing two unrelated boxes.
   const geometry = await page.evaluate(() => {
     const read = (selector: string) => {
-      const bubble = document.querySelector(selector)
-      if (!bubble) throw new Error(`${selector} is missing`)
-      const rect = bubble.getBoundingClientRect()
-      return { left: rect.left, right: rect.right }
+      const surface = document.querySelector(`${selector} .bubble__surface`)
+      if (!surface) throw new Error(`${selector} .bubble__surface is missing`)
+      const bubble = surface.closest('.bubble')!.getBoundingClientRect()
+      const rect = surface.getBoundingClientRect()
+      return { bubbleLeft: bubble.left, bubbleRight: bubble.right, left: rect.left, right: rect.right }
     }
     return { own: read('.bubble--own'), other: read('.bubble--other') }
   })
-  const ownIsRight = geometry.own.right > geometry.other.right
-  const ownIsLeft = geometry.own.left < geometry.other.left
-  expect(ownIsRight || ownIsLeft).toBe(true)
+  // RTL: the other party's bubble is pinned to the right edge of the row and the
+  // viewer's own bubble to the left edge. Neither may drift towards the middle.
+  expect(geometry.other.right, 'the other party stays on the right (RTL start)')
+    .toBeGreaterThan(geometry.own.right)
+  expect(geometry.own.left, 'own messages stay on the left (RTL end)')
+    .toBeLessThan(geometry.other.left)
+  expect(Math.abs(geometry.other.bubbleRight - geometry.other.right), 'other bubble hugs its row edge')
+    .toBeLessThan(2)
+  expect(Math.abs(geometry.own.bubbleLeft - geometry.own.left), 'own bubble hugs its row edge')
+    .toBeLessThan(2)
 
   // Every bubble carries exactly one avatar and one machine-readable time.
   for (const selector of ['.bubble--own', '.bubble--other']) {

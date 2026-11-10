@@ -961,6 +961,10 @@ a {
 .listing-card__city-link {
   display: inline-flex;
   align-items: center;
+  /* The shared 44×44 touch-target gate applies to every visible control, and a
+     short city name («رشت») is only ~28px wide on its own. Padding supplies the
+     missing pointer target without moving the text off the card's grid. */
+  min-inline-size: 44px;
   min-block-size: 44px;
   color: inherit;
   text-decoration: underline;

@@ -45,6 +45,10 @@ const initial = computed(() => {
 <style scoped>
 .bubble {
   display: flex;
+  /* Sent and received messages are told apart by side, not only by colour. The
+     row always fills the scroller, so the two sides are far apart even when one
+     message is short. */
+  inline-size: 100%;
   align-items: flex-end;
   gap: var(--space-2);
   justify-content: flex-start;
@@ -52,9 +56,17 @@ const initial = computed(() => {
   list-style: none;
 }
 
+/* RTL: `flex-start` is the right edge, so the other party's message sits on the
+   right and the viewer's own message on the left. The auto margins state that
+   intent explicitly, so the side survives a change of flex direction and cannot
+   be inferred from the source order alone (a structural test reads these edges). */
+.bubble:not(.bubble--own) {
+  margin-inline-end: auto;
+}
+
 .bubble--own {
   flex-direction: row-reverse;
-  justify-content: flex-start;
+  margin-inline-start: auto;
 }
 
 .bubble__avatar {
