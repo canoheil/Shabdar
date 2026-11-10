@@ -99,7 +99,7 @@
               :aria-invalid="ariaInvalid"
               @change="applyNow"
             >
-              <option value="">{{ province ? 'همهٔ شهرها' : 'ابتدا استان را انتخاب کنید' }}</option>
+              <option value="">{{ province ? 'همهٔ شهرها' : 'انتخاب شهر' }}</option>
               <option v-for="item in cities" :key="item.slug" :value="item.slug">
                 {{ item.name_fa }}
               </option>
@@ -125,7 +125,7 @@
               step="1"
               inputmode="numeric"
               dir="ltr"
-              placeholder="بدون حداقل"
+              placeholder="حداقل قیمت"
               :aria-describedby="describedBy"
               :aria-invalid="ariaInvalid"
               @change="applyNow"
@@ -144,7 +144,7 @@
               step="1"
               inputmode="numeric"
               dir="ltr"
-              placeholder="بدون سقف"
+              placeholder="حداکثر قیمت"
               :aria-describedby="describedBy"
               :aria-invalid="ariaInvalid"
               @change="applyNow"
@@ -254,7 +254,7 @@
               :aria-describedby="describedBy"
               :aria-invalid="ariaInvalid"
             >
-              <option value="">{{ draftProvince ? 'همهٔ شهرها' : 'ابتدا استان را انتخاب کنید' }}</option>
+              <option value="">{{ draftProvince ? 'همهٔ شهرها' : 'انتخاب شهر' }}</option>
               <option v-for="item in draftCities" :key="item.slug" :value="item.slug">
                 {{ item.name_fa }}
               </option>
@@ -280,7 +280,7 @@
               step="1"
               inputmode="numeric"
               dir="ltr"
-              placeholder="بدون حداقل"
+              placeholder="حداقل قیمت"
               :aria-describedby="describedBy"
               :aria-invalid="ariaInvalid"
             >
@@ -297,7 +297,7 @@
               step="1"
               inputmode="numeric"
               dir="ltr"
-              placeholder="بدون سقف"
+              placeholder="حداکثر قیمت"
               :aria-describedby="describedBy"
               :aria-invalid="ariaInvalid"
             >

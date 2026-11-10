@@ -130,6 +130,9 @@ test('@blocks only confirmed mutations filter one viewer and failures or 401 pre
   const targetItem = comments.locator('.listing-comments__item').filter({ hasText: 'ادمین یک' })
   const blockButton = targetItem.getByRole('button', { name: 'مسدود کردن نویسنده', exact: true })
   await expect(blockButton).toBeVisible()
+  // The privacy note speaks about blocked users, not "authors".
+  await expect(comments.getByText('دیدگاه‌های کاربران مسدودشده برای شما پنهان می‌شود.', { exact: true }))
+    .toBeVisible()
 
   const endpoint = `**/api/v1/me/blocks/${admin.public_id}`
   await page.route(endpoint, async (route) => {
