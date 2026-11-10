@@ -735,6 +735,8 @@ pub(crate) fn card_from_row(row: &sqlx::mysql::MySqlRow) -> Result<serde_json::V
         "price_toman": row.try_get::<Option<u64>, _>("price_toman").map_err(|_| ApiError::Internal)?,
         "price_type": row.try_get::<String, _>("price_type").map_err(|_| ApiError::Internal)?,
         "city": row.try_get::<String, _>("city").map_err(|_| ApiError::Internal)?,
+        // Additive Phase 14 field: the listing's city as a clean-URL segment.
+        "city_slug": row.try_get::<String, _>("city_slug").map_err(|_| ApiError::Internal)?,
         "province": row.try_get::<String, _>("province").map_err(|_| ApiError::Internal)?,
         "category": row.try_get::<String, _>("category").map_err(|_| ApiError::Internal)?,
         "cover_image": cover.map(|k| format!("/media/{k}")),
@@ -934,6 +936,7 @@ pub async fn feed(
     let mut sql = format!(
         "SELECT l.id, l.public_id, l.slug, l.title, l.price_toman, l.price_type, \
          l.rating_sum, l.rating_count, l.published_at, c.name_fa AS city, \
+         c.slug AS city_slug, \
          p.name_fa AS province, cat.name_fa AS category, \
          (SELECT storage_key FROM listing_images WHERE listing_id = l.id \
           ORDER BY sort_order LIMIT 1) AS cover, \

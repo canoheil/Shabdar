@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-11-09T00:00:00.000Z",
+  "measuredHead": "4ce586667a3f837a49b839691d16e6c66b397910",
+  "baselineReason": "Phase 12 recorded Home at 94982 bytes; the shipped Phase 13/14 surfaces pushed it to 98719. The stale Phase 7 baseline (89027) made the delta rule fail on any Home change.",
+  "measurementMethod": "production build (nuxt build) -> static .output/public scripts referenced by the SSR document of each route -> gzip level 9. Same assets and the same gzip level the CI capture script measures; CI re-measures over HTTP and remains authoritative.",
+  "gzipLevel": 9,
+  "totalCeiling": 100000,
+  "deltaLimit": 25600,
+  "home": {
+    "totalGzip": 98719,
+    "scriptCount": 3,
+    "scripts": [
+      "/_nuxt/CorzdlQj.js",
+      "/_nuxt/BRpO8YOL.js",
+      "/_nuxt/BLi74PSh.js"
+    ]
+  },
+  "category": {
+    "totalGzip": 98249,
+    "scriptCount": 3,
+    "scripts": [
+      "/_nuxt/CorzdlQj.js",
+      "/_nuxt/BRpO8YOL.js",
+      "/_nuxt/TzkasvZS.js"
+    ]
+  },
+  "city": {
+    "totalGzip": 98265,
+    "scriptCount": 3,
+    "scripts": [
+      "/_nuxt/CorzdlQj.js",
+      "/_nuxt/BRpO8YOL.js",
+      "/_nuxt/TzkasvZS.js"
+    ]
+  },
+  "detail": {
+    "totalGzip": null,
+    "note": "Detail needs the real listing fixture, which needs MariaDB + the Rust API. CI measures it; this file intentionally does not invent a number."
+  }
+}

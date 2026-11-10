@@ -17,14 +17,34 @@ function routeTotal(report, route) {
   return value
 }
 
+/// A baseline entry may be explicitly unmeasured (`totalGzip: null` plus a note)
+/// when the route needs fixtures a sandbox cannot produce. That is a gap, not a
+/// zero: the route is skipped for the delta rule but still held to the absolute
+/// ceiling by the current measurement.
+function baselineTotal(report, route) {
+  if (!report || typeof report !== 'object' || !(route in report)) {
+    throw new Error(`Missing ${route} route in client JS report`)
+  }
+  const value = report[route]?.totalGzip
+  if (value === null) return null
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`Invalid ${route} totalGzip; expected a non-negative finite number`)
+  }
+  return value
+}
+
 export function compareReports(baseline, current) {
   return Object.fromEntries(ROUTES.map((route) => {
-    const baselineBytes = routeTotal(baseline, route)
+    const baselineBytes = baselineTotal(baseline, route)
     const currentBytes = routeTotal(current, route)
+    if (baselineBytes === null) {
+      return [route, { baseline: null, current: currentBytes, delta: 0, skipped: true }]
+    }
     return [route, {
       baseline: baselineBytes,
       current: currentBytes,
       delta: currentBytes - baselineBytes,
+      skipped: false,
     }]
   }))
 }
@@ -37,7 +57,7 @@ export function assertWithinBudget(baseline, current, limit = MAX_ROUTE_GZIP_DEL
   const result = compareReports(baseline, current)
   const failures = ROUTES.flatMap((route) => {
     const messages = []
-    if (result[route].delta > limit) {
+    if (!result[route].skipped && result[route].delta > limit) {
       messages.push(`${route} initial-route client JS grew by ${formatBytes(result[route].delta)} bytes; delta limit is ${formatBytes(limit)}`)
     }
     if (result[route].current > MAX_ROUTE_GZIP_TOTAL) {
@@ -59,6 +79,12 @@ function runCli() {
   const result = assertWithinBudget(baseline, current)
   for (const route of ROUTES) {
     const row = result[route]
+    if (row.skipped) {
+      console.log(
+        `${route}: baseline=unmeasured current=${formatBytes(row.current)} bytes gzip (ceiling ${formatBytes(MAX_ROUTE_GZIP_TOTAL)} only)`,
+      )
+      continue
+    }
     console.log(
       `${route}: baseline=${formatBytes(row.baseline)} current=${formatBytes(row.current)} delta=${formatBytes(row.delta)} bytes gzip (limit +${formatBytes(MAX_ROUTE_GZIP_DELTA)})`,
     )

@@ -54,7 +54,14 @@
     </NuxtLink>
     <p class="listing-card__price">{{ formatPrice(listing.price_toman, listing.price_type) }}</p>
     <p class="listing-card__meta">
-      <span>{{ listing.city }}</span>
+      <NuxtLink
+        v-if="cityLink && cityHref"
+        :to="cityHref"
+        class="listing-card__city-link"
+      >
+        {{ listing.city }}
+      </NuxtLink>
+      <span v-else>{{ listing.city }}</span>
       <span aria-hidden="true">·</span>
       <span>{{ listing.category }}</span>
     </p>
@@ -74,9 +81,17 @@ import type { ApiListingCard } from '~/types'
 const props = withDefaults(defineProps<{
   listing: ApiListingCard
   imagePriority?: boolean
+  /// Discovery lists link the city to its clean index page; account and admin
+  /// lists keep plain text so a management page never offers a detour.
+  cityLink?: boolean
 }>(), {
   imagePriority: false,
+  cityLink: false,
 })
+
+const cityHref = computed(() =>
+  props.listing.city_slug ? `/city/${props.listing.city_slug}` : '',
+)
 
 const imageSizes = LISTING_CARD_IMAGE_SIZES
 const jpegSrcsetAttributes = computed(() => (

@@ -1050,6 +1050,10 @@ async fn feed_filters_by_category_and_city() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["data"].as_array().unwrap().len(), 1);
+    // Phase 14: the feed card carries the city slug so Home can link to the
+    // clean `/city/{slug}` page instead of the query-only feed.
+    assert_eq!(body["data"][0]["city"], "رشت");
+    assert_eq!(body["data"][0]["city_slug"], "rasht");
 
     // Unknown filter slugs are a client error, not an empty list.
     let (status, body) = send(app, Method::GET, "/api/v1/listings?category=nope", None).await;

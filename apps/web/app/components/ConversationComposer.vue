@@ -59,6 +59,8 @@
       </span>
     </div>
 
+    <p v-if="notice" class="composer__note" role="status">{{ notice }}</p>
+
     <p v-if="!canMessage" id="composer-disabled" class="composer__note" role="status">
       {{ disabledNote || 'ارسال پیام در این گفتگو ممکن نیست.' }}
     </p>
@@ -81,6 +83,7 @@
 <script setup lang="ts">
 import type { ApiSendMessageResult } from '~/types'
 import { formatCount } from '~/utils/chatFormat'
+import { isSendableDraft } from '~/utils/chatDraft'
 
 const props = withDefaults(defineProps<{
   viewerPublicId: string
@@ -125,17 +128,23 @@ const {
 } = state
 
 const textarea = ref<HTMLTextAreaElement | null>(null)
+// A local, dismissible hint for a draft the composer refuses to submit; it is
+// not a server error and never blocks editing.
+const notice = ref('')
 const errorAlert = ref<{ focus: () => void } | null>(null)
 const waitSeconds = ref(0)
 let waitTimer: ReturnType<typeof setInterval> | null = null
 
 const length = computed(() => Array.from(draft.value).length)
+// A draft of only spaces or zero-width/bidi controls is empty for the reader and
+// is rejected by the API, so the button stays disabled and no request is made.
+const sendable = computed(() => isSendableDraft(draft.value))
 const canSubmit = computed(() =>
   props.canMessage
   && canSend.value
   && !sending.value
   && waitSeconds.value === 0
-  && length.value > 0
+  && sendable.value
   && length.value <= maxChars,
 )
 const canRetry = computed(() => !conflict.value && !expired.value && canSend.value)
@@ -169,6 +178,7 @@ function startWaitTimer(seconds: number) {
 
 function onInput(event: Event) {
   const target = event.target as HTMLTextAreaElement
+  notice.value = ''
   updateDraft(target.value)
 }
 
@@ -180,6 +190,13 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 async function submit(): Promise<void> {
+  if (!sendable.value) {
+    // Enter on an empty/ZWNJ-only draft must not reach the sending state.
+    if (draft.value !== '' && !sending.value) {
+      notice.value = 'پیام نمی‌تواند فقط فاصله یا نویسهٔ نامرئی باشد.'
+    }
+    return
+  }
   const result = await send()
   if (result) {
     stopWaitTimer()

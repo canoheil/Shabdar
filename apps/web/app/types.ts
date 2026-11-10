@@ -39,6 +39,16 @@ export interface ApiCity {
   is_launch_city: boolean
 }
 
+/// Phase 14: one city resolved by slug, with the province the clean `/city/{slug}`
+/// page needs for its breadcrumb and its filter state.
+export interface ApiCityDetail {
+  id: number
+  name_fa: string
+  slug: string
+  province_slug: string
+  province_name_fa: string
+}
+
 export interface ApiListingCard {
   public_id: string
   slug: string
@@ -46,6 +56,9 @@ export interface ApiListingCard {
   price_toman: number | null
   price_type: 'fixed' | 'negotiable' | 'free'
   city: string
+  // Additive Phase 14 field: the city used for a clean `/city/{slug}` link.
+  // Optional so an older API response still type-checks and renders as text.
+  city_slug?: string
   province: string
   category: string
   cover_image: string | null

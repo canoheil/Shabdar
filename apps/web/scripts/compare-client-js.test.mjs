@@ -63,3 +63,40 @@ test('negative and non-numeric route sizes are rejected', () => {
     /invalid detail/i,
   )
 })
+
+// --- Phase 14: an unmeasured route in the baseline must not be silently zero ---
+
+test('an unmeasured route in the baseline is skipped, never treated as zero bytes', () => {
+  const baseline = {
+    home: { totalGzip: 98_000, scripts: [] },
+    detail: { totalGzip: null, note: 'measured in CI' },
+  }
+  const current = report(98_500, 99_000)
+  const result = compareReports(baseline, current)
+  assert.equal(result.home.delta, 500)
+  // No bogus 99,000-byte "growth" against a 0-byte baseline.
+  assert.equal(result.detail.skipped, true)
+  assert.doesNotThrow(() => assertWithinBudget(baseline, current))
+})
+
+test('a measured route still fails when it grows past the delta limit', () => {
+  const baseline = {
+    home: { totalGzip: 98_000, scripts: [] },
+    detail: { totalGzip: null, note: 'measured in CI' },
+  }
+  assert.throws(
+    () => assertWithinBudget(baseline, report(98_000 + 25_601, 90_000)),
+    /home.*25,601/,
+  )
+})
+
+test('the absolute ceiling still applies to a route the baseline does not measure', () => {
+  const baseline = {
+    home: { totalGzip: 98_000, scripts: [] },
+    detail: { totalGzip: null, note: 'measured in CI' },
+  }
+  assert.throws(
+    () => assertWithinBudget(baseline, report(98_000, MAX_ROUTE_GZIP_TOTAL + 1)),
+    /detail.*100,001.*100,000/,
+  )
+})

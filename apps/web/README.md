@@ -145,6 +145,9 @@ npm run dev          # dev server on http://localhost:3000
 ```
 
 `NUXT_API_BASE` overrides the proxy target (default `http://127.0.0.1:8080`).
+`NUXT_PUBLIC_SITE_URL` sets the public origin used by `/sitemap.xml` and the
+per-page canonicals (default `http://127.0.0.1:3000`; set it to the real HTTPS
+origin in production).
 Smoke: `curl -s http://localhost:3000/api/v1/health` →
 `{"status":"ok","database":"ok"}` with Axum running.
 
@@ -201,6 +204,7 @@ cd apps/web
 npm ci
 npm run typecheck
 npm run build
+npm run test:unit       # node --test: budget comparer, route chunks, baseline, chat draft
 npx playwright install chromium
 npm run test:fixtures  # reset and seed, then run the characterization smoke
 npm run test:e2e       # complete durable browser suite, including the quality matrix

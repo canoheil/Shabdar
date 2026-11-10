@@ -66,7 +66,7 @@ The previous version is not available. The feature list from the user's screensh
 ### Global
 - Responsive layout: desktop sidebar and mobile bottom navigation (home, search, post listing, messages, account).
 - Dark mode, notification bell (basic in-app list), loading/empty/error states.
-- SEO: server-rendered listing pages, canonical slug URL, meta tags, sitemap, basic JSON-LD for Product/Offer.
+- SEO: server-rendered listing pages, canonical slug URL, meta tags, sitemap, basic JSON-LD for Product/Offer. Phase 14 adds indexed legal pages (`/privacy`, `/terms`), shareable `/category/{slug}` and `/city/{slug}` pages with their own title and canonical, plus `robots.txt`/`sitemap.xml`. City pages are not in the sitemap yet; legacy `?category=`/`?city=` URLs keep working and are not redirected.
 - Listings removed by admin or seller return HTTP `410 Gone` (so search engines drop them).
 
 ## 4. Deferred (not in v1)

@@ -75,6 +75,11 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // Same-origin /api proxy target (Task 6). Override: NUXT_API_BASE.
     apiBase: 'http://127.0.0.1:8080',
+    public: {
+      // Absolute origin used by sitemap.xml, robots.txt and canonical links.
+      // Override in a deployment: NUXT_PUBLIC_SITE_URL=https://example.com
+      siteUrl: 'http://127.0.0.1:3000',
+    },
   },
 
   modules: ['@nuxtjs/color-mode'],

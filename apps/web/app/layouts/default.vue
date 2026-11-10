@@ -89,6 +89,13 @@
     </main>
     <footer class="shell__footer">
       <p>شبدر — بازارچهٔ آگهی‌های محلی</p>
+      <nav class="shell__footer-links" aria-label="پیوندهای حقوقی و اطلاع‌رسانی">
+        <NuxtLink to="/privacy">حریم خصوصی</NuxtLink>
+        <span aria-hidden="true">·</span>
+        <NuxtLink to="/terms">قوانین استفاده</NuxtLink>
+        <span aria-hidden="true">·</span>
+        <NuxtLink to="/advertising">تبلیغات</NuxtLink>
+      </nav>
     </footer>
   </div>
 </template>

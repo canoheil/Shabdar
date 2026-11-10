@@ -14,6 +14,7 @@ import {
   openThread,
   readRequests,
   resetChatRows,
+  sentMessages,
   waitForDelay,
 } from './support/chat'
 
@@ -354,6 +355,61 @@ test('@chat-thread listing cards link only while the listing is public', async (
   await page.reload()
   await expect(page.locator('.bubble .listing-reference')).toContainText('این آگهی دیگر در دسترس نیست.')
   await expect(page.locator('.bubble a.listing-reference')).toHaveCount(0)
+})
+
+test('@chat-thread both sides render as a messenger: opposite sides, avatar and time per bubble', async ({ page }) => {
+  const conversation = await buy(slugOf(readFixtures().detailPath))
+  await sendMessage('buyer', conversation, { client_message_id: clientMessageId(), body: 'پیام من' })
+  await sendMessage('seller', conversation, { client_message_id: clientMessageId(), body: 'پیام او' })
+
+  await openBuyerThread(page, conversation)
+  const own = page.locator('.thread__scroller .bubble--own')
+  const other = page.locator('.thread__scroller .bubble--other')
+  await expect(own).toHaveCount(1)
+  await expect(other).toHaveCount(1)
+
+  // The viewer's own message sits on the opposite inline side from the
+  // other party's message; this is the structural claim, not a pixel check.
+  const geometry = await page.evaluate(() => {
+    const read = (selector: string) => {
+      const bubble = document.querySelector(selector)
+      if (!bubble) throw new Error(`${selector} is missing`)
+      const rect = bubble.getBoundingClientRect()
+      return { left: rect.left, right: rect.right }
+    }
+    return { own: read('.bubble--own'), other: read('.bubble--other') }
+  })
+  const ownIsRight = geometry.own.right > geometry.other.right
+  const ownIsLeft = geometry.own.left < geometry.other.left
+  expect(ownIsRight || ownIsLeft).toBe(true)
+
+  // Every bubble carries exactly one avatar and one machine-readable time.
+  for (const selector of ['.bubble--own', '.bubble--other']) {
+    await expect(page.locator(`${selector} .bubble__avatar`)).toHaveCount(1)
+    const time = page.locator(`${selector} .bubble__time`)
+    await expect(time).toHaveCount(1)
+    await expect(time).toHaveAttribute('datetime', /T/)
+    await expect(time).toHaveText(/[۰-۹]/)
+  }
+
+  // A draft made only of spaces or zero-width characters is empty for the
+  // reader: the send button stays disabled and nothing reaches the API.
+  const sendButton = page.locator('.composer__send')
+  const sent: Array<{ body: string }> = sentMessages(page)
+  for (const draft of ['   ', '\u200c\u200c', '\u200b \u200c']) {
+    await page.locator('#composer-body').fill(draft)
+    await expect(sendButton).toBeDisabled()
+    await page.locator('#composer-body').press('Enter')
+    await expect(page.locator('.composer__note')).toContainText('پیام نمی‌تواند فقط فاصله یا نویسهٔ نامرئی باشد.')
+  }
+  expect(sent).toHaveLength(0)
+  await expect(bubbles(page)).toHaveCount(2)
+
+  // The block action lives in the header menu, never in the conversation body.
+  await expect(page.locator('.thread__scroller').getByRole('button', { name: 'مسدود کردن کاربر' })).toHaveCount(0)
+  await expect(page.locator('.thread__header .thread__menu-trigger')).toBeVisible()
+  await openThreadMenu(page)
+  await expect(page.locator('.thread__header').getByRole('button', { name: 'مسدود کردن کاربر', exact: true })).toBeVisible()
 })
 
 test('@chat-thread blocking keeps read-only history and clears only after confirmation', async ({ page }) => {

@@ -4,8 +4,9 @@
 //! POST /api/v1/auth/otp/verify, GET/PATCH /api/v1/me,
 //! POST /api/v1/auth/logout, GET /api/v1/categories,
 //! GET /api/v1/locations/provinces,
-//! GET /api/v1/locations/provinces/{slug}/cities, and the direct-chat routes
-//! under /api/v1/conversations and /api/v1/me/conversations.
+//! GET /api/v1/locations/provinces/{slug}/cities, GET /api/v1/locations/cities/{slug},
+//! and the direct-chat routes under /api/v1/conversations and
+//! /api/v1/me/conversations.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -200,6 +201,9 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/locations/provinces/{slug}/cities",
             get(province_cities),
         )
+        // City slugs are unique per province, not globally, so a clean
+        // `/city/{slug}` URL needs one read that answers city + province.
+        .route("/api/v1/locations/cities/{slug}", get(city_by_slug))
         .merge(chat)
         // Unknown paths: 404 in the documented envelope (plan Task 4).
         .fallback(not_found)
@@ -1558,6 +1562,45 @@ async fn provinces(State(state): State<AppState>) -> Result<Json<serde_json::Val
         })
         .collect::<Result<_, ApiError>>()?;
     Ok(Json(serde_json::json!({ "data": data })))
+}
+
+/// GET /api/v1/locations/cities/{slug} — one city plus its province, for the
+/// clean `/city/{slug}` page (Phase 14).
+///
+/// City slugs are unique inside a province only, so a shared slug is resolved
+/// deterministically to the lowest city id: the same URL always renders the same
+/// city, and its canonical cannot flip between requests.
+async fn city_by_slug(
+    State(state): State<AppState>,
+    Path(slug): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let row = sqlx::query(
+        "SELECT c.id, c.name_fa, c.slug, p.slug AS province_slug, \
+                p.name_fa AS province_name_fa \
+         FROM cities c JOIN provinces p ON p.id = c.province_id \
+         WHERE c.slug = ? ORDER BY c.id LIMIT 1",
+    )
+    .bind(&slug)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|_| ApiError::Internal)?
+    .ok_or(ApiError::NotFound)?;
+    let id: u32 = row.try_get("id").map_err(|_| ApiError::Internal)?;
+    let name_fa: String = row.try_get("name_fa").map_err(|_| ApiError::Internal)?;
+    let city_slug: String = row.try_get("slug").map_err(|_| ApiError::Internal)?;
+    let province_slug: String = row.try_get("province_slug").map_err(|_| ApiError::Internal)?;
+    let province_name_fa: String = row
+        .try_get("province_name_fa")
+        .map_err(|_| ApiError::Internal)?;
+    Ok(Json(serde_json::json!({
+        "data": {
+            "id": id,
+            "name_fa": name_fa,
+            "slug": city_slug,
+            "province_slug": province_slug,
+            "province_name_fa": province_name_fa,
+        },
+    })))
 }
 
 /// GET /api/v1/locations/provinces/{slug}/cities — cities of one province

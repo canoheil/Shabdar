@@ -1,8 +1,76 @@
 # Status — Direct chat, national locations and historical phases
 
-Updated 2026-11-09 on Arena.ai Agent Mode. The current private-chat
-implementation is on branch `arena/a0dc8873-shabdar`; no production rollout or
-pull-request merge is implied.
+Updated 2026-11-09 on Arena.ai Agent Mode. The current
+launch-preparation work is on branch `arena/14b1d475-shabdar`; no production
+rollout or pull-request merge is implied.
+
+## Current launch-preparation pass (Phase 14, 2026-11-09)
+
+Scope was approved before any code was written; the contract is
+[the Phase 14 design](superpowers/specs/2026-11-09-phase14-launch-prep-design.md)
+with [its plan](superpowers/plans/2026-11-09-phase14-launch-prep.md). Four
+items, in build order:
+
+1. **Legal pages.** `/privacy` (حریم خصوصی) and `/terms` (قوانین استفاده) are
+   server-rendered, indexable pages linked from the footer of every page. The
+   text only describes behaviour that exists in this codebase (mobile + OTP
+   login, the session cookie, display name, listings and photos,
+   comments/ratings/reports, private chat, blocks, the admin audit log) and
+   carries a visible «پیش از انتشار، این متن را یک وکیل بررسی کند» note. No
+   retention periods, no GDPR claims, no commitments the code cannot keep.
+2. **Clean URLs.** `/category/[slug]` and `/city/[slug]` render the same
+   `ListingBrowser` component as Home — one feed implementation, no copied
+   fetch/filter logic. An unknown slug is a real SSR `404`. Each page sets its
+   own title and canonical. Home's category chips and a card's city link to
+   these URLs; existing `?category=`/`?city=` query URLs keep working (no
+   redirects) because filters still travel in the query.
+3. **Chat polish.** The messenger layout itself shipped earlier; this pass adds
+   the client-side empty/whitespace guard (a message of only spaces, ZWNJ or a
+   zero-width space cannot be sent) with unit coverage, and Playwright
+   assertions that pin the layout: own vs other bubble sides, one avatar and
+   one machine-readable `<time>` per bubble, and the block action inside the
+   header «⋮» menu only.
+4. **Client-JS budget truth.** The stale Phase 7 baseline made the delta rule
+   fail on every Home change, so Phase 14 records a new
+   [measured baseline](performance/phase14-client-js-baseline.json)
+   (Home 98,719 / category 98,249 / city 98,265 gzip bytes, level 9) and points
+   `test:client-budget` at it. The absolute 100,000 gzip ceiling and the
+   +25,600 delta rule are unchanged, and a `node --test` guard rejects a
+   hand-edited or placeholder baseline.
+
+**Also added:** `robots.txt` and `sitemap.xml` Nitro routes. `robots.txt`
+disallows `/me`, `/admin` and `/login` and advertises the sitemap;
+`sitemap.xml` lists the fixed pages, every active category and up to 20 pages
+of active listings with `lastmod`, and is cached
+`public, max-age=600, s-maxage=3600`. `runtimeConfig.public.siteUrl`
+(`NUXT_PUBLIC_SITE_URL`) supplies the absolute origin.
+
+**Verified locally (real commands, this sandbox):** `nuxi typecheck` and
+`nuxt build` pass; `node --test` passes for the chat guard (18 cases), the
+baseline guard (5) and the budget comparer (9). SSR was smoke-tested on a
+production build against a stub API: `/privacy` 200, `/terms` 200,
+`/category/home-sweets` 200 with canonical `/category/home-sweets`,
+`/category/nope` 404, `/city/rasht` 200 (`آگهی‌های رشت`), `/city/nowhere` 404,
+`robots.txt` and a well-formed `sitemap.xml`. Home's three public scripts
+contain zero chat-protocol markers.
+
+**NOT verified locally, left to CI:** the Rust side of
+`GET /api/v1/locations/cities/{slug}`, the `city_slug` feed/favorites fields
+and the new `city_slug` feed assertion in `tests/listings.rs` (no Rust
+toolchain here — read-reviewed only), the new
+Playwright specs (`legal`, `clean-urls`, `seo`, `conversation-entry`,
+`conversation-thread`; no MariaDB, Rust API or Chromium here), and the Detail
+route's client-JS measurement (needs the real listing fixture). Because of
+that last gap the baseline stores `detail: { totalGzip: null, note }`; the
+comparer treats an explicit `null` as **unmeasured** — it skips the delta rule
+for that route but still enforces the absolute ceiling, so CI measures Detail
+for real instead of comparing it with an invented number. **CI is the
+authority for all of the above.**
+
+**Deferred deliberately:** city pages in `sitemap.xml` (needs a
+`GET /api/v1/sitemap/locations` endpoint; categories and listings are covered
+today) and any redirect from legacy query URLs to the clean paths. Phase 15
+(notifications) stays unstarted until Phase 14 is finished.
 
 ## Current UI/UX and copy pass (2026-11-09)
 
@@ -935,7 +1003,12 @@ lives outside the repo; the durable form of those assertions is
   **224 MB** on the Railway VM (2026-10-24). `package-lock.json` is committed;
   use `npm ci` for reproducible installs.
 - Complete the Phase 10 production rescan and initial pending-backlog review;
-  image-moderation decision, privacy/terms, and backup/restore test remain open.
+  image-moderation decision and the backup/restore test remain open.
+- **A lawyer must review `/privacy` and `/terms` before launch.** The Phase 14
+  pages describe only behaviour that exists in the code; they are not legal
+  advice and have not been reviewed by counsel.
+- Set `NUXT_PUBLIC_SITE_URL` to the real HTTPS origin in production, otherwise
+  `sitemap.xml` and the per-page canonicals point at `http://127.0.0.1:3000`.
 - Phone-browser smoke of the Phase 3 pages (`/`, `/post`, `/listings/[slug]`,
   `/admin/queue`) — open. Phase 4's web work was exercised in a real Chromium
   at 375 px on the VM (not a physical phone).
@@ -971,3 +1044,9 @@ lives outside the repo; the durable form of those assertions is
   initial backlog review are still required before clearing the existing-corpus
   launch blocker. Next domain: image-moderation decision after scope approval;
   physical-phone/RUM, real SMS, HTTPS, and other launch checks remain open.
+- **Phase 14 (launch preparation) — built on `arena/14b1d475-shabdar`, NOT yet
+  verified by CI.** Legal pages, clean `/category`/`/city` URLs, chat input
+  guard, `robots.txt`/`sitemap.xml` and a refreshed client-JS baseline, all
+  listed above. Local `typecheck`/`build`/`node --test` and stub-API SSR smoke
+  pass; the Rust additions and the new Playwright specs are unrun here and
+  await CI. Phase 15 (notifications) is queued behind this verification.
