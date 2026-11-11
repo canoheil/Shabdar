@@ -149,3 +149,54 @@ All seven tasks are implemented on `arena/14b1d475-shabdar`.
 `apps/api/tests/locations.rs` (no Rust toolchain), every Playwright spec
 (`legal`, `clean-urls`, `seo`, `conversation-entry`, `conversation-thread`,
 `quality`), Lighthouse, and the Detail budget measurement.
+
+## Follow-up (2026-11-09): the Detail LCP regression was a bundle boundary bug
+
+CI measured Detail's LCP at 2553–2560 ms against a 2500 ms budget while Home
+passed on the same build. The cause was not the Detail page: the shared
+`ListingBrowser.vue` had been folded into the `shell` chunk, and the shell is
+preloaded by **every** route — so Detail, `/privacy`, `/terms` and the account
+pages all downloaded Home's feed code.
+
+Measured with the build's own page→chunk manifest
+(`.output/server/chunks/virtual/precomputed.mjs`) and level-9 gzip:
+
+| build | shell | Detail total | Home total | `/privacy` total | feed code on Detail |
+| --- | --- | --- | --- | --- | --- |
+| `main` (before Phase 14) | 81,224 | — | — | — | no |
+| before this fix | 86,628 | — | 98,719 | — | **yes** |
+| with the fix | 79,923 | 90,180 | 99,567 | 92,849 | **no** |
+
+The fix is two `return` (no chunk name) exclusions in the existing
+`manualChunks` catch-all in `nuxt.config.ts`, one for `ListingBrowser.vue` and
+one for `ListingGallery.vue`. Each is left to Rollup, which keeps it in a chunk
+that only the pages importing it load.
+
+Findings worth keeping, because each one was measured and each wrong turn looked
+plausible:
+
+- **Returning a chunk *name* is the trap.** A named manual chunk also captures
+  the shared runtime that module touches (vue-router, the Nuxt app runtime), and
+  then the shell imports that chunk right back — the split silently undoes
+  itself and *every* route pays. `return` with no value is what works.
+- **The match must not end in `$`.** Vite splits a Vue SFC into
+  `?vue&type=script` sub-modules; anchoring the regex on the bare `.vue` id
+  leaves the component body in the shell. The earlier "the fix did not work"
+  reading came from exactly this.
+- **`defineAsyncComponent` is not an alternative.** It breaks SSR of the feed,
+  which this project requires, and it was reverted. `Lazy<Component>` does not
+  move a component out of a chunk a `manualChunks` rule has already claimed.
+- **Verify against the manifest, not a local page load.** The local Detail page
+  500s against the dev stub (the stub's listing payload has no `images`), which
+  makes the document useless as evidence; the manifest plus gzip is reliable and
+  is what the numbers above come from.
+
+The refreshed baseline in `docs/performance/phase14-client-js-baseline.json` now
+carries a real Home (99,567), category (99,087), city (99,103) and Detail
+(90,180) measurement. Home's margin is thin — about 430 bytes under the 100,000
+ceiling — because splitting a chunk duplicates some module boilerplate. That
+margin, not the ceiling, is the next thing to watch; any Home-side addition
+should be measured before it is merged.
+
+**Still open:** CI has to confirm both the Lighthouse detail-LCP gate and the
+refreshed budget gate with real numbers.
