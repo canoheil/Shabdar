@@ -1,41 +1,64 @@
 {
   "schemaVersion": 1,
   "measuredAt": "2026-11-09T00:00:00.000Z",
-  "measuredHead": "4ce586667a3f837a49b839691d16e6c66b397910",
-  "baselineReason": "Phase 12 recorded Home at 94982 bytes; the shipped Phase 13/14 surfaces pushed it to 98719. The stale Phase 7 baseline (89027) made the delta rule fail on any Home change.",
+  "measuredHead": "411c05f4d6718bb0a08d05b6b0a8d4e1750c2cb0",
+  "baselineReason": "Phase 12 recorded Home at 94982 bytes; the shipped Phase 13/14 surfaces pushed it to 98719, and the shared listing browser then added its own chunk. Re-measured after splitting ListingBrowser and ListingGallery out of the shell chunk, so Detail and the legal/account pages no longer download feed code.",
   "measurementMethod": "production build (nuxt build) -> static .output/public scripts referenced by the SSR document of each route -> gzip level 9. Same assets and the same gzip level the CI capture script measures; CI re-measures over HTTP and remains authoritative.",
   "gzipLevel": 9,
   "totalCeiling": 100000,
   "deltaLimit": 25600,
   "home": {
-    "totalGzip": 98719,
-    "scriptCount": 3,
+    "totalGzip": 99567,
+    "scriptCount": 8,
     "scripts": [
-      "/_nuxt/CorzdlQj.js",
-      "/_nuxt/BRpO8YOL.js",
-      "/_nuxt/BLi74PSh.js"
+      "/_nuxt/BS-6FVv0.js",
+      "/_nuxt/CoKco8-S.js",
+      "/_nuxt/Cpm5Xcft.js",
+      "/_nuxt/D2Z58HyU.js",
+      "/_nuxt/DDsy0bR-.js",
+      "/_nuxt/DgM04XeV.js",
+      "/_nuxt/Dmlx_Qon.js",
+      "/_nuxt/T3nYmZCQ.js"
     ]
   },
   "category": {
-    "totalGzip": 98249,
-    "scriptCount": 3,
+    "totalGzip": 99087,
+    "scriptCount": 8,
     "scripts": [
-      "/_nuxt/CorzdlQj.js",
-      "/_nuxt/BRpO8YOL.js",
-      "/_nuxt/TzkasvZS.js"
+      "/_nuxt/BS-6FVv0.js",
+      "/_nuxt/CDBUQCNm.js",
+      "/_nuxt/Cpm5Xcft.js",
+      "/_nuxt/D2Z58HyU.js",
+      "/_nuxt/DDsy0bR-.js",
+      "/_nuxt/DgM04XeV.js",
+      "/_nuxt/Dmlx_Qon.js",
+      "/_nuxt/T3nYmZCQ.js"
     ]
   },
   "city": {
-    "totalGzip": 98265,
-    "scriptCount": 3,
+    "totalGzip": 99103,
+    "scriptCount": 8,
     "scripts": [
-      "/_nuxt/CorzdlQj.js",
-      "/_nuxt/BRpO8YOL.js",
-      "/_nuxt/TzkasvZS.js"
+      "/_nuxt/BS-6FVv0.js",
+      "/_nuxt/BsMM7kzf.js",
+      "/_nuxt/Cpm5Xcft.js",
+      "/_nuxt/D2Z58HyU.js",
+      "/_nuxt/DDsy0bR-.js",
+      "/_nuxt/DgM04XeV.js",
+      "/_nuxt/Dmlx_Qon.js",
+      "/_nuxt/T3nYmZCQ.js"
     ]
   },
   "detail": {
-    "totalGzip": null,
-    "note": "Detail needs the real listing fixture, which needs MariaDB + the Rust API. CI measures it; this file intentionally does not invent a number."
+    "totalGzip": 90180,
+    "scriptCount": 5,
+    "scripts": [
+      "/_nuxt/Bxq_RWuy.js",
+      "/_nuxt/CqkQhx1T.js",
+      "/_nuxt/DDsy0bR-.js",
+      "/_nuxt/DgM04XeV.js",
+      "/_nuxt/Dmlx_Qon.js"
+    ],
+    "note": "Measured from the build's page->chunk manifest (precomputed.mjs) rather than an HTTP load: the local sandbox has no MariaDB, so the fixture listing used by CI's HTTP capture does not exist here. Same assets, same gzip level; CI re-measures over HTTP and stays authoritative."
   }
 }
