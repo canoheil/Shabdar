@@ -81,15 +81,33 @@ jobs:
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
 
-      - name: Install MariaDB client
+      # The MariaDB client used to be installed from apt. Runs 43050731523 and
+      # 43052074478 both died here with apt's exit 100 before a single test ran,
+      # twice in a row, so the client now comes from the service container that
+      # is already running next to the job: no package mirror, no name drift.
+      # apt stays as a fallback for the case where docker cannot see it.
+      - name: Resolve MariaDB client
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends mariadb-client
+          set -euo pipefail
+          if container=$(docker ps --filter "ancestor=mariadb:11" --format '{{.ID}}' | head -n1) \
+             && [ -n "${container}" ]; then
+            echo "MARIA_CONTAINER=${container}" >> "$GITHUB_ENV"
+            docker exec "${container}" mariadb --version
+          else
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends mariadb-client \
+              || sudo apt-get install --yes --no-install-recommends default-mysql-client
+          fi
 
       - name: Create scratch test database
         run: |
-          mariadb --host=127.0.0.1 --user=root --password=shabdar_test \
-            --execute="CREATE DATABASE IF NOT EXISTS shabdar_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+          set -euo pipefail
+          sql="CREATE DATABASE IF NOT EXISTS shabdar_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+          if [ -n "${MARIA_CONTAINER:-}" ]; then
+            docker exec "${MARIA_CONTAINER}" mariadb --user=root --password=shabdar_test --execute="${sql}"
+          else
+            mariadb --host=127.0.0.1 --user=root --password=shabdar_test --execute="${sql}"
+          fi
 
       - name: Install locked web dependencies
         working-directory: apps/web
