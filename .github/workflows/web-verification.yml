@@ -225,9 +225,43 @@ jobs:
           cat "$E2E_API_LOG"
           exit 1
 
+      # `--with-deps` shells out to apt, and apt is what failed twice on this
+      # runner (exit 100 / 1) before a single test could run. The ubuntu-latest
+      # image already carries Chromium's shared libraries, so the plain download
+      # is tried first and the apt path only as a fallback. Either failure is
+      # annotated as base64 so the log is readable through the API.
       - name: Install Chromium
         working-directory: apps/web
-        run: npx playwright install --with-deps chromium
+        run: |
+          set +e
+          npx playwright install chromium > /tmp/pw-install.log 2>&1
+          status=$?
+          if [ "$status" -eq 0 ]; then
+            # Prove the browser actually starts here, not thirteen minutes later
+            # inside the suite: a missing shared library fails in one second.
+            node --input-type=module -e "import { chromium } from '@playwright/test'; const b = await chromium.launch(); await b.close(); console.log('chromium launch ok')" >> /tmp/pw-install.log 2>&1
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              echo 'installed but will not launch; adding system dependencies' >> /tmp/pw-install.log
+            fi
+          fi
+          if [ "$status" -ne 0 ]; then
+            npx playwright install --with-deps chromium >> /tmp/pw-install.log 2>&1
+            status=$?
+          fi
+          if [ "$status" -ne 0 ]; then
+            tail -n 60 /tmp/pw-install.log
+            python - <<'PY'
+          import base64
+          from pathlib import Path
+
+          payload = Path('/tmp/pw-install.log').read_bytes()[-16000:]
+          encoded = base64.b64encode(payload).decode()
+          for offset in range(0, len(encoded), 3500):
+              print(f'::error::PW_INSTALL_LOG_BASE64={encoded[offset:offset + 3500]}')
+          PY
+          fi
+          exit "$status"
 
       - name: Run real-stack Playwright
         working-directory: apps/web
