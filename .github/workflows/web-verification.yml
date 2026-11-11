@@ -179,6 +179,7 @@ jobs:
         run: npm run typecheck
 
       - name: Build Nuxt production
+        id: nuxt-build
         working-directory: apps/web
         run: npm run build
 
@@ -255,14 +256,17 @@ jobs:
       # above fails. Without `always()` a single red performance assertion
       # silently suppressed the client-JS verdict for six consecutive runs on
       # the Phase 14 branch, so the budget was never actually exercised.
-      # `measure:client` creates its own fixtures, so it needs no prior step.
+      # `measure:client` creates its own fixtures, so it needs no prior step,
+      # but it does need a build: when an earlier step dies (an apt mirror flake
+      # once killed the MariaDB client install) these would otherwise fail with
+      # exit 127 and bury the real error.
       - name: Measure production route client JS after the final Playwright fixture reset
-        if: always()
+        if: always() && steps.nuxt-build.outcome == 'success'
         working-directory: apps/web
         run: npm run measure:client
 
       - name: Check production route client JS budget
-        if: always()
+        if: always() && steps.nuxt-build.outcome == 'success'
         working-directory: apps/web
         run: npm run test:client-budget
 
