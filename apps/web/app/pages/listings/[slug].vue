@@ -181,10 +181,30 @@ const publicReadOptions = {
   headers: { cookie: '' },
   credentials: 'omit' as const,
 }
-const { data: listing, pending, error } = await useFetch<ApiListingDetail>(
-  detailUrl,
-  publicReadOptions,
-)
+// These three SSR reads are independent of one another: the comment URL is
+// built from the route slug, not from the listing body, and the viewer read
+// needs only the incoming cookie. Awaiting them one after another therefore
+// made the document pay three serial API round trips before the first byte,
+// which is the dominant term in Detail's Largest Contentful Paint (measured
+// TTFB 454ms of a 2556ms LCP). Fire them together and await once, so the
+// server response costs one round trip instead of three.
+const commentsUrl = `/api/v1/listings/${encodeURIComponent(slug)}/comments`
+const listingRequest = useFetch<ApiListingDetail>(detailUrl, publicReadOptions)
+const commentsRequest = useFetch<ApiPage<ApiComment>>(commentsUrl, {
+  key: `listing-comments:${slug}`,
+  ...publicReadOptions,
+})
+const authRequest = useAuth()
+
+const [
+  { data: listing, pending, error },
+  { data: initialComments, error: initialCommentsError },
+  {
+    user: me,
+    status: authStatus,
+    pending: mePending,
+  },
+] = await Promise.all([listingRequest, commentsRequest, authRequest])
 
 if (error.value) {
   const statusCode = [404, 410].includes(error.value.statusCode ?? 0)
@@ -196,18 +216,7 @@ if (error.value) {
 
 // The first public comment page is crawlable, but its failure never replaces
 // the successfully loaded listing with a fatal error page.
-const commentsUrl = `/api/v1/listings/${encodeURIComponent(slug)}/comments`
-const { data: initialComments, error: initialCommentsError } = await useFetch<ApiPage<ApiComment>>(
-  commentsUrl,
-  { key: `listing-comments:${slug}`, ...publicReadOptions },
-)
 const commentsReadFailed = computed(() => Boolean(initialCommentsError.value))
-
-const {
-  user: me,
-  status: authStatus,
-  pending: mePending,
-} = await useAuth()
 
 const gone = computed(() => error.value?.statusCode === 410)
 const missing = computed(() => error.value?.statusCode === 404)

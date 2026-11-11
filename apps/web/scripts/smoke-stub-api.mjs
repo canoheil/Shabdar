@@ -50,7 +50,19 @@ const CARD = {
 const LISTING = {
   ...CARD,
   description: 'دوچرخه کوهستان در حد نو، مناسب مسیرهای جنگلی.',
-  images: [],
+  // One real entry, not `[]`: the Detail page reads `images[0]` for its
+  // canonical/OG image, so an empty gallery used to make the smoke page 500 and
+  // the document useless as evidence (see the Phase 14 plan's follow-up).
+  images: [{
+    url: '/media/01smoke0000000000000000001/01smoke0000000000000000003.png',
+    alt_text: 'دوچرخه کوهستان — تصویر 1',
+    width: 1200,
+    height: 900,
+    srcset: '/media/01smoke0000000000000000001/01smoke0000000000000000003.png--w240.jpg 240w, '
+      + '/media/01smoke0000000000000000001/01smoke0000000000000000003.png--w640.jpg 640w',
+    webp_srcset: '/media/01smoke0000000000000000001/01smoke0000000000000000003.png--w240.webp 240w, '
+      + '/media/01smoke0000000000000000001/01smoke0000000000000000003.png--w640.webp 640w',
+  }],
   seller: { public_id: '01smoke0000000000000000002', display_name: 'فروشندهٔ نمونه' },
   comment_count: 0,
 }
@@ -104,8 +116,18 @@ const server = createServer((req, res) => {
       page: { next_cursor: null, has_more: false },
     })
   }
+  // The comment page must be matched before the detail route: `/listings/{slug}`
+  // is a prefix of `/listings/{slug}/comments`, and returning the listing there
+  // fed the comments component the wrong shape.
+  if (/^\/api\/v1\/listings\/[^/]+\/comments$/.test(path)) {
+    return send(res, 200, { data: [], page: { next_cursor: null, has_more: false } })
+  }
   if (path.startsWith('/api/v1/listings/')) {
-    return send(res, 200, { data: { ...LISTING, favorited: undefined, my_stars: undefined } })
+    // Detail is the one listing route that is NOT enveloped: the Rust handler
+    // answers `Json(body)` with the listing fields at the top level, which is
+    // exactly what `useFetch<ApiListingDetail>` expects. Wrapping it in `data`
+    // here made every local smoke check of Detail 500.
+    return send(res, 200, { ...LISTING })
   }
   return send(res, 404, { error: { code: 'not_found' } })
 })

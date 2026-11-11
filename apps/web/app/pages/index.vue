@@ -56,15 +56,22 @@
 import type { ApiCategory } from '~/types'
 
 // The hero advertises the real category count; the browser owns the feed itself.
-const { data: categories } = await useFetch<{ data: ApiCategory[] }>('/api/v1/categories')
-const categoryCount = computed(() => categories.value?.data.length ?? 0)
+// The category list and the viewer read are independent, so they are issued
+// together: serializing them added a second server round trip to Home's TTFB,
+// which is charged directly against the LCP element (the hero heading).
+const categoriesRequest = useFetch<{ data: ApiCategory[] }>('/api/v1/categories')
+const authRequest = useAuth()
 
-const {
-  user: me,
-  status: authStatus,
-  pending: mePending,
-  refresh: refreshAuth,
-} = await useAuth()
+const [
+  { data: categories },
+  {
+    user: me,
+    status: authStatus,
+    pending: mePending,
+    refresh: refreshAuth,
+  },
+] = await Promise.all([categoriesRequest, authRequest])
+const categoryCount = computed(() => categories.value?.data.length ?? 0)
 
 const loggingOut = ref(false)
 async function logout(): Promise<void> {

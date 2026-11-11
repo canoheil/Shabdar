@@ -54,18 +54,53 @@ production build against a stub API: `/privacy` 200, `/terms` 200,
 `robots.txt` and a well-formed `sitemap.xml`. Home's three public scripts
 contain zero chat-protocol markers.
 
-**NOT verified locally, left to CI:** the Rust side of
-`GET /api/v1/locations/cities/{slug}`, the `city_slug` feed/favorites fields
-and the new `city_slug` feed assertion in `tests/listings.rs` (no Rust
-toolchain here — read-reviewed only), the new
-Playwright specs (`legal`, `clean-urls`, `seo`, `conversation-entry`,
-`conversation-thread`; no MariaDB, Rust API or Chromium here), and the Detail
-route's client-JS measurement (needs the real listing fixture). Because of
-that last gap the baseline stores `detail: { totalGzip: null, note }`; the
-comparer treats an explicit `null` as **unmeasured** — it skips the delta rule
-for that route but still enforces the absolute ceiling, so CI measures Detail
-for real instead of comparing it with an invented number. **CI is the
-authority for all of the above.**
+**What CI then confirmed (run `43023891828`, commit `c5cb227`):** Rust
+formatting, Clippy with warnings denied, the full API suite against real
+MariaDB (including `apps/api/tests/locations.rs` and the new `city_slug` feed
+assertion), Nuxt typecheck, `nuxt build`, real-stack startup and **166/166
+Playwright tests**, including the new `legal`, `clean-urls` and `seo` specs.
+The client-JS baseline also carries a real Detail measurement now (90,180
+gzip bytes) taken from the build's page→chunk manifest; the `null`/unmeasured
+path still exists in the comparer for a route a sandbox cannot measure, but no
+shipped baseline entry uses it.
+
+**The one red gate — and its real cause.** Detail's Largest Contentful Paint
+measured 2556 ms against the 2500 ms budget (three runs: 2558 / 2555 / 2556,
+i.e. not noise). `main` had measured 2480 ms on the same gate, so the branch
+added roughly 76 ms. The plan had attributed the regression to `ListingBrowser`
+living in the shell chunk; that hypothesis is **contradicted by the
+measurements** — after the chunk split Detail went from 4 scripts / 99,942
+gzip bytes to 5 scripts / 90,180 (lighter) while LCP did not move at all
+(2553–2560 before, 2554–2558 after).
+
+The Lighthouse phase breakdown located the cost: `TTFB 454 ms` plus
+`render delay ~1650 ms` on an image that had already finished loading at
+~907 ms. The server response itself was three **serial** API round trips —
+listing, then comments, then the viewer read — although none of the three
+depends on another (`/listings/[slug]`, `/listings/[slug]/comments`,
+`/api/v1/me`). Home had the same pattern in miniature (categories, then auth).
+Both pages now issue those reads concurrently with `Promise.all`, so the
+document costs one round trip instead of three. Chunk sizes are unchanged by
+this edit; it targets the TTFB term the measurement actually pointed at.
+
+**CI was also mis-wired and is fixed here:** a red Lighthouse step made the two
+client-JS steps `skipped` on six consecutive runs, so the refreshed budget gate
+never actually executed; both are now `if: always()`. The workflow now fires
+once per SHA (the duplicate `pull_request` trigger is gone and `main` is added
+to `push`), and the dead `manual-verification.yml` — pinned to the Phase 6
+branch `arena/8d80fa18-shabdar`, which will never receive a push again — is
+deleted.
+
+**Verified locally on this revision:** `nuxi typecheck` exit 0, `nuxt build`
+complete, `node --test` **37/37**, and SSR smoke on the production build
+against the stub API: `/`, `/listings/{slug}`, `/privacy`, `/terms`,
+`/category/home-sweets`, `/city/rasht`, `robots.txt` and `sitemap.xml` all
+`200`; `/category/nope` and `/city/nowhere` `404`; Detail renders with its
+title, canonical (`/listings/دوچرخه-کوهستان`) and gallery image. The stub had
+to be corrected for that to be possible at all: it wrapped Detail in a `data`
+envelope the Rust handler never sends, so every local Detail smoke check was a
+`500`. **The LCP verdict itself is CI's to give** — a local sandbox has no
+Chromium, MariaDB or Rust toolchain.
 
 **Deferred deliberately:** city pages in `sitemap.xml` (needs a
 `GET /api/v1/sitemap/locations` endpoint; categories and listings are covered

@@ -200,3 +200,62 @@ should be measured before it is merged.
 
 **Still open:** CI has to confirm both the Lighthouse detail-LCP gate and the
 refreshed budget gate with real numbers.
+
+## Correction (2026-11-11): the chunk split was not the LCP cause
+
+The section above names the shell-chunk boundary as the cause of Detail's LCP
+regression. CI contradicts that, so the record is corrected rather than left
+standing:
+
+| build | Detail LCP (3 runs) | Detail client JS |
+| --- | --- | --- |
+| `main` (`b992c64`) | 2480 / 2478 / 2481 | 99,942 gzip, 4 scripts |
+| before the chunk fix (`411c05f`) | 2553 / 2559 / 2560 | — |
+| after the chunk fix (`6b66646`, `c5cb227`) | 2556 / 2555 / 2558 | 90,180 gzip, 5 scripts |
+
+The split did what it claimed — Detail downloads ~10 KB less and no feed code —
+but LCP did not move by a single millisecond. A cause that does not move the
+metric is not the cause.
+
+**What the Lighthouse phases actually showed.** The LCP element is the gallery
+image. It finished loading at ~907 ms (`TTFB 454` + `load delay 152` +
+`load time 300`), then waited until ~2556 ms to paint (`render delay ~1650`).
+The 454 ms server response was three **serial** API round trips from one page
+setup:
+
+```
+await useFetch('/api/v1/listings/{slug}')            // then
+await useFetch('/api/v1/listings/{slug}/comments')   // then
+await useAuth()                                      // /api/v1/me
+```
+
+None of the three depends on another: the comment URL is built from the route
+slug, not from the listing body, and the viewer read needs only the incoming
+cookie. `apps/web/app/pages/listings/[slug].vue` now issues all three at once
+and awaits once, so the document costs one round trip instead of three. Home
+had the same pattern in miniature (categories, then auth) and is fixed the same
+way. Chunk sizes are unchanged by this edit; it targets the TTFB term the
+measurement pointed at. Detail's LCP figure has to come from CI.
+
+**Two CI gaps this exposed.** Every red run after `411c05f` failed at the
+Lighthouse step and therefore *skipped* the client-JS measurement and budget
+steps — for six consecutive runs the budget gate never executed, and the
+refreshed baseline was never compared against a real capture. `.github/workflows/web-verification.yml`
+now marks both steps `if: always()` so one red performance assertion can no
+longer suppress the other gate's verdict. The workflow also runs once per SHA:
+the `pull_request` trigger is gone (in-repo branches fired the same job twice,
+and one of the two always ended cancelled) and `main` was added to the `push`
+branches so a merge is verified on the commit that ships.
+`.github/workflows/manual-verification.yml` is deleted: it was pinned to
+`arena/8d80fa18-shabdar` (a Phase 6 branch that will never receive a push
+again) and its API steps are a subset of what the web workflow already runs.
+
+**Local smoke was lying, and now it does not.** `scripts/smoke-stub-api.mjs`
+answered `/api/v1/listings/{slug}` with a `data` envelope and matched
+`/listings/{slug}/comments` through the detail prefix rule. The Rust handler
+returns the listing flat (`Json(body)`), so every local Detail smoke check was
+a 500 and the page could not be used as evidence. The stub now mirrors the real
+contract: flat detail, comments matched first and paginated. With that fix a
+production build renders `/listings/{slug}` as `200` against the stub with its
+title, canonical and gallery image, which is what makes the fetch change above
+verifiable without MariaDB.
