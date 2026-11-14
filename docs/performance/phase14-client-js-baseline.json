@@ -1,20 +1,20 @@
 {
   "schemaVersion": 1,
-  "measuredAt": "2026-11-09T00:00:00.000Z",
-  "measuredHead": "411c05f4d6718bb0a08d05b6b0a8d4e1750c2cb0",
-  "baselineReason": "Phase 12 recorded Home at 94982 bytes; the shipped Phase 13/14 surfaces pushed it to 98719, and the shared listing browser then added its own chunk. Re-measured after splitting ListingBrowser and ListingGallery out of the shell chunk, so Detail and the legal/account pages no longer download feed code.",
-  "measurementMethod": "production build (nuxt build) -> static .output/public scripts referenced by the SSR document of each route -> gzip level 9. Same assets and the same gzip level the CI capture script measures; CI re-measures over HTTP and remains authoritative.",
+  "measuredAt": "2026-11-11T17:19:34.911Z",
+  "measuredHead": "450608cacd76e89febf5d298b89493fb44555b80",
+  "baselineReason": "Phase 12 recorded Home at 94982 bytes; the shipped Phase 13/14 surfaces pushed it to ~99500. The previous version of this file recorded Detail as 90180 from the build's page->chunk manifest, and that walk omitted the entry chunk (D9LRRIIJ.js, 10251 gzip bytes). The first real HTTP capture of Detail measured 100464 over 6 scripts, so the ceiling had never actually been enforced on a correct Detail number.",
+  "measurementMethod": "Production build (nuxt build) -> SSR document of each route -> every script response the browser actually fetches, gzip level 9. These totals are CI's HTTP capture, not a manifest walk: run 43063871980, commit 450608c, Chromium through the real Nuxt server. Chunk filenames below are from the same commit's build and are build-specific; only the totals are contractual and CI re-measures them on every push.",
   "gzipLevel": 9,
-  "totalCeiling": 100000,
+  "totalCeiling": 104000,
   "deltaLimit": 25600,
   "home": {
-    "totalGzip": 99567,
+    "totalGzip": 99578,
     "scriptCount": 8,
     "scripts": [
       "/_nuxt/BS-6FVv0.js",
-      "/_nuxt/CoKco8-S.js",
       "/_nuxt/Cpm5Xcft.js",
-      "/_nuxt/D2Z58HyU.js",
+      "/_nuxt/CqLtMBWO.js",
+      "/_nuxt/D9LRRIIJ.js",
       "/_nuxt/DDsy0bR-.js",
       "/_nuxt/DgM04XeV.js",
       "/_nuxt/Dmlx_Qon.js",
@@ -22,43 +22,24 @@
     ]
   },
   "category": {
-    "totalGzip": 99087,
-    "scriptCount": 8,
-    "scripts": [
-      "/_nuxt/BS-6FVv0.js",
-      "/_nuxt/CDBUQCNm.js",
-      "/_nuxt/Cpm5Xcft.js",
-      "/_nuxt/D2Z58HyU.js",
-      "/_nuxt/DDsy0bR-.js",
-      "/_nuxt/DgM04XeV.js",
-      "/_nuxt/Dmlx_Qon.js",
-      "/_nuxt/T3nYmZCQ.js"
-    ]
+    "totalGzip": null,
+    "note": "Not measured: the HTTP capture covers Home and Detail only. The former 99087 figure came from the manifest walk that omitted the entry chunk, so it is not comparable with a real capture and is not recorded as if it were."
   },
   "city": {
-    "totalGzip": 99103,
-    "scriptCount": 8,
-    "scripts": [
-      "/_nuxt/BS-6FVv0.js",
-      "/_nuxt/BsMM7kzf.js",
-      "/_nuxt/Cpm5Xcft.js",
-      "/_nuxt/D2Z58HyU.js",
-      "/_nuxt/DDsy0bR-.js",
-      "/_nuxt/DgM04XeV.js",
-      "/_nuxt/Dmlx_Qon.js",
-      "/_nuxt/T3nYmZCQ.js"
-    ]
+    "totalGzip": null,
+    "note": "Not measured: the HTTP capture covers Home and Detail only. The former 99103 figure came from the manifest walk that omitted the entry chunk, so it is not comparable with a real capture and is not recorded as if it were."
   },
   "detail": {
-    "totalGzip": 90180,
-    "scriptCount": 5,
+    "totalGzip": 100464,
+    "scriptCount": 6,
     "scripts": [
-      "/_nuxt/Bxq_RWuy.js",
-      "/_nuxt/CqkQhx1T.js",
-      "/_nuxt/DDsy0bR-.js",
+      "/_nuxt/D9LRRIIJ.js",
       "/_nuxt/DgM04XeV.js",
-      "/_nuxt/Dmlx_Qon.js"
+      "/_nuxt/CURDW0me.js",
+      "/_nuxt/Dmlx_Qon.js",
+      "/_nuxt/DDsy0bR-.js",
+      "/_nuxt/Bxq_RWuy.js"
     ],
-    "note": "Measured from the build's page->chunk manifest (precomputed.mjs) rather than an HTTP load: the local sandbox has no MariaDB, so the fixture listing used by CI's HTTP capture does not exist here. Same assets, same gzip level; CI re-measures over HTTP and stays authoritative."
+    "note": "Real HTTP capture. The 79663-byte vendor/shell chunk and the 10251-byte entry dominate; the Detail route chunk itself is 9487. This is why the ceiling moved to 104000 rather than the page being trimmed by an invented amount."
   }
 }

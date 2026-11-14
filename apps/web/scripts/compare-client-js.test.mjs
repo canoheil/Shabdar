@@ -24,14 +24,20 @@ test('a route delta of exactly 25,600 bytes is allowed independently', () => {
   assert.doesNotThrow(() => assertWithinBudget(baseline, current))
 })
 
-test('the absolute 100,000-byte route ceiling is enforced independently', () => {
+// The ceiling is formatted with thousands separators in the failure message, so
+// the expectation is derived from the constant instead of hard-coded: changing
+// the budget must not require editing a regex in two places.
+const ceilingLabel = MAX_ROUTE_GZIP_TOTAL.toLocaleString('en-US')
+const overCeilingLabel = (MAX_ROUTE_GZIP_TOTAL + 1).toLocaleString('en-US')
+
+test(`the absolute ${ceilingLabel}-byte route ceiling is enforced independently`, () => {
   assert.doesNotThrow(() => assertWithinBudget(
     report(90_000, 90_000),
     report(MAX_ROUTE_GZIP_TOTAL, MAX_ROUTE_GZIP_TOTAL),
   ))
   assert.throws(
     () => assertWithinBudget(report(90_000, 90_000), report(90_000, MAX_ROUTE_GZIP_TOTAL + 1)),
-    /detail.*100,001.*100,000/,
+    new RegExp(`detail.*${overCeilingLabel}.*${ceilingLabel}`),
   )
 })
 
@@ -97,6 +103,6 @@ test('the absolute ceiling still applies to a route the baseline does not measur
   }
   assert.throws(
     () => assertWithinBudget(baseline, report(98_000, MAX_ROUTE_GZIP_TOTAL + 1)),
-    /detail.*100,001.*100,000/,
+    new RegExp(`detail.*${overCeilingLabel}.*${ceilingLabel}`),
   )
 })

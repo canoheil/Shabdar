@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { test } from 'node:test'
+import { MAX_ROUTE_GZIP_TOTAL } from './compare-client-js.mjs'
 
 // The budget gate is only meaningful if its baseline is real. These checks fail
 // on a hand-edited or placeholder baseline instead of letting a bogus "delta"
@@ -11,7 +12,8 @@ const BASELINE = resolve(
   import.meta.dirname,
   '../../../docs/performance/phase14-client-js-baseline.json',
 )
-const CEILING = 100_000
+// One source of truth: the comparer's constant, not a copy that can drift.
+const CEILING = MAX_ROUTE_GZIP_TOTAL
 
 const baseline = JSON.parse(readFileSync(BASELINE, 'utf8'))
 
