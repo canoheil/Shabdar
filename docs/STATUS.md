@@ -1,12 +1,39 @@
 # Status — Direct chat, national locations and historical phases
 
-Updated 2026-11-11 on Arena.ai Agent Mode. The launch-preparation work (Phase
-14) was carried from the closed PR #23 onto branch `arena/c1cbe813-shabdar` and
-finished there; its verification record below is for commit `1d3c54a`. No
+Updated 2026-11-14 on Arena.ai Agent Mode: a visual-refresh design pass was added
+(design only, see the first section). Before that, updated 2026-11-11: the
+launch-preparation work (Phase 14) was carried from the closed PR #23 onto
+branch `arena/c1cbe813-shabdar` and finished there; its verification record
+below is for commit `1d3c54a`. No
 production rollout is implied: migrations still have to be applied through the
 normal startup migrator, and `NUXT_PUBLIC_SITE_URL` must be set to the real
 HTTPS origin or every canonical and `sitemap.xml` entry will point at
 `http://127.0.0.1:3000`.
+
+## Visual refresh — design approved, spec awaiting review (2026-11-14)
+
+Design work only. **No application code, test or configuration changed**, so there
+is nothing new for CI to verify and the Phase 14 record below still describes the
+running site.
+
+- The owner asked for a full visual pass ("ugly and dead"). A review of the current
+  site on sample data found seven causes; the owner chose the «گرم و خانگی»
+  direction and approved three mockup rounds: Home, Listing detail, then the post
+  form, dashboard, inbox and conversation (with one empty state).
+- The contract is
+  [the visual refresh design](superpowers/specs/2026-11-14-visual-refresh-design.md).
+  It awaits the owner's review; the implementation plan is written only after that.
+- Reference images (before / approved proposal) are in
+  `design-system/shabdar/refresh-2026-11/`. They are mockups rendered from static
+  HTML with sample data, not screenshots of the app.
+- What the mockup numbers do and do not show: positions, box counts and contrast
+  were measured in headless Chromium on the mockups at 320–1440px in both themes.
+  They say nothing yet about the real app's client-JS budget or Lighthouse
+  medians; the spec names both as risks to be measured in CI at the Home stage.
+- `design-system/shabdar/MASTER.md` still describes the Phase 7 system. The spec
+  lists which of its rules the refresh replaces; the file is rewritten at close-out.
+- Notifications (Phase 15) stays the next product domain; the owner decides the
+  order.
 
 ## Current launch-preparation pass (Phase 14, 2026-11-09)
 
@@ -1135,3 +1162,7 @@ lives outside the repo; the durable form of those assertions is
   work was carried from the closed PR #23 onto `arena/c1cbe813-shabdar`, which
   is where CI verified it, and PR #24 merges it. Phase 15 (notifications) is
   next.
+- **Visual refresh — DESIGN ONLY on `arena/76915f79-shabdar`.** Direction and
+  three mockup rounds approved in conversation; written spec committed and
+  awaiting the owner's review. No plan yet, no application code, nothing for CI
+  to verify.
