@@ -1,7 +1,8 @@
 # Status — Direct chat, national locations and historical phases
 
-Updated 2026-11-14 on Arena.ai Agent Mode: a visual-refresh design pass was added
-(design only, see the first section). Before that, updated 2026-11-11: the
+Updated 2026-11-14 on Arena.ai Agent Mode: a visual-refresh design and its
+implementation plan were added (no application code yet, see the first section),
+and `main` was found red on one test since PR #25. Before that, updated 2026-11-11: the
 launch-preparation work (Phase 14) was carried from the closed PR #23 onto
 branch `arena/c1cbe813-shabdar` and finished there; its verification record
 below is for commit `1d3c54a`. No
@@ -10,30 +11,77 @@ normal startup migrator, and `NUXT_PUBLIC_SITE_URL` must be set to the real
 HTTPS origin or every canonical and `sitemap.xml` entry will point at
 `http://127.0.0.1:3000`.
 
-## Visual refresh — design approved, spec awaiting review (2026-11-14)
+## Visual refresh — spec approved, plan awaiting review (2026-11-14)
 
-Design work only. **No application code, test or configuration changed**, so there
-is nothing new for CI to verify and the Phase 14 record below still describes the
-running site.
+Design and planning only. **No application code, test or configuration has changed.**
 
 - The owner asked for a full visual pass ("ugly and dead"). A review of the current
   site on sample data found seven causes; the owner chose the «گرم و خانگی»
   direction and approved three mockup rounds: Home, Listing detail, then the post
   form, dashboard, inbox and conversation (with one empty state).
 - The contract is
-  [the visual refresh design](superpowers/specs/2026-11-14-visual-refresh-design.md).
-  It awaits the owner's review; the implementation plan is written only after that.
+  [the visual refresh design](superpowers/specs/2026-11-14-visual-refresh-design.md),
+  approved by the owner on 2026-11-14.
+- [The implementation plan](superpowers/plans/2026-11-14-visual-refresh.md) has nine
+  tasks and awaits the owner's review. Its section "Corrections to the spec" lists
+  what planning found; where the two documents differ, the plan wins. One decision
+  is open: how the main photo of a listing is fitted (D1 in Task 4).
 - Reference images (before / approved proposal) are in
   `design-system/shabdar/refresh-2026-11/`. They are mockups rendered from static
   HTML with sample data, not screenshots of the app.
 - What the mockup numbers do and do not show: positions, box counts and contrast
   were measured in headless Chromium on the mockups at 320–1440px in both themes.
-  They say nothing yet about the real app's client-JS budget or Lighthouse
-  medians; the spec names both as risks to be measured in CI at the Home stage.
+  They say nothing about the real app's client-JS budget or Lighthouse medians;
+  those are measured in CI at every task of the plan.
 - `design-system/shabdar/MASTER.md` still describes the Phase 7 system. The spec
   lists which of its rules the refresh replaces; the file is rewritten at close-out.
 - Notifications (Phase 15) stays the next product domain; the owner decides the
   order.
+
+### `main` is red on one test since PR #25
+
+Read from CI on 2026-11-14, not changed by this branch:
+
+- PR #25 ("Render shell icons consistently during SSR", merge `fda97b0`) added
+  `apps/web/tests/e2e/shell-ssr.spec.ts`. Its second test fails on `main`
+  (run 43628236875) and failed on the PR's own branch (run 43628196721): 167
+  passed, 1 failed. Line 49 asks for the button named «جستجو» on the whole page,
+  and Home has two: the navigation action and the search form's submit button.
+- The workflow skips Lighthouse when Playwright fails, so `fda97b0` has no
+  Lighthouse verdict; its client-JS budget step did run and passed. The last full
+  green run is 43616929450 on `9ba038e`, the commit before PR #25.
+- Task 1 of the plan scopes that locator to the main navigation, as
+  `navigation.spec.ts:123` already does, and records a green baseline for this
+  branch before any redesign.
+
+### Baseline for the refresh
+
+| | Home | Detail | Source |
+|---|---|---|---|
+| Client JS, gzip bytes | 99,578 | 100,464 | CI run 43616929450 (`9ba038e`) |
+| LCP median | 2404.4 ms | 2556.7 ms | same; ceiling 2700 ms |
+| CLS median | 0.0727 | 0.0022 | same; ceiling 0.1 |
+| TBT median | 122 ms | 86 ms | same; ceiling 200 ms |
+| Accessibility | 1.00 | 1.00 | same; floor 0.95 |
+| Inline CSS bytes | 33,341 | 33,340 | local build of `fda97b0` with `scripts/smoke-stub-api.mjs` |
+
+Detail's LCP and Home's CLS are the two numbers with little room. Every task of
+the plan appends a row here from its own CI run.
+
+### Verified locally in this session, and what was not
+
+- `npm run typecheck` exits 0 and `npm run test:unit` passes 37 tests on the
+  unchanged app code (Node 22.22.3).
+- A throwaway build outside the repository proved the icon mechanism the plan
+  uses: the sprite is emitted as a hashed file even when small (`?no-inline`), it
+  is served as `image/svg+xml`, icons render with and without JavaScript, and the
+  server and the browser write the same `href` once the origin is stripped.
+- A local headless Chromium against a stub API measured 95,643 (Home) and 96,522
+  (Detail) gzip bytes of client JS on `fda97b0`. That is an approximation with the
+  CI method, not a CI number; it suggests PR #25 freed about 3.9 KB.
+- Not run locally: Playwright, the API suite and Lighthouse. The sandbox has no
+  MariaDB or Rust toolchain, and CI logs and artifacts cannot be downloaded from
+  it; run annotations can.
 
 ## Current launch-preparation pass (Phase 14, 2026-11-09)
 
@@ -1162,7 +1210,7 @@ lives outside the repo; the durable form of those assertions is
   work was carried from the closed PR #23 onto `arena/c1cbe813-shabdar`, which
   is where CI verified it, and PR #24 merges it. Phase 15 (notifications) is
   next.
-- **Visual refresh — DESIGN ONLY on `arena/76915f79-shabdar`.** Direction and
-  three mockup rounds approved in conversation; written spec committed and
-  awaiting the owner's review. No plan yet, no application code, nothing for CI
-  to verify.
+- **Visual refresh — DESIGN AND PLAN ONLY on `arena/76915f79-shabdar`.** Direction,
+  three mockup rounds and the written spec are approved; the nine-task plan is
+  committed and awaits the owner's review. No application code. `main` is red on
+  one test since PR #25 (first section); the plan's Task 1 fixes it.

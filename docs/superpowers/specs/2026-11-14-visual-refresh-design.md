@@ -3,9 +3,14 @@
 **Date:** 2026-11-14
 
 **Status:** Direction and screens approved in conversation, one mockup round at a
-time (Home, Listing detail, then post form + dashboard + messages). This written
-spec awaits the owner's review. **No application code has been written**; per
-`AGENTS.md`, implementation starts only after this spec and its plan are approved.
+time (Home, Listing detail, then post form + dashboard + messages). The owner
+approved this spec on 2026-11-14. **No application code has been written**; per
+`AGENTS.md`, implementation starts only after the plan is approved too.
+
+**Plan:** [`docs/superpowers/plans/2026-11-14-visual-refresh.md`](../plans/2026-11-14-visual-refresh.md).
+Its section "Corrections to the spec" lists what planning found (among them: `main`
+is red on one test since PR #25, and four test edits that §9 does not list). Where
+the plan and this spec differ, the plan wins.
 
 **Branch:** `arena/76915f79-shabdar`. **Baseline:** `fda97b0` (merge of PR #25).
 
