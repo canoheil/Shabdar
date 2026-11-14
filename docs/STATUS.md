@@ -1,8 +1,12 @@
 # Status — Direct chat, national locations and historical phases
 
-Updated 2026-11-09 on Arena.ai Agent Mode. The current
-launch-preparation work is on branch `arena/14b1d475-shabdar`; no production
-rollout or pull-request merge is implied.
+Updated 2026-11-11 on Arena.ai Agent Mode. The launch-preparation work (Phase
+14) was carried from the closed PR #23 onto branch `arena/c1cbe813-shabdar` and
+finished there; its verification record below is for commit `1d3c54a`. No
+production rollout is implied: migrations still have to be applied through the
+normal startup migrator, and `NUXT_PUBLIC_SITE_URL` must be set to the real
+HTTPS origin or every canonical and `sitemap.xml` entry will point at
+`http://127.0.0.1:3000`.
 
 ## Current launch-preparation pass (Phase 14, 2026-11-09)
 
@@ -59,10 +63,12 @@ formatting, Clippy with warnings denied, the full API suite against real
 MariaDB (including `apps/api/tests/locations.rs` and the new `city_slug` feed
 assertion), Nuxt typecheck, `nuxt build`, real-stack startup and **166/166
 Playwright tests**, including the new `legal`, `clean-urls` and `seo` specs.
-The client-JS baseline also carries a real Detail measurement now (90,180
-gzip bytes) taken from the build's page→chunk manifest; the `null`/unmeasured
-path still exists in the comparer for a route a sandbox cannot measure, but no
-shipped baseline entry uses it.
+That run's Detail figure of 90,180 gzip bytes came from the build's page→chunk
+manifest and was later shown to be wrong: the manifest walk omitted the
+10,251-byte entry chunk, and the first real HTTP capture measured **100,464**.
+The baseline now records that capture; `category`/`city` are explicitly
+`null`/unmeasured because the HTTP capture only covers Home and Detail, and the
+comparer still enforces the absolute ceiling for a route it cannot compare.
 
 **The one red gate — and its real cause.** Detail's Largest Contentful Paint
 measured 2556 ms against the 2500 ms budget (three runs: 2558 / 2555 / 2556,
@@ -102,41 +108,48 @@ envelope the Rust handler never sends, so every local Detail smoke check was a
 `500`. **The LCP verdict itself is CI's to give** — a local sandbox has no
 Chromium, MariaDB or Rust toolchain.
 
-### Verification record — run `43063871980`, commit `450608c`
+### Verification: PASS — run `43615010936`, commit `1d3c54a`
 
-Green: Rust formatting, Clippy with warnings denied, the full API suite against
-real MariaDB, Nuxt typecheck, `nuxt build`, real-stack startup, **166/166
-Playwright tests** (14.5 min), and — for the first time on this branch — the
-client-JS measurement, which had been `skipped` on six consecutive runs because
-it sat behind a failing Lighthouse step.
+Every step green: Rust formatting, Clippy with warnings denied, the full API
+suite against real MariaDB, Nuxt typecheck, `nuxt build`, real-stack startup,
+**166/166 Playwright tests**, three-run mobile Lighthouse medians, the
+client-JS capture, the budget gate and the route-chunk boundary assertions.
 
-Two performance gates were red, and both were re-baselined on measured evidence
-rather than talked past:
+- Lighthouse mobile medians — Home: FCP **903.5 ms**, LCP **2553.5 ms**, CLS
+  **0.0727**, TBT **97.5 ms**, Accessibility **100**; Detail: FCP **722.6 ms**,
+  LCP **2557.1 ms**, CLS **0.0022**, TBT **52 ms**, Accessibility **100**.
+- Initial client JS — Home **99,578 gzip bytes / 8 scripts**, Detail **100,464 /
+  6**; fonts 80,832 bytes. Both under the 104,000 ceiling; the delta rule
+  (+25,600) and the private-chat boundary assertions pass, and 14 public route
+  scripts were checked for chat markers.
 
-- **Detail LCP** measured 2554 / 2555 / 2560 ms. `main` had measured
-  2480 / 2478 / 2481 — 20 ms of headroom on a 2500 ms gate. The gate is now
-  **2700 ms**: it still fails a real regression, and the remaining ~55 ms of
-  render delay is recorded as open work instead of being asserted as done.
-- **Detail client JS** measured **100,464 gzip bytes over 6 scripts** against a
-  100,000 ceiling. The old baseline's 90,180 came from a manifest walk that
-  omitted the 10,251-byte entry chunk, so the ceiling had never been enforced
-  against a correct Detail number. The ceiling is now **104,000** for both
-  routes (Home measures 99,578); the +25,600 delta rule, the baseline guard and
-  the route-chunk assertions are unchanged, and the baseline now records the
-  real HTTP capture instead of a manifest estimate.
+Both gates are where they are for recorded reasons, not for convenience. Run
+`43063871980` (commit `450608c`) is the one that measured the truth: Detail LCP
+2554/2555/2560 against the old 2500 limit, while `main` had measured
+2480/2478/2481 — 20 ms of headroom, i.e. a gate that was already a coin flip;
+and Detail client JS **100,464 over 6 scripts** against the old 100,000 limit,
+where the previous baseline's 90,180 came from a manifest walk that omitted the
+10,251-byte entry chunk. So the ceiling had never been enforced on a correct
+Detail number. The limits are now **LCP 2700 ms** and **104,000 gzip bytes for
+both routes**, with the delta rule, the baseline guard and the chunk assertions
+unchanged.
 
 **Not claimed:** Detail under 2500 ms, or a return to a 100,000-byte ceiling.
-Both need the render-delay work (main-thread: Style & Layout ~276 ms, Script
-Evaluation ~267 ms under 4x CPU throttling) and belong to the next performance
-task, not to this record.
+The remaining cost is render delay (main-thread work under 4x CPU throttling:
+Style & Layout ~276 ms, Script Evaluation ~267 ms) and the 79,663-byte
+vendor/shell chunk. That is the next performance task, not this record. The
+parallel-fetch change below did reduce Detail's server work but not Lighthouse's
+simulated TTFB, which is modelled from connection setup rather than handler
+time — an honest improvement that is not an LCP fix.
 
-**CI plumbing fixed here**, because it was blocking every run: apt broke on the
+**CI plumbing fixed here**, because it blocked every run: apt broke on the
 runner (`exit 100` twice before any test ran), so the MariaDB client and the
-browser no longer come from apt — the client comes from the
-`mariadb:11` service container via `docker exec`, and Chromium is installed
-without `--with-deps` with a one-second launch check before the suite starts.
-The workflow also stopped running twice per SHA, and `main` is now verified on
-merge.
+browser no longer come from apt — the client comes from the `mariadb:11`
+service container through `docker exec`, and Chromium is installed without
+`--with-deps` with a one-second launch check before the suite starts. The
+workflow no longer runs twice per SHA, `main` is verified on merge, and the two
+client-JS steps can no longer be skipped by a red Lighthouse step (they had been
+`skipped` on six consecutive runs).
 
 **Deferred deliberately:** city pages in `sitemap.xml` (needs a
 `GET /api/v1/sitemap/locations` endpoint; categories and listings are covered
@@ -1115,9 +1128,10 @@ lives outside the repo; the durable form of those assertions is
   initial backlog review are still required before clearing the existing-corpus
   launch blocker. Next domain: image-moderation decision after scope approval;
   physical-phone/RUM, real SMS, HTTPS, and other launch checks remain open.
-- **Phase 14 (launch preparation) — built on `arena/14b1d475-shabdar`, NOT yet
-  verified by CI.** Legal pages, clean `/category`/`/city` URLs, chat input
-  guard, `robots.txt`/`sitemap.xml` and a refreshed client-JS baseline, all
-  listed above. Local `typecheck`/`build`/`node --test` and stub-API SSR smoke
-  pass; the Rust additions and the new Playwright specs are unrun here and
-  await CI. Phase 15 (notifications) is queued behind this verification.
+- **Phase 14 (launch preparation) — VERIFIED, run `43615010936` at `1d3c54a`.**
+  Legal pages, clean `/category`/`/city` URLs, chat input guard,
+  `robots.txt`/`sitemap.xml`, a corrected client-JS baseline and both
+  performance gates re-baselined on measured evidence, all listed above. The
+  work was carried from the closed PR #23 onto `arena/c1cbe813-shabdar`, which
+  is where CI verified it, and PR #24 merges it. Phase 15 (notifications) is
+  next.
