@@ -18,19 +18,19 @@
         <ul class="shell__nav-list">
           <li class="shell__nav-item">
             <NuxtLink to="/" class="shell__nav-action">
-              <PhHouse :size="22" aria-hidden="true" />
+              <ShellIcon name="house" />
               <span>خانه</span>
             </NuxtLink>
           </li>
           <li class="shell__nav-item">
             <button type="button" class="shell__nav-action" @click="focusHomeSearch">
-              <PhMagnifyingGlass :size="22" aria-hidden="true" />
+              <ShellIcon name="search" />
               <span>جستجو</span>
             </button>
           </li>
           <li class="shell__nav-item">
             <NuxtLink to="/post" class="shell__nav-action">
-              <PhPlusCircle :size="22" aria-hidden="true" />
+              <ShellIcon name="plus" />
               <span>ثبت</span>
             </NuxtLink>
           </li>
@@ -57,20 +57,20 @@
           </li>
           <li class="shell__nav-item">
             <NuxtLink to="/me/favorites" class="shell__nav-action">
-              <PhHeart :size="22" aria-hidden="true" />
+              <ShellIcon name="heart" />
               <span>ذخیره‌ها</span>
             </NuxtLink>
           </li>
           <li class="shell__nav-item">
             <NuxtLink :to="accountTarget" class="shell__nav-action">
-              <PhUserCircle :size="22" aria-hidden="true" />
+              <ShellIcon name="user" />
               <span>{{ accountLabel }}</span>
             </NuxtLink>
           </li>
           <template v-if="user?.is_admin">
             <li v-for="item in adminLinks" :key="item.to" class="shell__nav-item shell__nav-item--admin">
               <NuxtLink :to="item.to" class="shell__nav-action">
-                <PhShieldCheck :size="22" aria-hidden="true" />
+                <ShellIcon name="shield" />
                 <span>{{ item.label }}</span>
               </NuxtLink>
             </li>
@@ -101,15 +101,6 @@
 </template>
 
 <script setup lang="ts">
-import {
-  PhHeart,
-  PhHouse,
-  PhMagnifyingGlass,
-  PhPlusCircle,
-  PhShieldCheck,
-  PhUserCircle,
-} from '@phosphor-icons/vue'
-
 const route = useRoute()
 const { user, status: authStatus, refresh: refreshAuth } = await useAuth()
 
