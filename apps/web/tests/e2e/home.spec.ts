@@ -11,29 +11,38 @@ test('@home search-led hierarchy and visible categories work at mobile and deskt
   await page.goto('/')
   await expect(page.getByRole('heading', { level: 1 })).toContainText('جستجو')
   await expect(page.getByRole('searchbox', { name: 'جستجو', exact: true })).toBeVisible()
-  const categories = page.locator('.home__categories')
+  const categories = page.locator('.browser__categories')
   await expect(categories).toBeVisible()
-  // Seven seeded categories plus the native "همه" action.
-  await expect(categories.getByRole('button')).toHaveCount(8)
-  await expect(categories.getByRole('button', { name: 'همه', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  const firstCategory = categories.getByRole('button').nth(1)
+  // Seven seeded categories plus the native "همه" action. Since Phase 14 each
+  // chip is a real clean URL (/category/{slug}) marked with aria-current.
+  await expect(categories.getByRole('link')).toHaveCount(8)
+  await expect(categories.getByRole('link', { name: 'همه', exact: true })).toHaveAttribute('aria-current', 'page')
+  const firstCategory = categories.getByRole('link').nth(1)
   await firstCategory.click()
-  await expect(firstCategory).toHaveAttribute('aria-pressed', 'true')
-  await expect(page).toHaveURL(/[?&]category=[^&]+/)
+  await expect(firstCategory).toHaveAttribute('aria-current', 'page')
+  // With no other filter active the chip is a clean canonical URL.
+  await expect(page).toHaveURL(/\/category\/[^/?]+$/)
   await expect(page.getByRole('button', { name: 'فیلترها', exact: true })).toBeVisible()
   await expectNoOverflow(page)
   await expectTouchTargets(page)
   await expectNoSeriousA11y(page)
 
   await page.setViewportSize({ width: 1024, height: 900 })
-  const desktopFilters = page.locator('.home__desktop-filters')
+  const desktopFilters = page.locator('.browser__desktop-filters')
   await expect(desktopFilters).toBeVisible()
-  await expect(desktopFilters.getByLabel('دسته', { exact: true })).toBeVisible()
+  // The category is fixed by the /category/{slug} path, so that one control is
+  // intentionally absent; every other filter stays available.
+  await expect(desktopFilters.getByLabel('دسته', { exact: true })).toHaveCount(0)
   await expect(desktopFilters.getByLabel('استان', { exact: true })).toBeVisible()
   await expect(desktopFilters.getByLabel('شهر', { exact: true })).toBeVisible()
   await expect(desktopFilters.getByLabel('مرتب‌سازی', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'فیلترها', exact: true })).toHaveCount(0)
   await expectNoOverflow(page)
+
+  // Home itself still offers every filter, including the category select.
+  await page.goto('/')
+  await expect(desktopFilters.getByLabel('دسته', { exact: true })).toBeVisible()
+  await expect(desktopFilters.getByLabel('استان', { exact: true })).toBeVisible()
 })
 
 test('@home national province and city filters load real locations and survive reload', async ({ page }) => {
@@ -50,7 +59,7 @@ test('@home national province and city filters load real locations and survive r
   await expect(page.locator('.home__intro')).not.toContainText('گیلان')
   await expect(page.locator('.home__intro')).not.toContainText('رشت')
 
-  const filters = page.locator('.home__desktop-filters')
+  const filters = page.locator('.browser__desktop-filters')
   const province = filters.getByLabel('استان', { exact: true })
   const city = filters.getByLabel('شهر', { exact: true })
   await expect(province.locator('option')).toHaveCount(32)
@@ -82,7 +91,7 @@ test('@home national province and city filters load real locations and survive r
 test('@home city-loading failure keeps the selected province and retries real options', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 900 })
   await page.goto('/')
-  const filters = page.locator('.home__desktop-filters')
+  const filters = page.locator('.browser__desktop-filters')
   const province = filters.getByLabel('استان', { exact: true })
   const city = filters.getByLabel('شهر', { exact: true })
   let fail = true
@@ -119,13 +128,16 @@ test('@home search debounce, URL state and Back restore controls', async ({ page
   await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe('فرش')
   await expect.poll(() => feedRequests.length).toBe(1)
   const searchUrl = page.url()
-  const categories = page.locator('.home__categories')
-  await categories.getByRole('button').nth(1).click()
+  const categories = page.locator('.browser__categories')
+  await categories.getByRole('link').nth(1).click()
+  // A search term is still active, so the chip keeps it as `?q=` instead of
+  // dropping the user's query; the category stays in the same query string.
   await expect(page).toHaveURL(/[?&]category=[^&]+/)
+  await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe('فرش')
   await page.goBack()
   await expect(page).toHaveURL(searchUrl)
   await expect(search).toHaveValue('فرش')
-  await expect(categories.getByRole('button', { name: 'همه', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(categories.getByRole('link', { name: 'همه', exact: true })).toHaveAttribute('aria-current', 'page')
   await page.goBack()
   await expect(page).toHaveURL(originalUrl)
   await expect(search).toHaveValue('')
@@ -254,7 +266,7 @@ test('@home load more preserves confirmed cards and cursor through failure and d
   await expect(cards).toHaveCount(20)
   const confirmedTitles = await cards.locator('h3').allTextContents()
   expect(new Set(confirmedTitles).size).toBe(20)
-  const more = page.locator('.home__pagination').getByRole('button')
+  const more = page.locator('.browser__pagination').getByRole('button')
   await expect(more).toBeVisible()
 
   let failLoads = true

@@ -23,22 +23,41 @@ function databaseConfig() {
   }
 }
 
-export async function runSql(sql: string): Promise<string> {
+/// The CLI can come from two places. A developer machine usually has `mariadb`
+/// on PATH; CI may not, because the client is installed there from the service
+/// container instead of from apt (`MARIA_CONTAINER`). Inside the container the
+/// server is reached over its own socket, so host/port are only passed on the
+/// PATH route. Both forms run the same batch SQL, so no test changes meaning.
+function clientInvocation(sql: string): { command: string; args: string[] } {
   const config = databaseConfig()
-  const { stdout } = await execFileAsync(
-    'mariadb',
-    [
+  const shared = [
+    `--user=${config.user}`,
+    `--password=${config.password}`,
+    `--database=${config.database}`,
+    '--batch',
+    '--skip-column-names',
+    `--execute=${sql}`,
+  ]
+  const container = process.env.MARIA_CONTAINER
+  if (container) {
+    return { command: 'docker', args: ['exec', container, 'mariadb', ...shared] }
+  }
+  return {
+    command: 'mariadb',
+    args: [
       `--host=${config.host}`,
       `--port=${config.port}`,
-      `--user=${config.user}`,
-      `--password=${config.password}`,
-      `--database=${config.database}`,
-      '--batch',
-      '--skip-column-names',
-      `--execute=${sql}`,
+      ...shared,
     ],
-    { timeout: 30_000, maxBuffer: 1024 * 1024 },
-  )
+  }
+}
+
+export async function runSql(sql: string): Promise<string> {
+  const { command, args } = clientInvocation(sql)
+  const { stdout } = await execFileAsync(command, args, {
+    timeout: 30_000,
+    maxBuffer: 1024 * 1024,
+  })
   return stdout.trim()
 }
 

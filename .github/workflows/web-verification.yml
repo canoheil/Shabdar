@@ -4,15 +4,15 @@ on:
   push:
     # Every agent session works on its own arena/* branch; verifying the whole
     # namespace keeps a new session branch covered without editing this file.
+    # `main` is included so a merge is verified on the commit that actually
+    # ships, not only on the branch that proposed it.
+    #
+    # There is deliberately no `pull_request` trigger. Branches in this
+    # repository are in-repo, so a PR fired the same job a second time for the
+    # same SHA (one of the two runs always ended up cancelled). The push run is
+    # the single source of truth for a branch, and PRs inherit it.
     branches:
       - 'arena/**'
-    paths:
-      - apps/api/**
-      - apps/web/**
-      - .github/workflows/web-verification.yml
-      - docs/performance/**
-  pull_request:
-    branches:
       - main
     paths:
       - apps/api/**
@@ -81,15 +81,33 @@ jobs:
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
 
-      - name: Install MariaDB client
+      # The MariaDB client used to be installed from apt. Runs 43050731523 and
+      # 43052074478 both died here with apt's exit 100 before a single test ran,
+      # twice in a row, so the client now comes from the service container that
+      # is already running next to the job: no package mirror, no name drift.
+      # apt stays as a fallback for the case where docker cannot see it.
+      - name: Resolve MariaDB client
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends mariadb-client
+          set -euo pipefail
+          if container=$(docker ps --filter "ancestor=mariadb:11" --format '{{.ID}}' | head -n1) \
+             && [ -n "${container}" ]; then
+            echo "MARIA_CONTAINER=${container}" >> "$GITHUB_ENV"
+            docker exec "${container}" mariadb --version
+          else
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends mariadb-client \
+              || sudo apt-get install --yes --no-install-recommends default-mysql-client
+          fi
 
       - name: Create scratch test database
         run: |
-          mariadb --host=127.0.0.1 --user=root --password=shabdar_test \
-            --execute="CREATE DATABASE IF NOT EXISTS shabdar_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+          set -euo pipefail
+          sql="CREATE DATABASE IF NOT EXISTS shabdar_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+          if [ -n "${MARIA_CONTAINER:-}" ]; then
+            docker exec "${MARIA_CONTAINER}" mariadb --user=root --password=shabdar_test --execute="${sql}"
+          else
+            mariadb --host=127.0.0.1 --user=root --password=shabdar_test --execute="${sql}"
+          fi
 
       - name: Install locked web dependencies
         working-directory: apps/web
@@ -179,6 +197,7 @@ jobs:
         run: npm run typecheck
 
       - name: Build Nuxt production
+        id: nuxt-build
         working-directory: apps/web
         run: npm run build
 
@@ -206,9 +225,43 @@ jobs:
           cat "$E2E_API_LOG"
           exit 1
 
+      # `--with-deps` shells out to apt, and apt is what failed twice on this
+      # runner (exit 100 / 1) before a single test could run. The ubuntu-latest
+      # image already carries Chromium's shared libraries, so the plain download
+      # is tried first and the apt path only as a fallback. Either failure is
+      # annotated as base64 so the log is readable through the API.
       - name: Install Chromium
         working-directory: apps/web
-        run: npx playwright install --with-deps chromium
+        run: |
+          set +e
+          npx playwright install chromium > /tmp/pw-install.log 2>&1
+          status=$?
+          if [ "$status" -eq 0 ]; then
+            # Prove the browser actually starts here, not thirteen minutes later
+            # inside the suite: a missing shared library fails in one second.
+            node --input-type=module -e "import { chromium } from '@playwright/test'; const b = await chromium.launch(); await b.close(); console.log('chromium launch ok')" >> /tmp/pw-install.log 2>&1
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              echo 'installed but will not launch; adding system dependencies' >> /tmp/pw-install.log
+            fi
+          fi
+          if [ "$status" -ne 0 ]; then
+            npx playwright install --with-deps chromium >> /tmp/pw-install.log 2>&1
+            status=$?
+          fi
+          if [ "$status" -ne 0 ]; then
+            tail -n 60 /tmp/pw-install.log
+            python - <<'PY'
+          import base64
+          from pathlib import Path
+
+          payload = Path('/tmp/pw-install.log').read_bytes()[-16000:]
+          encoded = base64.b64encode(payload).decode()
+          for offset in range(0, len(encoded), 3500):
+              print(f'::error::PW_INSTALL_LOG_BASE64={encoded[offset:offset + 3500]}')
+          PY
+          fi
+          exit "$status"
 
       - name: Run real-stack Playwright
         working-directory: apps/web
@@ -250,11 +303,22 @@ jobs:
           fi
           exit "$status"
 
+      # The two budget steps stay after Playwright (they measure the state the
+      # suite leaves behind) but must not be skipped when the Lighthouse gate
+      # above fails. Without `always()` a single red performance assertion
+      # silently suppressed the client-JS verdict for six consecutive runs on
+      # the Phase 14 branch, so the budget was never actually exercised.
+      # `measure:client` creates its own fixtures, so it needs no prior step,
+      # but it does need a build: when an earlier step dies (an apt mirror flake
+      # once killed the MariaDB client install) these would otherwise fail with
+      # exit 127 and bury the real error.
       - name: Measure production route client JS after the final Playwright fixture reset
+        if: always() && steps.nuxt-build.outcome == 'success'
         working-directory: apps/web
         run: npm run measure:client
 
       - name: Check production route client JS budget
+        if: always() && steps.nuxt-build.outcome == 'success'
         working-directory: apps/web
         run: npm run test:client-budget
 

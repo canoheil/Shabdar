@@ -47,6 +47,20 @@ export default defineNuxtConfig({
               if (/\/app\/components\/(?:MessageBubble|ListingReferenceCard|ConversationComposer|ConversationListItem)\.vue/.test(id)) return
               if (/\/app\/composables\/(?:useInboxSync|useConversationThread|useMessageSend)\.ts/.test(id)) return
               if (/\/app\/utils\/contactSeller\.ts/.test(id)) return
+              // The shared listing browser is Home's, /category's and /city's feed
+              // UI. The shell catch-all below would ship it to every route — Detail
+              // included, which needs none of it — so it is left to Rollup, which
+              // keeps it in a chunk imported only by those three pages. Do not give
+              // it a chunk NAME: a named manual chunk also captures the shared
+              // runtime it touches, and then the shell imports that back. The Vue
+              // sub-module queries (`?vue&type=script`) must match too, or the
+              // component body stays in the shell. SSR is unaffected either way:
+              // this is a plain render-time import, not a lazy one.
+              if (/\/app\/components\/ListingBrowser\.vue/.test(id)) return
+              // The gallery is Detail-only UI. It is harmless to keep in the shell
+              // when the shell has room, but the feed split above needs that room
+              // back, and only Detail ever renders a gallery.
+              if (/\/app\/components\/ListingGallery\.vue/.test(id)) return
               if (/\/app\/(components|layouts|composables)\//.test(id)) return 'shell'
             },
           },
@@ -75,6 +89,11 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // Same-origin /api proxy target (Task 6). Override: NUXT_API_BASE.
     apiBase: 'http://127.0.0.1:8080',
+    public: {
+      // Absolute origin used by sitemap.xml, robots.txt and canonical links.
+      // Override in a deployment: NUXT_PUBLIC_SITE_URL=https://example.com
+      siteUrl: 'http://127.0.0.1:3000',
+    },
   },
 
   modules: ['@nuxtjs/color-mode'],

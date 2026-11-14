@@ -311,6 +311,38 @@ test('@chat-entry drafts survive a reload per viewer and conversation', async ({
   expect(parsed.clientMessageId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
 })
 
+test('@chat-entry whitespace and zero-width drafts never leave the composer', async ({ page }) => {
+  const conversation = await startConversation('buyer', readFixtures().detailPath.replace('/listings/', ''))
+  await openThread(page, readFixtures().buyerStorage, conversation.public_id)
+  await expect(composerInput(page)).toBeEnabled()
+
+  // Nothing is sent, so any POST here is a real failure.
+  const posts: string[] = []
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && /\/messages$/.test(new URL(request.url()).pathname)) {
+      posts.push(request.url())
+    }
+  })
+
+  // Real invisible characters, exactly as a keyboard can produce them.
+  const invisibleDrafts = ['   ', '\u200c', '\u200c\u200c  ', '\n\t ', '\u200b\u200f']
+  for (const draft of invisibleDrafts) {
+    await composerInput(page).fill(draft)
+    await expect(sendButton(page)).toBeDisabled()
+    await composerInput(page).press('Enter')
+    await expect(bubbles(page)).toHaveCount(0)
+  }
+  expect(posts).toEqual([])
+
+  // A visible character among invisibles is a real message.
+  await composerInput(page).fill('\u200c سلام \u200c')
+  await expect(sendButton(page)).toBeEnabled()
+  await sendButton(page).click()
+  await expect(bubbles(page)).toHaveCount(1)
+  await expect(bubbles(page).first().locator('.bubble__body')).toHaveText('\u200c سلام \u200c')
+  expect(posts).toHaveLength(1)
+})
+
 test('@chat-entry unicode, counters and literal markup never overflow or execute', async ({ page }) => {
   const conversation = await startConversation('buyer', readFixtures().detailPath.replace('/listings/', ''))
   await openThread(page, readFixtures().buyerStorage, conversation.public_id)

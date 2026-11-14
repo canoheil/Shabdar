@@ -154,7 +154,8 @@ Phase 11 adds exactly `image = "=0.25.9"` with default features disabled and onl
 - `<html lang="fa" dir="rtl">`. RTL-safe CSS logical properties.
 - Listing pages are server-rendered with title, description, canonical URL, Open Graph tags, breadcrumbs, and JSON-LD `Product` with `Offer`. Only include fields that are true (no fake ratings). `AggregateRating` is included only when `rating_count` is above a minimum (proposed: 3).
 - Removed or deleted listings return HTTP 410.
-- Sitemap includes active listings and category pages. Robots rules block account, admin, and private pages.
+- `sitemap.xml` (Nitro route, `Cache-Control: public, max-age=600, s-maxage=3600`) includes the fixed public pages, every active category and up to 20 pages of 200 active listings. City pages are deferred until an API endpoint can enumerate them. `robots.txt` allows `/` and disallows `/me`, `/admin`, `/login`, and advertises the sitemap. Absolute URLs come from `runtimeConfig.public.siteUrl` (`NUXT_PUBLIC_SITE_URL`).
+- Category and city pages are real URLs (`/category/{slug}`, `/city/{slug}`) rendered by the same `ListingBrowser` as Home; an unknown slug is a server-rendered 404. Filters other than the one fixed by the path stay in the query, so `/listings`-style query URLs keep working without redirects.
 - Filtered and sorted URLs (`?sort=…`) use a canonical URL without the sort parameter to avoid duplicate indexing.
 - User-specific data (favorites, own rating, own comments) is never rendered into cached public HTML. Those parts load on the client after SSR.
 - Persian numbers in display: a single policy, applied in the frontend only. Stored values stay numeric.

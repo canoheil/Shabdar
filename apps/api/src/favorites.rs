@@ -102,6 +102,7 @@ pub async fn list(
     let mut sql = String::from(
         "SELECT l.id, l.public_id, l.slug, l.title, l.price_toman, l.price_type, \
          l.rating_sum, l.rating_count, l.published_at, c.name_fa AS city, \
+         c.slug AS city_slug, \
          p.name_fa AS province, cat.name_fa AS category, \
          (SELECT storage_key FROM listing_images WHERE listing_id = l.id \
           ORDER BY sort_order LIMIT 1) AS cover, \
