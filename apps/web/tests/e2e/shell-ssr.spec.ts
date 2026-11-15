@@ -43,10 +43,11 @@ test('shell hydrates without mismatch for anonymous and admin navigation', async
       expect(response?.status()).toBe(200)
       await expect(page.locator(`${nav} .shell__nav-action svg`).first()).toBeVisible()
       if (storageState) {
-        await expect(page.getByRole('link', { name: 'صف بررسی', exact: true })).toHaveCount(1)
+        // Admin entries are desktop-only: at this 375px viewport they are rendered but display: none.
+        await expect(page.getByRole('link', { name: 'صف بررسی', exact: true, includeHidden: true })).toHaveCount(1)
         await expect(page.locator('.shell__nav-item--admin svg path')).toHaveCount(6)
       }
-      await page.getByRole('button', { name: 'جستجو', exact: true }).click()
+      await page.getByRole('navigation', { name: 'ناوبری اصلی' }).getByRole('button', { name: 'جستجو', exact: true }).click()
       await expect(page.getByRole('searchbox', { name: 'جستجو', exact: true })).toBeFocused()
       expect(errors).toEqual([])
     } finally {
