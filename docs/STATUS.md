@@ -1,8 +1,10 @@
 # Status — Direct chat, national locations and historical phases
 
-Updated 2026-11-15 on Arena.ai Agent Mode: the visual-refresh plan was approved
-and its Task 1 (a green baseline) is done; no application code has changed yet
-(see the first section). `main` itself is still red on one test since PR #25
+Updated 2026-11-15 on Arena.ai Agent Mode: Tasks 1 and 2 of the nine-task visual
+refresh are done on branch `arena/76915f79-shabdar`: a green baseline, then the
+new foundation (colours, type and spacing scales, icons, shared parts and the
+page shell). Each page's own layout is still the old one until its task (see the
+first section). `main` itself is still red on one test since PR #25
 until that fix is merged. Before that, updated 2026-11-11: the
 launch-preparation work (Phase 14) was carried from the closed PR #23 onto
 branch `arena/c1cbe813-shabdar` and finished there; its verification record
@@ -12,10 +14,15 @@ normal startup migrator, and `NUXT_PUBLIC_SITE_URL` must be set to the real
 HTTPS origin or every canonical and `sitemap.xml` entry will point at
 `http://127.0.0.1:3000`.
 
-## Visual refresh — Task 1 of 9 done: green baseline (2026-11-15)
+## Visual refresh — Task 2 of 9 done: foundation (2026-11-15)
 
-**No application code has changed.** The branch holds the design documents and a
-two-line fix to one end-to-end test.
+**Every page now has the new shell and shared parts; no page has its new layout
+yet.** The colours, the type and spacing scales, the icons, the buttons, fields,
+alerts and empty states, and the navigation are the new ones on every page. What
+is inside a page (Home's hero and cards, the listing page, the forms, the
+account, the messages, the admin pages) is still arranged as before; Tasks 3 to 8
+rebuild those one group at a time. Behaviour, routes, data and the API are
+unchanged.
 
 - The owner asked for a full visual pass ("ugly and dead"). A review of the current
   site on sample data found seven causes; the owner chose the «گرم و خانگی»
@@ -45,8 +52,8 @@ two-line fix to one end-to-end test.
 | Task | State | Commit | CI run |
 |---|---|---|---|
 | 1 Green baseline | Done 2026-11-15 | `a5e2da6` | 43691418582, success |
-| 2 Foundation: tokens, icons, shared parts, shell | Not started; waits for the owner | | |
-| 3 Home, category, city | Not started | | |
+| 2 Foundation: tokens, icons, shared parts, shell | Done 2026-11-15 | `86738a0`, `92efcde` | 43704168232, success (43701510977 on `86738a0` failed on one test) |
+| 3 Home, category, city | Not started; waits for the owner | | |
 | 4 Listing detail | Not started | | |
 | 5 Forms: post, login, advertising | Not started | | |
 | 6 Account: dashboard, favourites, blocks | Not started | | |
@@ -57,7 +64,8 @@ two-line fix to one end-to-end test.
 ### Gate numbers per task
 
 Each cell is Home / Detail. Lighthouse values are the medians of three mobile runs
-in CI. Inline CSS is measured locally on the task's build with
+in CI. The LCP element is the one of the single run that the workflow diagnoses
+(the first of the three). Inline CSS is measured locally on the task's build with
 `scripts/smoke-stub-api.mjs`; it has no ceiling, and a rise above 10% is
 investigated before the push.
 
@@ -66,10 +74,69 @@ investigated before the push.
 | Ceiling or floor | | | ≤ 104,000 | ≤ 2700 | ≤ 0.1 | ≤ 200 | ≥ 0.95 | | 10% line: 36,675 / 36,674 |
 | Before PR #25 (last green on `main`) | `9ba038e` | 43616929450 | 99,578 / 100,464 | 2404.4 / 2556.7 | 0.0727 / 0.0022 | 122 / 86 | 1.00 / 1.00 | `h1` in `.home__intro` / gallery image | not measured |
 | 1 Baseline | `a5e2da6` | 43691418582 | 95,634 / 96,516 | 2405.1 / 2553.3 | 0.0727 / 0.0022 | 99.5 / 72 | 1.00 / 1.00 | `h1` in `.home__intro` / gallery image | 33,341 / 33,340 |
+| 2 Foundation | `92efcde` | 43704168232 | 94,736 / 95,619 | 2405.1 / 2556.6 | 0.0789 / 0.0021 | 62 / 50.5 | 1.00 / 1.00 | first card image / gallery image | 34,642 / 34,641 |
 
-Detail's LCP (147 ms under the ceiling) and Home's CLS (0.027 under) are the two
-numbers with little room. Home's three LCP runs in the baseline were 1698.6, 2409.1
-and 2405.1 ms, so a single run can differ from the median by 700 ms.
+Detail's LCP (143 ms under the ceiling after Task 2) and Home's CLS (0.021 under)
+are the two numbers with little room.
+
+- Home's CLS rose from 0.0727 to 0.0789 in Task 2. The cause is the old one: when
+  the web font replaces the fallback font, the first screen moves by 70px. The new
+  shell starts the page 20 to 33px higher, so more of the moved content is on the
+  first screen. Task 3 rebuilds that first screen and has to bring the number
+  down.
+- Home's three LCP runs were 1698.6, 2409.1 and 2405.1 ms at the baseline and
+  2552.0, 2405.1 and 2403.2 ms after Task 2. The median is the same. The diagnosed
+  run had the `h1` as its LCP element at the baseline (1698.6 ms) and the first
+  card image after Task 2 (2552.0 ms). Which element the other runs chose is not
+  recorded.
+- Client JS fell by 898 / 897 bytes: the icons moved out of the page's code into
+  one static sprite file (5,787 bytes, about 2 kB compressed, cached for a year).
+
+### Task 2: what was built and found
+
+- Built (28 files in `apps/web`, commits `86738a0` and `92efcde`):
+  `tokens.css` with the new palette (39 colours per theme) and the scales;
+  `main.css` rewritten on those scales; the icon system (`app/utils/icons.ts`,
+  `AppIcon.vue`, a committed sprite of 17 Phosphor symbols, and the script that
+  builds it); the shell (a six-item tab bar with a raised «ثبت» below 1024px, a
+  17rem sidebar from 1024px, a theme control with sun and moon); buttons, fields,
+  alerts with a tone icon, the empty state and the avatar. `ShellIcon.vue` is
+  gone.
+- Tests: two new unit files (46 unit tests in all). Three end-to-end files were
+  edited as the plan's rows T2 to T5 say, and one test was added: the shell keeps
+  its labels, names and sizes when the sprite cannot load. These edits were run
+  red against the old build before the implementation.
+- **The first push was red, and it was this work's fault.** CI run 43701510977 on
+  `86738a0` passed 168 of 169 Playwright tests. `comments.spec.ts:93` finds the
+  failed-comment alert by its exact text and expects that element to hold focus.
+  The plan had put the alert's words inside a new wrapper element, so the test
+  found the wrapper instead of the focused alert. Commit `92efcde` removes the
+  wrapper and places the icon with CSS; the alerts look the same to the pixel.
+  Run 43704168232 on `92efcde` is green: 169 passed, Lighthouse and the client-JS
+  budget passed.
+- Why it was not caught before the push: that test creates a listing through the
+  real API, so it cannot run in this sandbox, and before the push the tests were
+  searched for the class names that changed but not for the alert texts. The plan
+  now forbids wrapping text that a test finds by its exact words, and a scan of
+  the suite found no second place of that kind.
+- Left for the page tasks (each is recorded in the plan):
+  - Home's CLS, above (Task 3).
+  - In an alert that holds a row of text and a button, the text is 8px below the
+    tone icon from 768px. Each page task aligns its own row.
+  - The conversation page in phone landscape (844×390): the tab bar is docked
+    below 1024px now (it was a static bar from 768px), and the composer sits 176px
+    under it until the page is scrolled. It is fine in portrait, on tablets and on
+    desktop. Task 7 rebuilds this page.
+  - «دیده شد» inside an own chat bubble has a contrast of 4.43:1 in the light
+    theme, just under 4.5:1. It had the same value before the refresh; CI's
+    accessibility matrix does not include the conversation page. Task 7 replaces
+    the bubble colours and re-checks it.
+  - The contents list of the privacy page wraps badly on phones, as it did before
+    (Task 8).
+- Two things the plan asked for were not done, on purpose: the skeleton has no
+  animation (the spec said "the existing animation stays", and there was none),
+  and a unit test that compared the token file with the test tables was dropped
+  because `theme.spec.ts` already checks the computed values in a browser.
 
 ### Task 1: what was found and done
 
@@ -99,7 +166,7 @@ and 2405.1 ms, so a single run can differ from the median by 700 ms.
 
 ### What can be checked locally, and what only CI can say
 
-- Local and exact: `npm run typecheck`, `npm run test:unit` (37 tests today),
+- Local and exact: `npm run typecheck`, `npm run test:unit` (46 tests today),
   `npm run build`, inline CSS bytes. Node 22.22.3 here, Node 26 in CI.
 - Local and approximate: end-to-end specs that create no data can run against the
   built app with a sample-data stub API. On the unchanged app, `quality.spec.ts`
@@ -111,9 +178,13 @@ and 2405.1 ms, so a single run can differ from the median by 700 ms.
   `apps/web/tests/e2e/.artifacts/`.
 - Local client-JS measurement on `fda97b0` read 95,643 / 96,522; CI then measured
   95,634 / 96,516 on the same app code.
-- CI only: the API suite, the real-stack Playwright suite (168 tests), Lighthouse.
+- CI only: the API suite, the real-stack Playwright suite (169 tests), Lighthouse.
   The sandbox has no MariaDB or Rust toolchain. CI logs and artifacts cannot be
   downloaded from it; run annotations can, and they carry the numbers above.
+- Of the 169 end-to-end tests, 62 pass against the stub. The other 107 need the
+  real stack, its fixtures or its OTP log, and Task 2's one red test was among
+  them. A change to shared markup is therefore argued from the tests' source
+  before the push, and CI decides.
 - A throwaway build outside the repository proved the icon mechanism Task 2 uses:
   the sprite is emitted as a hashed file even when small (`?no-inline`), it is
   served as `image/svg+xml`, icons render with and without JavaScript, and the

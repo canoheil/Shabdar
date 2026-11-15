@@ -43,6 +43,21 @@ Line numbers are as of `fda97b0`.
 - CSS first. A template changes only to add, remove or wrap an element, or where a task says
   so. A new disclosure is a native `<details>`. No new client state except `listing-day-now`
   (Task 3).
+- Never wrap existing text that a test finds by its exact words. Playwright's exact-text
+  locator returns the innermost element that holds the text, so a new wrapper takes the place
+  of the element the test meant, and a check of focus, role or class then reads the wrapper.
+  Before a template gains an element around text, search `tests/e2e` for that text. Most of
+  these specs need the real stack and cannot run locally, so only CI shows the failure
+  (found in Task 2: run 43701510977, `comments.spec.ts:124`). A scan of the suite on
+  2026-11-15 found one place where an element found by text is then checked for focus, a
+  class, an attribute or a style: `comments.spec.ts:122-124`.
+- Inside an `AppAlert`, the tone icon is pinned to the first line. The slot is a direct child
+  of the alert, so a paragraph that opens it has `margin: 0`, and the first line of text
+  starts at the top. Today a row of text and a button (`.browser__error`, `.inbox__state`,
+  `.thread__state`, `.favorites__error`, `.blocks-page__error`, `.detail__contact-state`, the
+  admin `__error` rows) centres its text against the 46px button from 768px, which puts the
+  text 8px below the icon. The task that restyles such a row puts icon and text on one line
+  again: the button goes under the text, or the row aligns to its start.
 - Scale (spec §3): weights 400, 600, 800; font sizes only
   `--font-size-12/14/16/18/22/28/36/display`; radii only
   `--radius-small/control/card/panel/dialog/pill`, `50%` or `0`; `box-shadow` only
@@ -103,6 +118,7 @@ also spelled out in the conversation with the Task 1 report.
 | C9 | §7.10: the error page shows Shabdarak | `admin-errors.spec.ts:67,80,104` allow it on 404 only, as today. | The `status === 404` condition stays. |
 | C10 | §4: regular, fill and duotone weights | The mockups also draw small glyphs (carets, check, x) in bold. | A symbol id may end in `-bold`. |
 | C11 | §13.3: "two shadows and two glows" | The field focus halo of §6 is a third `box-shadow` value. | Token `--ring-focus`. |
+| C12 | §6: the skeleton's "existing animation stays" | The old CSS and the component have no animation, and §3 says nothing loops (found while executing Task 2). | The skeleton stays static. |
 
 ## Baseline
 
@@ -137,7 +153,7 @@ investigated before the push.
 | `app/utils/format.ts` | Gains `formatListingDay`. |
 | `app/utils/images.ts` | `LISTING_CARD_IMAGE_SIZES` for the new grid. |
 | SFCs under `app/pages`, `app/components`, `app/layouts` | Scoped composition only, written with tokens. |
-| `tests/unit/icon-sprite.test.mjs`, `design-system.test.mjs`, `listing-format.test.mjs` (new) | Local red/green for sprite contents, the scale, token/test agreement, the day label and category icons. |
+| `tests/unit/icon-sprite.test.mjs`, `design-system.test.mjs`, `listing-format.test.mjs` (new) | Local red/green for sprite contents, the scale, the day label and category icons. |
 | `design-system/shabdar/MASTER.md` | Rewritten in Task 9. |
 
 The mockup pages that produced the boards are in
@@ -215,7 +231,7 @@ Every edit to an existing end-to-end test. "§9" marks the five the spec already
 |---|---|---|---|---|
 | T1 | `shell-ssr.spec.ts:49` | Page-wide button «جستجو» | The same button inside the `ناوبری اصلی` landmark | 1 |
 | T1b | `shell-ssr.spec.ts:46` | Role link «صف بررسی», count 1 | The same, with `includeHidden: true` (found while executing Task 1; see C1) | 1 |
-| T2 | `shell-ssr.spec.ts:20-24` | Each action has one inline `svg path` | Each action's `svg[aria-hidden="true"] use` points at `/_nuxt/sprite.<hash>.svg#<id>`; the sprite answers 200 as `image/svg+xml` and holds every referenced id | 2 |
+| T2 | `shell-ssr.spec.ts:20-24` | Each action has one inline `svg path` | Each action's `svg[aria-hidden="true"] use` points at `/_nuxt/sprite.<hash>.svg#<id>`; the sprite answers 200 as `image/svg+xml` and holds every referenced id; exactly one icon per action is visible and its `<use>` has a non-empty box, so it really painted | 2 |
 | T3 | `shell-ssr.spec.ts:47` | `.shell__nav-item--admin svg path` count 6 | `.shell__nav-item--admin svg use` count 6 | 2 |
 | T4 | `theme.spec.ts:8-66` (§9) | 27 tokens per theme | The 39 rows of spec §3.1 per theme | 2 |
 | T5 | `navigation.spec.ts:53-70` | At 768px the nav is not fixed and sits under the brand | At 768px the nav is fixed at the bottom, brand and theme control share one row, main bottom padding ≥ nav height | 2 |
@@ -285,6 +301,26 @@ git push origin arena/76915f79-shabdar
 
 ### Task 2: Foundation — tokens, scales, icons, shared parts, shell (spec §3–§6)
 
+**As executed (2026-11-15, commits `86738a0` and `92efcde`).** Five things differ from the
+first version of these steps. The steps below are corrected to match; the reasons are in the
+ledger.
+
+- The end-to-end edits of Step 7 were written first and run red against the old build; the
+  implementation followed. These specs run locally against the sample-data stub.
+- The unit test that compared `tokens.css` with the `theme.spec.ts` tables was not written:
+  `theme.spec.ts` checks the computed values in a browser, locally and in CI. The unit suite
+  has 46 tests, not 47.
+- T2 also requires that exactly one icon per action is visible and that its `<use>` has a
+  non-empty box. The box is empty when the sprite is blocked or an id is missing.
+- `main.css` lost the dead `.card__title a` rules as well, its two slow motions are multiples
+  of `--duration-normal`, and an invalid field keeps its red edge under the pointer.
+- `AppAlert` has no `div.app-alert__body`. The first version of Step 5 put the slot inside
+  that wrapper, and CI run 43701510977 on `86738a0` went red: 168 passed, 1 failed.
+  `comments.spec.ts:122-124` finds the failed-comment alert by its exact text and expects that
+  element to hold focus; with the wrapper the locator found the wrapper. Commit `92efcde` puts
+  the slot back as a direct child of the root and hangs the icon in the root's start padding.
+  The rendered alerts are pixel-identical to the wrapper layout.
+
 **Files:**
 - Create: `app/utils/icons.ts`, `app/assets/icons/sprite.svg`, `app/components/AppIcon.vue`,
   `scripts/build-icon-sprite.mjs`, `tests/unit/icon-sprite.test.mjs`,
@@ -309,7 +345,7 @@ git push origin arena/76915f79-shabdar
   and `.avatar` (`.avatar--b` for the viewer's own avatar).
 - Produces `SCOPE` in `tests/unit/design-system.test.mjs`; every later task appends its files.
 
-- [ ] **Step 1: Write the two failing unit tests**
+- [x] **Step 1: Write the two failing unit tests**
 
 `tests/unit/icon-sprite.test.mjs`:
 
@@ -391,32 +427,19 @@ test('no glyph or emoji stands in for an icon, and no inline svg outside AppIcon
   })
   assert.deepEqual(offenders, [])
 })
-
-test('tokens.css and the theme.spec.ts tables agree on 39 colours per theme', () => {
-  const tokens = read('app/assets/css/tokens.css')
-  const block = (selector) => Object.fromEntries([...tokens.slice(tokens.indexOf(`${selector} {`)).split('}')[0].matchAll(/(--color-[\w-]+):\s*(#[0-9A-Fa-f]{6})/g)].map((match) => [match[1], match[2].toUpperCase()]))
-  const light = block(':root')
-  const dark = { ...light, ...block(':root.dark') }
-  const spec = read('tests/e2e/theme.spec.ts')
-  const table = (name) => Object.fromEntries([...spec.slice(spec.indexOf(`const ${name} = {`)).split('} as const')[0].matchAll(/'(--color-[\w-]+)':\s*'(#[0-9A-F]{6})'/g)].map((match) => [match[1], match[2]]))
-  for (const [name, declared] of [['LIGHT', light], ['DARK', dark]]) {
-    const pinned = table(name)
-    assert.equal(Object.keys(pinned).length, 39)
-    for (const [token, value] of Object.entries(pinned)) assert.equal(declared[token], value, `${name} ${token}`)
-  }
-})
 ```
 
-- [ ] **Step 2: Register both files and see them fail**
+- [x] **Step 2: Register both files and see them fail**
 
 Append the two paths to the `node --test` list in `test:unit` and to the `node --test` list
 at the start of `test:client-budget`. Change nothing else in those scripts.
 
 Run: `npm run test:unit`
-Expected: FAIL. `icon-sprite` cannot import `icons.ts`; `design-system` lists 56 offenders in
-`main.css`, the inline `<svg>` in `layouts/default.vue`, and 27 pinned tokens instead of 39.
+Expected: FAIL. `icon-sprite` cannot import `icons.ts`; `design-system` lists the off-scale
+declarations of `main.css` and the inline `<svg>` in `layouts/default.vue`. As run: 44 tests,
+6 failed.
 
-- [ ] **Step 3: Build the icon system**
+- [x] **Step 3: Build the icon system**
 
 `app/utils/icons.ts` exports `ICON_NAMES` and `AppIconName`. This task's names: `house`,
 `house-fill`, `magnifying-glass`, `plus-circle-fill`, `chat-circle`, `chat-circle-fill`,
@@ -456,7 +479,7 @@ withDefaults(defineProps<{ name: AppIconName; size?: number }>(), { size: 20 })
 
 `.app-icon { fill: currentColor; flex: none; }` goes in `main.css`.
 
-- [ ] **Step 4: Write the tokens and the 39-row tables (T4)**
+- [x] **Step 4: Write the tokens and the 39-row tables (T4)**
 
 `tokens.css` gets every colour of spec §3.1 in both themes, and these values, which the spec
 names without numbers:
@@ -480,7 +503,7 @@ Write every colour as six-digit hex. Delete `--shadow-xs`, `--shadow-nav`, `--co
 `--shadow-card` so nothing dangles. Replace the `LIGHT` and `DARK` tables of `theme.spec.ts`
 with the 39 rows of spec §3.1 (the 27 existing names and the 12 new ones).
 
-- [ ] **Step 5: Rewrite `main.css` and the shell to spec §3.3, §5 and §6**
+- [x] **Step 5: Rewrite `main.css` and the shell to spec §3.3, §5 and §6**
 
 Rewrite, do not append: every declaration in `main.css` uses the scale, and the unused
 `.alert-error`, `.alert-ok` and `.empty` rules go. The base `h1` is 28px/800 with a muted lead
@@ -500,6 +523,8 @@ under it, so an inner page needs no header card. These are pinned by tests and m
 - `:focus-visible` keeps an outline of at least 2px (`quality.spec.ts:211-216`).
 - A select's caret is two `linear-gradient` backgrounds in `currentColor`: no data URL, no
   wrapper element.
+- An alert's words are direct children of the element that takes focus
+  (`comments.spec.ts:122-124`).
 
 Template changes: in `default.vue`, each nav link renders its regular and its `-fill` icon and
 CSS shows one by `[aria-current='page']`; «جستجو» and the admin rows render one icon; «ثبت»
@@ -507,18 +532,19 @@ renders `plus-circle-fill`; the inline bubble `<svg>` and `p.shell__sidebar-note
 `AppThemeToggle` keeps its label and select and gains `sun` and `moon`, one shown by
 `html.dark`; below 1024px the select lies transparent over a 44px round button. `AppAlert`
 renders its tone icon (`warning-circle-fill`, `check-circle-fill`, `warning-fill`,
-`info-fill`) before a `div.app-alert__body` that holds the slot. `AppButton` gains the three
-variants. Delete `ShellIcon.vue`.
+`info-fill`) before the slot, which stays a direct child of the root: the root has
+`position: relative` and a start padding that holds the absolutely placed icon. `AppButton`
+gains the three variants. Delete `ShellIcon.vue`.
 
 If the CI run reports a serious axe violation on the transparent select, redraw it as a
-visible pill select with the same markup and tell the owner.
+visible pill select with the same markup and tell the owner. Run 43704168232 reported none.
 
-- [ ] **Step 6: Run the unit tests**
+- [x] **Step 6: Run the unit tests**
 
 Run: `npm run test:unit`
-Expected: PASS, 47 tests.
+Expected: PASS, 46 tests.
 
-- [ ] **Step 7: Edit the shell tests (T2, T3, T5) and add the sprite test**
+- [x] **Step 7: Edit the shell tests (T2, T3, T5) and add the sprite test**
 
 In `shell-ssr.spec.ts`, the label loop of the no-JavaScript test (lines 20-24) becomes:
 
@@ -531,6 +557,10 @@ for (const label of actions) {
   const found = await action.locator('svg[aria-hidden="true"] use').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('href') ?? ''))
   expect(found.length, label).toBeGreaterThan(0)
   await expect(action.locator('svg:not([aria-hidden="true"])')).toHaveCount(0)
+  // The shown icon really paints: an external <use> has a box only once the sprite loaded and its id resolved.
+  const shown = action.locator('svg:visible use')
+  await expect(shown, label).toHaveCount(1)
+  await expect.poll(() => shown.evaluate((node) => (node as SVGGraphicsElement).getBBox().width), { message: label }).toBeGreaterThan(0)
   hrefs.push(...found)
 }
 for (const href of hrefs) expect(href).toMatch(SPRITE)
@@ -576,11 +606,16 @@ test('@navigation tablet keeps the docked tab bar under a one-row top bar', asyn
 })
 ```
 
-- [ ] **Step 8: Run the stage gate, commit and push**
+- [x] **Step 8: Run the stage gate, commit and push**
 
 Extra local check: the SSR document of `/` contains `<use href="/_nuxt/sprite.` and no
 `data:image/svg`. This is the first run with the sprite request, so compare Detail's LCP with
 the baseline row before going on.
+
+Verdict: run 43701510977 on `86738a0` was red (the alert wrapper, above). Run 43704168232 on
+`92efcde` is green: Playwright 169 passed; client JS 94,736 / 95,619; LCP 2405.1 / 2556.6 ms;
+CLS 0.0789 / 0.0021; TBT 62 / 50.5 ms; accessibility 1.00 / 1.00. Detail's LCP is about
+3 ms above the baseline. Home's CLS rose by 0.0062; Task 3 owns it.
 
 ```bash
 git add apps/web/app apps/web/scripts/build-icon-sprite.mjs apps/web/tests apps/web/package.json
@@ -717,7 +752,15 @@ Pinned by tests:
   (`clean-urls.spec.ts:64-72`).
 - First-screen blocks keep a height that does not depend on the font: the search pill, the
   tiles (one-line labels), the results header, and a card title box that always reserves two
-  lines. This is the defence for Home's CLS (0.0727 today); only the CI run can confirm it.
+  lines. This is the defence for Home's CLS; only the CI run can confirm it. The baseline was
+  0.0727. After Task 2 it is 0.0789 (run 43704168232): the font swap moves the same 70px as
+  before, and the new shell starts the page 20 to 33px higher, so more of the moved content
+  is on the first screen. The ceiling is 0.1. This task must end below 0.0789.
+- Home's LCP element is no longer fixed. The baseline's diagnosed run had the `h1` (1699 ms);
+  the Task 2 run's diagnosed run had the first card image (2552 ms, 148 ms under the ceiling).
+  The median was 2405.1 ms both times. The first card image keeps the one
+  `fetchpriority="high"`, and the new first screen must not make a late-loading element the
+  largest one.
 
 - [ ] **Step 5: Run the unit tests**
 
@@ -826,6 +869,10 @@ Expected: FAIL: scale offenders, `→` in `[slug].vue`, `★` and `☆` in `List
   `<details class="listing-comments__menu">` whose `<summary>` holds `dots-three-bold` and the
   visually hidden text «گزینه‌های بیشتر». The menu has the union of their `v-if` conditions,
   so an item with none of them has no menu. «حذف دیدگاه» stays outside it.
+- The `gone` and `missing` alerts (`[slug].vue:4-11`) open with a bare `<p>` that keeps the
+  browser's 16px margin, so the tone icon sits one line above the words (found in Task 2).
+  They show only when a later client-side read fails; the first load throws the error page.
+  Give the paragraph `margin: 0`.
 - `ListingGallery`: the previous and next buttons show `caret-right-bold` and
   `caret-left-bold`; their `aria-label`s stay. `ListingRating`: each star shows `star-fill`
   or `star`. Heart and stars get the short pop of spec §3.3.
@@ -1040,9 +1087,17 @@ Expected: FAIL: scale offenders and the inline `<svg>` in `ConversationComposer.
 - Conversation: one sheet between the top bar and the tab bar. `main.css` gets
   `.shell:has(.thread) .shell__footer { display: none; }`. `.thread__scroller` stays the only
   scroll container.
+- The sheet must fit in phone landscape as well. Since Task 2 the tab bar is fixed at
+  844×390 (it was static there before), and the card's minimum height is 28rem, so the
+  composer sits 176px under the bar until the page is scrolled. It is fine at 375×812,
+  375×667, 768×1024 and from 1024px. Measure the composer against the bar at 844×390 and
+  667×375.
 - `MessageBubble`: the `.bubble__avatar` element and its `initial` go; the `.sr-only` sender
   stays. Own bubbles use `--color-bubble`, others sand; 20px corners with one tight 6px
   corner. `.bubble__seen` holds `checks-bold` and its text «دیده شد», visually hidden.
+- Re-run axe on the conversation page locally in both themes: CI's `quality.spec.ts` has no
+  conversation route. Before the refresh «دیده شد» was emerald text on a 15% emerald tint,
+  4.43:1 (found in Task 2; the refresh did not cause it). The new bubble colours must pass.
 - Composer: pill textarea, round send button, counter underneath. The three inline `<svg>`s
   become `AppIcon`: back `arrow-right-bold`, menu trigger `dots-three-vertical-bold`, send
   `paper-plane-right-fill` (mirrored for RTL).
