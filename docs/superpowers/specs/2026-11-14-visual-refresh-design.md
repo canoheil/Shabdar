@@ -4,8 +4,8 @@
 
 **Status:** Direction and screens approved in conversation, one mockup round at a
 time (Home, Listing detail, then post form + dashboard + messages). The owner
-approved this spec on 2026-11-14. **No application code has been written**; per
-`AGENTS.md`, implementation starts only after the plan is approved too.
+approved this spec on 2026-11-14 and the plan on 2026-11-15. Implementation follows
+the plan one task at a time; `docs/STATUS.md` says which tasks are done.
 
 **Plan:** [`docs/superpowers/plans/2026-11-14-visual-refresh.md`](../plans/2026-11-14-visual-refresh.md).
 Its section "Corrections to the spec" lists what planning found (among them: `main`

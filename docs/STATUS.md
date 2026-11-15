@@ -1,8 +1,9 @@
 # Status — Direct chat, national locations and historical phases
 
-Updated 2026-11-14 on Arena.ai Agent Mode: a visual-refresh design and its
-implementation plan were added (no application code yet, see the first section),
-and `main` was found red on one test since PR #25. Before that, updated 2026-11-11: the
+Updated 2026-11-15 on Arena.ai Agent Mode: the visual-refresh plan was approved
+and its Task 1 (a green baseline) is done; no application code has changed yet
+(see the first section). `main` itself is still red on one test since PR #25
+until that fix is merged. Before that, updated 2026-11-11: the
 launch-preparation work (Phase 14) was carried from the closed PR #23 onto
 branch `arena/c1cbe813-shabdar` and finished there; its verification record
 below is for commit `1d3c54a`. No
@@ -11,9 +12,10 @@ normal startup migrator, and `NUXT_PUBLIC_SITE_URL` must be set to the real
 HTTPS origin or every canonical and `sitemap.xml` entry will point at
 `http://127.0.0.1:3000`.
 
-## Visual refresh — spec approved, plan awaiting review (2026-11-14)
+## Visual refresh — Task 1 of 9 done: green baseline (2026-11-15)
 
-Design and planning only. **No application code, test or configuration has changed.**
+**No application code has changed.** The branch holds the design documents and a
+two-line fix to one end-to-end test.
 
 - The owner asked for a full visual pass ("ugly and dead"). A review of the current
   site on sample data found seven causes; the owner chose the «گرم و خانگی»
@@ -23,65 +25,99 @@ Design and planning only. **No application code, test or configuration has chang
   [the visual refresh design](superpowers/specs/2026-11-14-visual-refresh-design.md),
   approved by the owner on 2026-11-14.
 - [The implementation plan](superpowers/plans/2026-11-14-visual-refresh.md) has nine
-  tasks and awaits the owner's review. Its section "Corrections to the spec" lists
-  what planning found; where the two documents differ, the plan wins. One decision
-  is open: how the main photo of a listing is fitted (D1 in Task 4).
+  tasks; the owner approved it on 2026-11-15. Its section "Corrections to the spec"
+  lists what planning found; where the two documents differ, the plan wins.
+- How the work proceeds, by the owner's choice: one task at a time. After each task
+  the CI verdict and the preview go to the owner, and the next task waits for the
+  owner's go-ahead.
+- Decision D1 (owner, 2026-11-15): the main photo of a listing page is shown whole
+  (`object-fit: contain`), as today. Listing cards crop to a square.
 - Reference images (before / approved proposal) are in
   `design-system/shabdar/refresh-2026-11/`. They are mockups rendered from static
   HTML with sample data, not screenshots of the app.
-- What the mockup numbers do and do not show: positions, box counts and contrast
-  were measured in headless Chromium on the mockups at 320–1440px in both themes.
-  They say nothing about the real app's client-JS budget or Lighthouse medians;
-  those are measured in CI at every task of the plan.
 - `design-system/shabdar/MASTER.md` still describes the Phase 7 system. The spec
   lists which of its rules the refresh replaces; the file is rewritten at close-out.
 - Notifications (Phase 15) stays the next product domain; the owner decides the
   order.
 
-### `main` is red on one test since PR #25
+### Progress
 
-Read from CI on 2026-11-14, not changed by this branch:
-
-- PR #25 ("Render shell icons consistently during SSR", merge `fda97b0`) added
-  `apps/web/tests/e2e/shell-ssr.spec.ts`. Its second test fails on `main`
-  (run 43628236875) and failed on the PR's own branch (run 43628196721): 167
-  passed, 1 failed. Line 49 asks for the button named «جستجو» on the whole page,
-  and Home has two: the navigation action and the search form's submit button.
-- The workflow skips Lighthouse when Playwright fails, so `fda97b0` has no
-  Lighthouse verdict; its client-JS budget step did run and passed. The last full
-  green run is 43616929450 on `9ba038e`, the commit before PR #25.
-- Task 1 of the plan scopes that locator to the main navigation, as
-  `navigation.spec.ts:123` already does, and records a green baseline for this
-  branch before any redesign.
-
-### Baseline for the refresh
-
-| | Home | Detail | Source |
+| Task | State | Commit | CI run |
 |---|---|---|---|
-| Client JS, gzip bytes | 99,578 | 100,464 | CI run 43616929450 (`9ba038e`) |
-| LCP median | 2404.4 ms | 2556.7 ms | same; ceiling 2700 ms |
-| CLS median | 0.0727 | 0.0022 | same; ceiling 0.1 |
-| TBT median | 122 ms | 86 ms | same; ceiling 200 ms |
-| Accessibility | 1.00 | 1.00 | same; floor 0.95 |
-| Inline CSS bytes | 33,341 | 33,340 | local build of `fda97b0` with `scripts/smoke-stub-api.mjs` |
+| 1 Green baseline | Done 2026-11-15 | `a5e2da6` | 43691418582, success |
+| 2 Foundation: tokens, icons, shared parts, shell | Not started; waits for the owner | | |
+| 3 Home, category, city | Not started | | |
+| 4 Listing detail | Not started | | |
+| 5 Forms: post, login, advertising | Not started | | |
+| 6 Account: dashboard, favourites, blocks | Not started | | |
+| 7 Messages: inbox, conversation | Not started | | |
+| 8 Admin, legal, error pages | Not started | | |
+| 9 Close-out | Not started | | |
 
-Detail's LCP and Home's CLS are the two numbers with little room. Every task of
-the plan appends a row here from its own CI run.
+### Gate numbers per task
 
-### Verified locally in this session, and what was not
+Each cell is Home / Detail. Lighthouse values are the medians of three mobile runs
+in CI. Inline CSS is measured locally on the task's build with
+`scripts/smoke-stub-api.mjs`; it has no ceiling, and a rise above 10% is
+investigated before the push.
 
-- `npm run typecheck` exits 0 and `npm run test:unit` passes 37 tests on the
-  unchanged app code (Node 22.22.3).
-- A throwaway build outside the repository proved the icon mechanism the plan
-  uses: the sprite is emitted as a hashed file even when small (`?no-inline`), it
-  is served as `image/svg+xml`, icons render with and without JavaScript, and the
+| Task | Commit | CI run | Client JS, gzip bytes | LCP, ms | CLS | TBT, ms | Accessibility | LCP element | Inline CSS, bytes |
+|---|---|---|---|---|---|---|---|---|---|
+| Ceiling or floor | | | ≤ 104,000 | ≤ 2700 | ≤ 0.1 | ≤ 200 | ≥ 0.95 | | 10% line: 36,675 / 36,674 |
+| Before PR #25 (last green on `main`) | `9ba038e` | 43616929450 | 99,578 / 100,464 | 2404.4 / 2556.7 | 0.0727 / 0.0022 | 122 / 86 | 1.00 / 1.00 | `h1` in `.home__intro` / gallery image | not measured |
+| 1 Baseline | `a5e2da6` | 43691418582 | 95,634 / 96,516 | 2405.1 / 2553.3 | 0.0727 / 0.0022 | 99.5 / 72 | 1.00 / 1.00 | `h1` in `.home__intro` / gallery image | 33,341 / 33,340 |
+
+Detail's LCP (147 ms under the ceiling) and Home's CLS (0.027 under) are the two
+numbers with little room. Home's three LCP runs in the baseline were 1698.6, 2409.1
+and 2405.1 ms, so a single run can differ from the median by 700 ms.
+
+### Task 1: what was found and done
+
+- `main` has been red since PR #25 ("Render shell icons consistently during SSR",
+  merge `fda97b0`): the second test of `apps/web/tests/e2e/shell-ssr.spec.ts` fails
+  (run 43628236875 on `main`, run 43628196721 on the PR's branch; 167 passed, 1
+  failed), and the workflow then skips Lighthouse.
+- The test had two defects, both in the test and not in the app:
+  1. Line 49 asked for the button named «جستجو» on the whole page. Home has two:
+     the navigation action and the search form's submit button. It is now scoped to
+     the main navigation, as `navigation.spec.ts` already does.
+  2. Line 46 expected the admin link «صف بررسی» by role at the default 375px
+     viewport. Admin entries are desktop-only (`display: none` below 1024px), and
+     `navigation.spec.ts` pins count 0 for that link at 375px. CI never reached
+     this line, because the anonymous pass of the loop failed first at line 49. It
+     now matches the link with `includeHidden: true`, which still tells an admin
+     shell (1) from an anonymous one (0).
+- The plan named only the first defect. The second was found by running the spec
+  locally before the push (below); the plan's "Test edits" now lists it as T1b.
+- Evidence. Local, against the sample-data stub: the unchanged file failed at line
+  49 with the same strict-mode violation as CI; with line 49 fixed it failed at line
+  46; with both fixed, 2 of 2 passed. CI run 43691418582 on `a5e2da6`: every step
+  green, Playwright 168 passed, Lighthouse and the client-JS budget passed.
+- **`main` is still red.** The fix is on this branch only. Merging this branch as it
+  stands (documents plus the two-line test fix) would make `main` green before the
+  redesign starts; that is the owner's call.
+
+### What can be checked locally, and what only CI can say
+
+- Local and exact: `npm run typecheck`, `npm run test:unit` (37 tests today),
+  `npm run build`, inline CSS bytes. Node 22.22.3 here, Node 26 in CI.
+- Local and approximate: end-to-end specs that create no data can run against the
+  built app with a sample-data stub API. On the unchanged app, `quality.spec.ts`
+  passes 19 of 21 tests that way (17 of 18 routes at four widths in both themes; the
+  other two tests create a listing through the real API), and `theme`, `brand`,
+  `navigation`, `legal` and `shell-ssr` pass in full. The stub's data are not CI's
+  fixtures, so a local pass is a reason to push, not a verdict. The config and the
+  stub live outside the repository; the fixture files are in the gitignored
+  `apps/web/tests/e2e/.artifacts/`.
+- Local client-JS measurement on `fda97b0` read 95,643 / 96,522; CI then measured
+  95,634 / 96,516 on the same app code.
+- CI only: the API suite, the real-stack Playwright suite (168 tests), Lighthouse.
+  The sandbox has no MariaDB or Rust toolchain. CI logs and artifacts cannot be
+  downloaded from it; run annotations can, and they carry the numbers above.
+- A throwaway build outside the repository proved the icon mechanism Task 2 uses:
+  the sprite is emitted as a hashed file even when small (`?no-inline`), it is
+  served as `image/svg+xml`, icons render with and without JavaScript, and the
   server and the browser write the same `href` once the origin is stripped.
-- A local headless Chromium against a stub API measured 95,643 (Home) and 96,522
-  (Detail) gzip bytes of client JS on `fda97b0`. That is an approximation with the
-  CI method, not a CI number; it suggests PR #25 freed about 3.9 KB.
-- Not run locally: Playwright, the API suite and Lighthouse. The sandbox has no
-  MariaDB or Rust toolchain, and CI logs and artifacts cannot be downloaded from
-  it; run annotations can.
 
 ## Current launch-preparation pass (Phase 14, 2026-11-09)
 
@@ -1210,7 +1246,8 @@ lives outside the repo; the durable form of those assertions is
   work was carried from the closed PR #23 onto `arena/c1cbe813-shabdar`, which
   is where CI verified it, and PR #24 merges it. Phase 15 (notifications) is
   next.
-- **Visual refresh — DESIGN AND PLAN ONLY on `arena/76915f79-shabdar`.** Direction,
-  three mockup rounds and the written spec are approved; the nine-task plan is
-  committed and awaits the owner's review. No application code. `main` is red on
-  one test since PR #25 (first section); the plan's Task 1 fixes it.
+- **Visual refresh — IN PROGRESS on `arena/76915f79-shabdar`, Task 1 of 9 done.**
+  Spec and plan are approved. Task 1 fixed the one red test and recorded a green
+  baseline (CI run 43691418582 on `a5e2da6`: 168 Playwright tests, Lighthouse and the
+  client-JS budget passed). No application code yet; Task 2 waits for the owner's
+  go-ahead. `main` stays red on that test until the fix is merged (first section).

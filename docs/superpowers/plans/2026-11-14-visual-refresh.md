@@ -68,7 +68,7 @@ Five conditions the spec implies and no existing test covers, most likely first.
 pinning test in the task that owns the code.
 
 1. **Photos that are not 4:3** (portrait phone shots, panoramas). Expected: never stretched; a
-   card shows a centred square crop; the listing page shows the photo as decision D1 says.
+   card shows a centred square crop; the listing page shows the whole photo (decision D1).
    Pinned in Task 3 (card) and Task 4 (gallery).
 2. **Long text in the two-column phone card** (165px wide at 375px, 138px at 320px): a
    twelve-digit price (the API has no upper bound), an unbroken title. Expected: text wraps
@@ -86,14 +86,16 @@ pinning test in the task that owns the code.
 
 ## Corrections to the spec, found while planning
 
-Where the spec and this section differ, this section wins. The owner was told on 2026-11-14.
+Where the spec and this section differ, this section wins. The owner approved the plan with
+this table on 2026-11-15; the rows a person can see or must know about (C1, C3 to C7, C9) were
+also spelled out in the conversation with the Task 1 report.
 
 | # | Spec says | Found | This plan |
 |---|---|---|---|
-| C1 | Baseline `fda97b0` | `main` is red since PR #25: `shell-ssr.spec.ts:31` fails with a strict-mode violation, because two buttons are named «جستجو» (run 43628236875: 167 passed, 1 failed). Lighthouse is skipped when Playwright fails, so that commit has no Lighthouse verdict. | Task 1 fixes the locator and records a green baseline before any redesign. |
+| C1 | Baseline `fda97b0` | `main` is red since PR #25: `shell-ssr.spec.ts:31` fails with a strict-mode violation, because two buttons are named «جستجو» (run 43628236875: 167 passed, 1 failed). Lighthouse is skipped when Playwright fails, so that commit has no Lighthouse verdict. | Task 1 fixes the test and records a green baseline before any redesign. Executing it showed a second defect behind the first: line 46 expects the link «صف بررسی» by role at 375px, where admin entries are `display: none` (`navigation.spec.ts:109` pins count 0). CI never reached that line. |
 | C2 | §9 lists five test edits | Four more existing assertions pin things the spec changes. | "Test edits" rows T2, T3, T5 and T7. |
 | C3 | §5: sidebar 264px | `navigation.spec.ts:93` pins 272px. | The sidebar stays `17rem`. |
-| C4 | §7.3, §11.2: detail cover uses `object-fit: cover` | `detail.spec.ts:30` pins `contain`. With `cover`, a portrait photo loses about half its height in a 4:3 frame, and the page has no zoom. | Owner decision D1 in Task 4. Until answered: `contain`. |
+| C4 | §7.3, §11.2: detail cover uses `object-fit: cover` | `detail.spec.ts:30` pins `contain`. With `cover`, a portrait photo loses about half its height in a 4:3 frame, and the page has no zoom. | Owner decision D1 (2026-11-15): the whole photo, `contain`. |
 | C5 | §7.3: foldout after the description | The approved board shows it right under the actions. | It stays where `.detail__reports` is today. |
 | C6 | §7.3: title under the gallery | `detail.spec.ts:74-97` pins gallery-above-summary on phones and equal tops from 1024px. | The title block moves into `.detail__summary` (Task 4). |
 | C7 | §7.3: the foldout wraps "seller block controls" | The page has no seller block control, and §11.5 forbids new features. | The foldout wraps the two report controls only. |
@@ -108,6 +110,7 @@ Where the spec and this section differ, this section wins. The owner was told on
 |---|---|---|---|
 | Client JS, gzip bytes | 99,578 | 100,464 | CI run 43616929450 on `9ba038e`, the last green run (before PR #25) |
 | Client JS, local | 95,643 | 96,522 | headless Chromium and a stub API on `fda97b0`; an approximation |
+| Client JS after Task 1 | 95,634 | 96,516 | CI run 43691418582 on `a5e2da6`; the row every later task is compared with is in `docs/STATUS.md` |
 | LCP median | 2404.4 ms, `h1` in `.home__intro` | 2556.7 ms, gallery image | CI run 43616929450 |
 | CLS median | 0.0727 | 0.0022 | same |
 | TBT median | 122 ms | 86 ms | same |
@@ -150,16 +153,17 @@ Run at the end of every task, from `apps/web`.
 npm run typecheck          # exit 0
 npm run test:unit          # 0 failures
 npm run build              # ends with "Build complete"
+for port in 8099 3105; do curl -s -o /dev/null -m 2 "http://127.0.0.1:$port/" && { echo "port $port is busy"; exit 1; }; done
 SMOKE_STUB_PORT=8099 node scripts/smoke-stub-api.mjs & STUB=$!
 NUXT_API_BASE=http://127.0.0.1:8099 HOST=127.0.0.1 PORT=3105 node .output/server/index.mjs & WEB=$!
-until curl -sf http://127.0.0.1:3105/api/v1/health >/dev/null; do sleep 0.5; done
+trap 'kill $WEB $STUB' EXIT
+until curl -sf http://127.0.0.1:3105/api/v1/health >/dev/null; do kill -0 $WEB || exit 1; sleep 0.5; done
 node --input-type=module -e '
 for (const path of ["/", "/listings/" + encodeURIComponent("دوچرخه-کوهستان")]) {
   const html = await (await fetch("http://127.0.0.1:3105" + path)).text()
   const css = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].reduce((n, m) => n + Buffer.byteLength(m[1]), 0)
   console.log(decodeURIComponent(path), "inline-css", css)
 }'
-kill $WEB $STUB
 ```
 
 Then commit, `git push origin arena/76915f79-shabdar`, and read the verdict. A run takes about
@@ -187,9 +191,16 @@ commit, run id, client JS, the four Lighthouse medians and the LCP element for H
 inline CSS) and commit it; a docs-only push starts no run. Rebuild the owner's preview and say
 which pages changed.
 
-Playwright cannot run in this sandbox (no MariaDB, no Rust API). An edited or new end-to-end
-assertion is therefore argued from the code before the push and proven by the CI run; unit
-tests give a real local red and green.
+The inline-CSS lines run as one script, so the `exit` and the `trap` stay inside it. The
+check for busy ports is there because a server left over from an earlier measurement once
+answered in place of the fresh build.
+
+The real-stack Playwright suite cannot run in this sandbox (no MariaDB, no Rust API). A spec
+that creates no data can still run against the built app and the sample-data stub, with
+hand-written fixture files in the gitignored `tests/e2e/.artifacts/` and a local config kept
+outside the repository; Task 1 used that for a red and a green of `shell-ssr.spec.ts`. Such a
+run is an approximation: the CI run on the real stack is the only verdict. Other end-to-end
+edits are argued from the code before the push; unit tests give a real local red and green.
 
 A task's restyling step lists only template changes and what the tests pin. The look itself is
 the spec section named in the task's title, and the boards. A task that needs a new icon adds
@@ -203,6 +214,7 @@ Every edit to an existing end-to-end test. "§9" marks the five the spec already
 | # | Where | Today | Becomes | Task |
 |---|---|---|---|---|
 | T1 | `shell-ssr.spec.ts:49` | Page-wide button «جستجو» | The same button inside the `ناوبری اصلی` landmark | 1 |
+| T1b | `shell-ssr.spec.ts:46` | Role link «صف بررسی», count 1 | The same, with `includeHidden: true` (found while executing Task 1; see C1) | 1 |
 | T2 | `shell-ssr.spec.ts:20-24` | Each action has one inline `svg path` | Each action's `svg[aria-hidden="true"] use` points at `/_nuxt/sprite.<hash>.svg#<id>`; the sprite answers 200 as `image/svg+xml` and holds every referenced id | 2 |
 | T3 | `shell-ssr.spec.ts:47` | `.shell__nav-item--admin svg path` count 6 | `.shell__nav-item--admin svg use` count 6 | 2 |
 | T4 | `theme.spec.ts:8-66` (§9) | 27 tokens per theme | The 39 rows of spec §3.1 per theme | 2 |
@@ -212,7 +224,7 @@ Every edit to an existing end-to-end test. "§9" marks the five the spec already
 | T8 | `reports.spec.ts:70,82,115,134,155,184` (§9) | Report controls are visible | The foldout or the comment menu is opened first | 4 |
 | T9 | `blocks.spec.ts:109,131,171` (§9) | The block button is visible | The comment menu is opened first | 4 |
 | T10 | `conversation-thread.spec.ts:360,403` (§9) | One `.bubble__avatar` per bubble | Count 0; the title says "time per bubble" | 7 |
-| T11 | `detail.spec.ts:30` | `object-fit: contain` | `cover`, only if the owner picks the cropped cover in D1 | 4 |
+| T11 | `detail.spec.ts:30` | `object-fit: contain` | Dropped: the owner chose `contain` in D1, so this line stays | none |
 
 ---
 
@@ -226,32 +238,44 @@ Every edit to an existing end-to-end test. "§9" marks the five the spec already
 - Produces: a table in `docs/STATUS.md` with one "baseline" row from a green run of this
   branch. Every later task appends its row.
 
-- [ ] **Step 1: Scope the ambiguous locator (T1)**
+- [x] **Step 1: Scope the ambiguous locator (T1) and match the hidden admin link (T1b)**
 
 ```ts
 await page.getByRole('navigation', { name: 'ناوبری اصلی' }).getByRole('button', { name: 'جستجو', exact: true }).click()
 ```
 
-`navigation.spec.ts:123` already uses this form. Nothing else in the file changes.
+`navigation.spec.ts:123` already uses this form.
 
-- [ ] **Step 2: Run the local part of the stage gate**
+```ts
+// Admin entries are desktop-only: at this 375px viewport they are rendered but display: none.
+await expect(page.getByRole('link', { name: 'صف بررسی', exact: true, includeHidden: true })).toHaveCount(1)
+```
+
+T1b was added during execution. With the spec run locally against the sample-data stub, the
+unchanged file failed at line 49 exactly as in CI; with line 49 fixed it failed at line 46;
+with both it passed. Nothing else in the file changes. The comment moves the later lines of
+the file down by one.
+
+- [x] **Step 2: Run the local part of the stage gate**
 
 Expected: typecheck exit 0, 37 unit tests pass, inline CSS 33,341 and 33,340.
 
-- [ ] **Step 3: Commit and push**
+- [x] **Step 3: Commit and push**
 
 ```bash
 git add apps/web/tests/e2e/shell-ssr.spec.ts
-git commit -m "test: scope the shell search button to the main navigation"
+git commit -m "test: make the shell-ssr hydration test pass on the real shell"
 git push origin arena/76915f79-shabdar
 ```
 
-- [ ] **Step 4: Read the CI verdict**
+- [x] **Step 4: Read the CI verdict**
 
 Expected: green, Playwright reports 168 passed. If any step is red here, stop: the baseline is
 over a gate with no redesign in it, and the owner decides what happens next.
 
-- [ ] **Step 5: Record the baseline row, commit and push**
+Result: run 43691418582 on `a5e2da6`, every step green, 168 passed.
+
+- [x] **Step 5: Record the baseline row, commit and push**
 
 ```bash
 git add docs/STATUS.md
@@ -762,17 +786,16 @@ git push origin arena/76915f79-shabdar
   `ListingComments.vue:119-150`, `ReportControl.vue`, `ReportForm.vue`, `BlockControl.vue`,
   `app/assets/css/main.css` (listing-gallery block), `app/utils/icons.ts`, the sprite
 - Test: `tests/e2e/reports.spec.ts` (T8, one new test), `tests/e2e/blocks.spec.ts` (T9),
-  `tests/e2e/detail.spec.ts` (one new assertion; T11 only by D1)
+  `tests/e2e/detail.spec.ts` (one new assertion)
 
 **Interfaces:**
 - Consumes: `AppIcon`, `.avatar`, `formatListingDay`, `listing-day-now`.
 - Produces `details.detail__reports` and `details.listing-comments__menu`, the two selectors
   the edited tests open.
 
-**D1, the owner's decision (asked 2026-11-14).** Until the owner answers, the main photo keeps
+**D1, decided by the owner on 2026-11-15: the whole photo.** The main photo keeps
 `object-fit: contain` in a 4:3 sand frame: the whole photo shows, a portrait photo gets side
-bars, and no test is edited. If the owner picks the cropped cover, the value is `cover` and
-T11 applies. Nothing else in this task depends on it.
+bars, and `detail.spec.ts:30` is not edited. Listing cards still crop to a square.
 
 - [ ] **Step 1: Extend `SCOPE` and see it fail**
 
