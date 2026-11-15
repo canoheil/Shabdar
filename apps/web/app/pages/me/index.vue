@@ -365,7 +365,7 @@ function statusLabel(status: string): string {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-card);
 }
 
 .dashboard__admin {
@@ -419,7 +419,7 @@ function statusLabel(status: string): string {
   background: linear-gradient(145deg, color-mix(in srgb, var(--color-primary) 6%, var(--color-surface)), var(--color-surface));
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-card);
 }
 
 .stat::after {
@@ -491,7 +491,7 @@ function statusLabel(status: string): string {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-card);
 }
 
 .mine__body {

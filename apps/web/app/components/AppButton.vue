@@ -12,7 +12,7 @@
 
 <script setup lang="ts">
 withDefaults(defineProps<{
-  variant?: 'primary' | 'secondary' | 'danger'
+  variant?: 'primary' | 'secondary' | 'accent' | 'soft' | 'danger' | 'danger-quiet'
   type?: 'button' | 'submit' | 'reset'
   loading?: boolean
   disabled?: boolean

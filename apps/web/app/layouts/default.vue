@@ -8,9 +8,6 @@
           <small class="shell__brand-tagline" aria-hidden="true">بازارچهٔ نزدیک شما</small>
         </span>
       </NuxtLink>
-      <p class="shell__sidebar-note">
-        از دل محله، برای آدم‌های خودمان؛ کشف کنید، گفت‌وگو کنید و آگهی بگذارید.
-      </p>
       <div class="shell__theme">
         <AppThemeToggle />
       </div>
@@ -18,59 +15,62 @@
         <ul class="shell__nav-list">
           <li class="shell__nav-item">
             <NuxtLink to="/" class="shell__nav-action">
-              <ShellIcon name="house" />
+              <span class="shell__nav-icon">
+                <AppIcon class="shell__nav-idle" name="house" :size="22" />
+                <AppIcon class="shell__nav-current" name="house-fill" :size="22" />
+              </span>
               <span>خانه</span>
             </NuxtLink>
           </li>
           <li class="shell__nav-item">
             <button type="button" class="shell__nav-action" @click="focusHomeSearch">
-              <ShellIcon name="search" />
+              <span class="shell__nav-icon">
+                <AppIcon name="magnifying-glass" :size="22" />
+              </span>
               <span>جستجو</span>
             </button>
           </li>
           <li class="shell__nav-item">
-            <NuxtLink to="/post" class="shell__nav-action">
-              <ShellIcon name="plus" />
+            <NuxtLink to="/post" class="shell__nav-action shell__nav-action--post">
+              <span class="shell__nav-icon">
+                <AppIcon name="plus-circle-fill" :size="22" />
+              </span>
               <span>ثبت</span>
             </NuxtLink>
           </li>
           <li class="shell__nav-item">
             <NuxtLink to="/me/conversations" class="shell__nav-action">
-              <!-- Inline bubble: the sixth action must not add an icon-package
-                   import to the shell chunk every public page loads. -->
-              <svg
-                width="22"
-                height="22"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.6 9.6 0 0 1-3.2-.5L3 21l1.6-4.3A8.2 8.2 0 0 1 3 11.5 8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z" />
-              </svg>
+              <span class="shell__nav-icon">
+                <AppIcon class="shell__nav-idle" name="chat-circle" :size="22" />
+                <AppIcon class="shell__nav-current" name="chat-circle-fill" :size="22" />
+              </span>
               <span>پیام‌ها</span>
             </NuxtLink>
           </li>
           <li class="shell__nav-item">
             <NuxtLink to="/me/favorites" class="shell__nav-action">
-              <ShellIcon name="heart" />
+              <span class="shell__nav-icon">
+                <AppIcon class="shell__nav-idle" name="heart" :size="22" />
+                <AppIcon class="shell__nav-current" name="heart-fill" :size="22" />
+              </span>
               <span>ذخیره‌ها</span>
             </NuxtLink>
           </li>
           <li class="shell__nav-item">
             <NuxtLink :to="accountTarget" class="shell__nav-action">
-              <ShellIcon name="user" />
+              <span class="shell__nav-icon">
+                <AppIcon class="shell__nav-idle" name="user-circle" :size="22" />
+                <AppIcon class="shell__nav-current" name="user-circle-fill" :size="22" />
+              </span>
               <span>{{ accountLabel }}</span>
             </NuxtLink>
           </li>
           <template v-if="user?.is_admin">
             <li v-for="item in adminLinks" :key="item.to" class="shell__nav-item shell__nav-item--admin">
               <NuxtLink :to="item.to" class="shell__nav-action">
-                <ShellIcon name="shield" />
+                <span class="shell__nav-icon">
+                  <AppIcon name="shield-check" :size="22" />
+                </span>
                 <span>{{ item.label }}</span>
               </NuxtLink>
             </li>

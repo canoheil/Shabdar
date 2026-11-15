@@ -1,39 +1,64 @@
+/*
+ * Design tokens. Colour values are the table in
+ * docs/superpowers/specs/2026-11-14-visual-refresh-design.md §3.1; tests/e2e/theme.spec.ts
+ * pins all of them in both themes, so change the two together.
+ * tests/unit/design-system.test.mjs holds components to the type, radius and shadow scales.
+ */
 :root {
   color-scheme: light;
 
-  /* Core semantic palette: stable Phase 7 contracts, extended for Phase 12. */
-  --color-bg: #F6F8F7;
+  /* Surfaces and text: warm paper, sand and brown-black ink. */
+  --color-bg: #FBF7F0;
   --color-surface: #FFFFFF;
-  --color-surface-muted: #EDF2EF;
-  --color-text: #17211B;
-  --color-text-muted: #52615A;
+  --color-surface-muted: #F4ECDF;
+  --color-text: #1F1B16;
+  --color-text-muted: #675C4F;
+  --color-border: #EADFCF;
+  --color-control-border: #8F8474;
+
+  /* Emerald stays the brand and the one colour of action. */
   --color-primary: #047857;
   --color-on-primary: #FFFFFF;
   --color-primary-hover: #065F46;
-  --color-border: #D5DEDA;
-  --color-control-border: #68776E;
+  --color-primary-soft: #E2F1EA;
   --color-focus: #047857;
-  --color-danger: #B91C1C;
+
+  /* Saffron: `accent-fill` is a fill and carries `on-accent-fill`; accent-coloured text uses `accent`. */
+  --color-accent: #A2470B;
+  --color-accent-soft: #FCEFD6;
+  --color-accent-fill: #F2B33D;
+  --color-on-accent-fill: #3A2903;
+
+  /* Status. A status always has an icon and a word, never a colour alone. */
+  --color-danger: #B42318;
   --color-on-danger: #FFFFFF;
+  --color-error: #B42318;
+  --color-error-bg: #FDECE9;
+  --color-warning: #8A5A00;
+  --color-warning-bg: #FCEFD6;
+  --color-info: #675C4F;
+  --color-info-bg: #F4ECDF;
 
-  --color-warning: #92400E;
-  --color-warning-bg: #FFFBEB;
-  --color-info: #075985;
-  --color-info-bg: #F0F9FF;
-  --color-error: #991B1B;
-  --color-error-bg: #FEF2F2;
+  /* Decorative pairs for tiles, avatars and stat icons: saffron, emerald, clay. */
+  --color-tint-a: #FCEFD6;
+  --color-ink-a: #8A5A00;
+  --color-tint-b: #E2F1EA;
+  --color-ink-b: #047857;
+  --color-tint-c: #FBE5DA;
+  --color-ink-c: #A2470B;
 
-  /* Shabdar identity: emerald depth with a warm, sparingly used accent. */
-  --color-accent: #9A4C0B;
-  --color-accent-soft: #FFF4E5;
+  /* The viewer's own chat bubble. */
+  --color-bubble: #047857;
+  --color-on-bubble: #FFFFFF;
+  --color-bubble-meta: #D5F5E6;
+
+  /* The emerald hero band of Home. */
   --color-hero: #0B3D2E;
   --color-hero-deep: #062A20;
   --color-hero-text: #F4FBF7;
   --color-hero-muted: #C4D9CE;
   --color-hero-accent: #F3C876;
   --color-hero-border: #396455;
-  --color-on-dark: #F4FBF7;
-  --color-on-dark-muted: #C4D9CE;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -46,16 +71,29 @@
   --space-12: 48px;
   --space-16: 64px;
 
-  --radius-control: 12px;
-  --radius-card: 18px;
-  --radius-panel: 26px;
-  --radius-dialog: 24px;
+  /* Type: eight sizes and three weights (400 body, 600 labels and controls, 800 headings). */
+  --font-size-12: 0.75rem;
+  --font-size-14: 0.875rem;
+  --font-size-16: 1rem;
+  --font-size-18: 1.125rem;
+  --font-size-22: 1.375rem;
+  --font-size-28: 1.75rem;
+  --font-size-36: 2.25rem;
+  --font-size-display: 2.625rem;
+
+  --radius-small: 10px;
+  --radius-control: 14px;
+  --radius-card: 20px;
+  --radius-panel: 28px;
+  --radius-dialog: 28px;
   --radius-pill: 999px;
 
-  --shadow-xs: 0 1px 2px rgb(6 42 32 / 0.05);
-  --shadow-card: 0 10px 30px rgb(6 42 32 / 0.07), 0 1px 2px rgb(6 42 32 / 0.05);
-  --shadow-lifted: 0 20px 48px rgb(6 42 32 / 0.14), 0 2px 6px rgb(6 42 32 / 0.06);
-  --shadow-nav: 0 12px 34px rgb(6 42 32 / 0.16);
+  /* Two elevations, two glows under filled buttons, and the halo of a focused field. */
+  --shadow-card: 0 1px 2px rgb(74 52 20 / 0.06), 0 8px 22px -10px rgb(74 52 20 / 0.18);
+  --shadow-lifted: 0 2px 6px rgb(74 52 20 / 0.08), 0 20px 40px -14px rgb(74 52 20 / 0.3);
+  --glow-primary: 0 8px 18px -10px var(--color-primary);
+  --glow-accent: 0 8px 18px -10px var(--color-accent-fill);
+  --ring-focus: 0 0 0 4px var(--color-primary-soft);
 
   --font-family-fallback: Tahoma, Arial, sans-serif;
   --font-family-base: 'Vazirmatn Variable', Tahoma, Arial, sans-serif;
@@ -67,38 +105,49 @@
 :root.dark {
   color-scheme: dark;
 
-  --color-bg: #0E1511;
-  --color-surface: #162019;
-  --color-surface-muted: #202D25;
-  --color-text: #F2F6F3;
-  --color-text-muted: #B2C0B6;
+  /* The same roles on warm near-black. A token that keeps its light value is not repeated. */
+  --color-bg: #14120E;
+  --color-surface: #1E1B16;
+  --color-surface-muted: #28241D;
+  --color-text: #F6F1E8;
+  --color-text-muted: #BDB2A1;
+  --color-border: #3A342A;
+  --color-control-border: #8C8172;
+
   --color-primary: #6EE7B7;
   --color-on-primary: #062E22;
   --color-primary-hover: #A7F3D0;
-  --color-border: #34463B;
-  --color-control-border: #7E9184;
+  --color-primary-soft: #16342A;
   --color-focus: #6EE7B7;
-  --color-danger: #FCA5A5;
-  --color-on-danger: #450A0A;
-
-  --color-warning: #FBBF24;
-  --color-warning-bg: #2B2111;
-  --color-info: #7DD3FC;
-  --color-info-bg: #10202B;
-  --color-error: #FCA5A5;
-  --color-error-bg: #162019;
 
   --color-accent: #F3C876;
-  --color-accent-soft: #2B2519;
+  --color-accent-soft: #33290F;
+  --color-accent-fill: #F3C876;
+  --color-on-accent-fill: #2B1F03;
+
+  --color-danger: #FDA29B;
+  --color-on-danger: #450A0A;
+  --color-error: #FDA29B;
+  --color-error-bg: #3B1D1A;
+  --color-warning: #F3C876;
+  --color-warning-bg: #3A2E12;
+  --color-info: #BDB2A1;
+  --color-info-bg: #28241D;
+
+  --color-tint-a: #3A2E12;
+  --color-ink-a: #F3C876;
+  --color-tint-b: #16342A;
+  --color-ink-b: #6EE7B7;
+  --color-tint-c: #3D2417;
+  --color-ink-c: #F2AB84;
+
+  --color-bubble: #1F4A3B;
+  --color-on-bubble: #F6F1E8;
+  --color-bubble-meta: #B9D8CB;
+
   --color-hero: #12382C;
   --color-hero-deep: #081F18;
-  --color-hero-text: #F4FBF7;
-  --color-hero-muted: #C4D9CE;
-  --color-hero-accent: #F3C876;
-  --color-hero-border: #396455;
 
-  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.2);
-  --shadow-card: 0 12px 32px rgb(0 0 0 / 0.2), 0 1px 2px rgb(0 0 0 / 0.16);
-  --shadow-lifted: 0 22px 52px rgb(0 0 0 / 0.34), 0 2px 6px rgb(0 0 0 / 0.2);
-  --shadow-nav: 0 12px 34px rgb(0 0 0 / 0.36);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.35), 0 8px 22px -10px rgb(0 0 0 / 0.6);
+  --shadow-lifted: 0 2px 6px rgb(0 0 0 / 0.4), 0 20px 40px -14px rgb(0 0 0 / 0.75);
 }

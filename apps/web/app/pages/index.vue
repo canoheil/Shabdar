@@ -236,7 +236,7 @@ async function logout(): Promise<void> {
   border: 1px solid var(--color-border);
   border-inline-start: 4px solid var(--color-accent);
   border-radius: var(--radius-card);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-card);
 }
 
 .home__account strong {

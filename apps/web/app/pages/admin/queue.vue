@@ -191,7 +191,7 @@ async function reject(publicId: string) {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-card);
 }
 
 .queue__section-header {
@@ -232,7 +232,7 @@ async function reject(publicId: string) {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-card);
 }
 
 .card__cover {

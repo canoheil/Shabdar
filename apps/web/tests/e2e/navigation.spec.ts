@@ -50,22 +50,33 @@ test('@navigation mobile has six safe bottom actions and one current page', asyn
   await expectNoSeriousA11y(page)
 })
 
-test('@navigation tablet header uses two rows without overflow', async ({ page }) => {
+test('@navigation tablet keeps the docked tab bar under a one-row top bar', async ({ page }) => {
   await page.setViewportSize({ width: 768, height: 1024 })
   await page.goto('/')
-  const boxes = await page.evaluate(() => {
+  const shell = await page.evaluate(() => {
     const brand = document.querySelector('.shell__brand')?.getBoundingClientRect()
+    const theme = document.querySelector('.shell__theme')?.getBoundingClientRect()
     const nav = document.querySelector('.shell__nav')
-    const navRect = nav?.getBoundingClientRect()
-    if (!brand || !nav || !navRect) throw new Error('Shell regions are missing')
+    const main = document.querySelector('.shell__main')
+    if (!brand || !theme || !nav || !main) throw new Error('Shell regions are missing')
+    const navRect = nav.getBoundingClientRect()
     return {
+      brandTop: brand.top,
       brandBottom: brand.bottom,
-      navTop: navRect.top,
+      themeTop: theme.top,
+      themeBottom: theme.bottom,
       position: getComputedStyle(nav).position,
+      navBottom: navRect.bottom,
+      navHeight: navRect.height,
+      mainBottom: Number.parseFloat(getComputedStyle(main).paddingBottom),
+      viewportHeight: window.innerHeight,
     }
   })
-  expect(boxes.position).not.toBe('fixed')
-  expect(boxes.navTop).toBeGreaterThanOrEqual(boxes.brandBottom - 1)
+  expect(shell.position).toBe('fixed')
+  expect(shell.navBottom).toBeCloseTo(shell.viewportHeight, 0)
+  // One row: the brand and the theme control overlap vertically.
+  expect(shell.themeTop < shell.brandBottom && shell.brandTop < shell.themeBottom).toBe(true)
+  expect(shell.mainBottom).toBeGreaterThanOrEqual(shell.navHeight)
   await expect(navigation(page).locator('.shell__nav-action:visible')).toHaveCount(6)
   await expectNoOverflow(page)
 })
