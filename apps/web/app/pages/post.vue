@@ -160,9 +160,14 @@
                 min="0"
                 inputmode="numeric"
                 dir="ltr"
-                :aria-describedby="describedBy"
+                :aria-describedby="[describedBy, typeof form.price_toman === 'number' && form.price_toman > 0 ? 'post-price-readback' : ''].filter(Boolean).join(' ') || undefined"
                 :aria-invalid="ariaInvalid"
               >
+              <p
+                v-if="typeof form.price_toman === 'number' && form.price_toman > 0"
+                id="post-price-readback"
+                class="post__price-readback"
+              >{{ formatPrice(form.price_toman, 'fixed') }}</p>
             </template>
           </AppField>
         </fieldset>
@@ -187,17 +192,24 @@
             :error="fieldErrors.images"
           >
             <template #default="{ id, describedBy, ariaInvalid }">
-              <input
-                :id="id"
-                ref="fileInput"
-                class="field__input"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                multiple
-                :aria-describedby="describedBy"
-                :aria-invalid="ariaInvalid"
-                @change="replacePreviews"
-              >
+              <span class="post__photo-drop">
+                <span class="post__photo-drop-hint" aria-hidden="true">
+                  <AppIcon name="camera-plus-duotone" :size="32" />
+                  <span>افزودن تصویر</span>
+                  <span class="post__photo-drop-count">{{ formatNumber(previews.length) }} از ۸ تصویر انتخاب شده</span>
+                </span>
+                <input
+                  :id="id"
+                  ref="fileInput"
+                  class="field__input post__photo-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  :aria-describedby="describedBy"
+                  :aria-invalid="ariaInvalid"
+                  @change="replacePreviews"
+                >
+              </span>
             </template>
           </AppField>
           <ul v-if="previews.length" class="post__previews" aria-label="پیش‌نمایش تصاویر">
@@ -208,10 +220,12 @@
                 width="320"
                 height="240"
               >
+              <span v-if="index === 0" class="post__preview-cover">کاور</span>
               <div class="post__preview-meta">
                 <span>{{ preview.file.name }}</span>
-                <AppButton variant="secondary" @click="removePreview(index)">
-                  حذف پیش‌نمایش {{ index + 1 }}
+                <AppButton variant="secondary" class="post__preview-remove" @click="removePreview(index)">
+                  <AppIcon name="x-bold" :size="16" />
+                  <span class="sr-only">حذف پیش‌نمایش {{ index + 1 }}</span>
                 </AppButton>
               </div>
             </li>
@@ -224,7 +238,7 @@
           </AppButton>
           <AppButton
             v-if="savedId"
-            variant="secondary"
+            variant="accent"
             :loading="saving"
             @click="submitForReview"
           >
@@ -469,14 +483,6 @@ async function submitForReview(): Promise<void> {
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-6);
-  color: var(--color-hero-text);
-  background:
-    radial-gradient(circle at 10% 0%, rgb(110 231 183 / 0.14), transparent 36%),
-    linear-gradient(135deg, var(--color-hero), var(--color-hero-deep));
-  border: 1px solid var(--color-hero-border);
-  border-radius: var(--radius-panel);
-  box-shadow: var(--shadow-card);
 }
 
 .post__header h1,
@@ -485,19 +491,18 @@ async function submitForReview(): Promise<void> {
 }
 
 .post__header h1 {
-  font-size: clamp(1.75rem, 4vw, 2.4rem);
   line-height: 1.5;
 }
 
 .post__header > div > p {
   margin-block-start: var(--space-2);
-  color: var(--color-hero-muted);
+  color: var(--color-text-muted);
 }
 
 .post__state {
   padding: var(--space-2) var(--space-3);
-  font-size: 0.8125rem;
-  font-weight: 650;
+  font-size: var(--font-size-12);
+  font-weight: 800;
   border: 1px solid currentColor;
   border-radius: var(--radius-pill);
 }
@@ -536,7 +541,7 @@ async function submitForReview(): Promise<void> {
   margin: 0;
   padding: var(--space-5);
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  border: 0;
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
 }
@@ -546,8 +551,8 @@ async function submitForReview(): Promise<void> {
   align-items: center;
   gap: var(--space-2);
   padding-inline: var(--space-2);
-  font-size: 1.0625rem;
-  font-weight: 720;
+  font-size: var(--font-size-18);
+  font-weight: 800;
 }
 
 .post__step {
@@ -556,42 +561,57 @@ async function submitForReview(): Promise<void> {
   inline-size: 30px;
   block-size: 30px;
   color: var(--color-on-primary);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-12);
   background: var(--color-primary);
-  border-radius: 10px;
+  border-radius: var(--radius-small);
 }
 
 .post__price-options {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2);
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-pill);
 }
 
 .post__price-option {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-1);
   min-block-size: 52px;
   padding-inline: var(--space-2);
-  background: var(--color-surface-muted);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
+  font-weight: 600;
+  border-radius: var(--radius-pill);
   cursor: pointer;
 }
 
 .post__price-option:has(input:checked) {
   color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface));
-  border-color: var(--color-primary);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.post__price-option:has(input:focus-visible) {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
 .post__price-option input {
-  flex: 0 0 44px;
-  inline-size: 44px;
-  block-size: 44px;
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
   margin: 0;
-  accent-color: var(--color-primary);
+  opacity: 0;
+}
+
+.post__price-readback {
+  margin: 0;
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-primary);
 }
 
 .post__upload-guide {
@@ -611,7 +631,7 @@ async function submitForReview(): Promise<void> {
 .post__upload-guide p {
   margin: var(--space-1) 0 0;
   color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-size: var(--font-size-14);
   line-height: 1.9;
 }
 
@@ -621,7 +641,7 @@ async function submitForReview(): Promise<void> {
   gap: var(--space-2);
   margin: 0;
   padding: 0;
-  font-size: 0.75rem;
+  font-size: var(--font-size-12);
   list-style: none;
 }
 
@@ -632,31 +652,44 @@ async function submitForReview(): Promise<void> {
   border-radius: var(--radius-pill);
 }
 
-.post__section input[type='file'] {
-  min-block-size: 60px;
-  padding: var(--space-2);
-  background: var(--color-surface-muted);
-  border-style: dashed;
-  cursor: pointer;
+.post__photo-drop {
+  position: relative;
+  display: block;
 }
 
-.post__section input[type='file']::file-selector-button {
-  min-block-size: 44px;
-  margin-inline-end: var(--space-3);
-  padding-inline: var(--space-4);
-  font: inherit;
+.post__photo-drop-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
+  color: var(--color-primary);
   font-weight: 600;
-  color: var(--color-on-primary);
-  background: var(--color-primary);
-  border: 0;
-  border-radius: 10px;
+  text-align: center;
+  background: var(--color-surface-muted);
+  border: 1.5px dashed var(--color-control-border);
+  border-radius: var(--radius-card);
+}
+
+.post__photo-drop-count {
+  font-size: var(--font-size-12);
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.post__photo-input {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  opacity: 0;
   cursor: pointer;
 }
 
 .post__previews {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(14rem, 100%), 1fr));
-  gap: var(--space-4);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -665,16 +698,35 @@ async function submitForReview(): Promise<void> {
 .post__preview {
   min-inline-size: 0;
   overflow: hidden;
+  position: relative;
   background: var(--color-surface-muted);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
 }
 
 .post__preview img {
   display: block;
   inline-size: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1 / 1;
   object-fit: cover;
+}
+
+.post__preview-cover {
+  position: absolute;
+  inset-block-start: var(--space-2);
+  inset-inline-start: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-12);
+  font-weight: 800;
+  color: var(--color-on-accent-fill);
+  background: var(--color-accent-fill);
+  border-radius: var(--radius-pill);
+}
+
+.post__preview-remove {
+  align-self: flex-start;
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  padding: 0;
 }
 
 .post__preview-meta {
@@ -682,7 +734,7 @@ async function submitForReview(): Promise<void> {
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-3);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-12);
   overflow-wrap: anywhere;
 }
 
@@ -693,8 +745,23 @@ async function submitForReview(): Promise<void> {
   gap: var(--space-3);
   padding: var(--space-4);
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+@media (min-width: 700px) {
+  .post__fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .post__fields > :nth-child(n + 4) {
+    grid-column: 1 / -1;
+  }
+
+  .post__previews {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
 }
 
 @media (min-width: 768px) {
@@ -706,14 +773,6 @@ async function submitForReview(): Promise<void> {
     padding: var(--space-6);
   }
 
-  .post__fields {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .post__fields > :nth-child(n + 3) {
-    grid-column: 1 / -1;
-  }
 
   .post__upload-guide {
     flex-direction: row;

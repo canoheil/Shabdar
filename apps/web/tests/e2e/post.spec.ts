@@ -168,6 +168,7 @@ test('@post real create upload submit exposes distinct draft and review states',
   await page.getByLabel('عنوان', { exact: true }).fill(title)
   await page.getByLabel('توضیحات', { exact: true }).fill('توضیحات آگهی‌ای که با آپلود واقعی به بررسی ارسال می‌شود.')
   await page.getByLabel('قیمت (تومان)', { exact: true }).fill('12500000')
+  await expect(page.locator('.post__price-readback')).toHaveText('۱۲٬۵۰۰٬۰۰۰ تومان')
   await page.getByLabel('تصاویر آگهی', { exact: true }).setInputFiles(file('upload.png'))
   await page.getByRole('button', { name: 'ایجاد پیش‌نویس', exact: true }).click()
   await expect(page.getByText('پیش‌نویس ساخته شد؛ برای انتشار، ارسال برای بررسی را بزنید.', { exact: true })).toBeVisible()

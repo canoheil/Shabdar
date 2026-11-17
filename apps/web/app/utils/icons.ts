@@ -11,6 +11,7 @@ export const ICON_NAMES = [
   'tag-duotone', 'shield-check-duotone', 'chat-circle-duotone', 'flag-duotone',
   'map-pin', 'map-pin-fill', 'star-fill', 'star', 'x-bold', 'sliders-horizontal-bold',
   'arrow-right-bold', 'caret-down-bold', 'caret-right-bold', 'caret-left-bold', 'dots-three-bold',
+  'camera-plus-duotone', 'phone-duotone', 'clipboard-text-duotone',
 ] as const
 
 export type AppIconName = typeof ICON_NAMES[number]

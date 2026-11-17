@@ -8,9 +8,9 @@
         جایگاه و متن پیشنهادی را با شما هماهنگ می‌کند.
       </p>
       <ul class="advertising-page__steps">
-        <li>مشخصات تماس و درخواست خود را بنویسید.</li>
-        <li>درخواست در پنل مدیریت ثبت و بررسی می‌شود.</li>
-        <li>برای هماهنگی بعدی با شمارهٔ تماس شما پیگیری می‌کنیم.</li>
+        <li><AppIcon name="clipboard-text-duotone" :size="22" /> مشخصات تماس و درخواست خود را بنویسید.</li>
+        <li><AppIcon name="shield-check-duotone" :size="22" /> درخواست در پنل مدیریت ثبت و بررسی می‌شود.</li>
+        <li><AppIcon name="phone-duotone" :size="22" /> برای هماهنگی بعدی با شمارهٔ تماس شما پیگیری می‌کنیم.</li>
       </ul>
       <p class="advertising-page__privacy">
         ثبت درخواست نیاز به ورود ندارد. شمارهٔ تماس فقط در بخش خصوصی مدیریت نمایش داده می‌شود.
@@ -212,8 +212,8 @@ useHead({
 .advertising-page__form-panel {
   padding: var(--space-6);
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-card);
 }
 
 .advertising-page__intro h1,
@@ -233,7 +233,7 @@ useHead({
 
 .advertising-page__kicker {
   color: var(--color-primary);
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .advertising-page__intro > p:not(.advertising-page__kicker) {
@@ -245,13 +245,25 @@ useHead({
   flex-direction: column;
   gap: var(--space-3);
   margin: 0;
-  padding-inline-start: var(--space-5);
+  padding: 0;
   line-height: 1.8;
+  list-style: none;
+}
+
+.advertising-page__steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  color: var(--color-text-muted);
+}
+
+.advertising-page__steps .app-icon {
+  color: var(--color-primary);
 }
 
 .advertising-page__privacy {
   color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-size: var(--font-size-14);
 }
 
 .advertising-form,
