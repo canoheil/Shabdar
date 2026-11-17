@@ -421,7 +421,7 @@ useHead({ title: 'قوانین دیدگاه | مدیریت شبدر' })
 }
 
 .admin-rules__header h1 {
-  font-size: 1.75rem;
+  font-size: var(--font-size-28);
 }
 
 .admin-rule-create,

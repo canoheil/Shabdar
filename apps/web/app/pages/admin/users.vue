@@ -247,7 +247,7 @@ useHead({ title: 'مدیریت کاربران | شبدر' })
 }
 
 .admin-users__header h1 {
-  font-size: 1.75rem;
+  font-size: var(--font-size-28);
 }
 
 .admin-users__search {

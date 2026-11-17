@@ -257,7 +257,7 @@ useHead({ title: 'گزارش‌های تخلف | مدیریت شبدر' })
 }
 
 .admin-reports__header h1 {
-  font-size: 1.75rem;
+  font-size: var(--font-size-28);
 }
 
 .admin-reports__filters,
