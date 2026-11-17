@@ -2,28 +2,37 @@ import { expect, test } from '@playwright/test'
 import { createListing } from './support/stack'
 
 // TEMPORARY diagnostic for the broken-cover duplicate request. Deleted once
-// the mechanism is known; it throws on purpose so CI prints what it saw.
-test('@diag broken cover request trace', async ({ page }) => {
-  const title = 'آگهی تشخیصی تصویر شکسته یکتا'
-  await createListing({ title, state: 'active' })
+// the mechanism is known; both tests throw on purpose so CI prints the trace.
+async function trace(page: import('@playwright/test').Page, title: string): Promise<string[]> {
   const seen: string[] = []
   const cdp = await page.context().newCDPSession(page)
   await cdp.send('Network.enable')
   cdp.on('Network.requestWillBeSent', (e) => {
     if (new URL(e.request.url).pathname.startsWith('/media/')) {
-      const init = e.initiator
-      const stack = (init?.stack?.callFrames ?? []).slice(0, 2)
-        .map((f) => `${f.functionName || '?'}@${f.url.split('/').pop()}:${f.lineNumber}`)
-        .join(',')
-      seen.push(`${new URL(e.request.url).pathname.split('/').pop()} type=${init?.type ?? '?'} ${stack}`)
+      seen.push(`${new URL(e.request.url).pathname.split('/').pop()} type=${e.initiator?.type ?? '?'}`)
     }
   })
   await page.route('**/media/**', async (route) => {
     await route.fulfill({ status: 404, body: '' })
   })
   await page.goto(`/?q=${encodeURIComponent(title)}`)
-  const fixtureCard = page.locator('.listing-card').filter({ hasText: title })
-  await expect(fixtureCard.getByText('تصویر در دسترس نیست', { exact: true })).toBeVisible()
-  await page.waitForTimeout(1500)
-  throw new Error(`DIAG ${JSON.stringify(seen)}`)
+  await page.waitForTimeout(2000)
+  return seen
+}
+
+test('@diag broken cover trace with hydration', async ({ page }) => {
+  const title = 'آگهی تشخیصی یکتا با هیدریشن'
+  await createListing({ title, state: 'active' })
+  const seen = await trace(page, title)
+  throw new Error(`DIAG-JS ${JSON.stringify(seen)}`)
+})
+
+test('@diag broken cover trace without JavaScript', async ({ browser }) => {
+  const title = 'آگهی تشخیصی یکتا بدون جاوااسکریپت'
+  await createListing({ title, state: 'active' })
+  const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 375, height: 812 } })
+  const page = await context.newPage()
+  const seen = await trace(page, title)
+  await context.close()
+  throw new Error(`DIAG-NOJS ${JSON.stringify(seen)}`)
 })
