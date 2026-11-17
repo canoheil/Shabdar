@@ -236,12 +236,13 @@ async function verifyCode() {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  inline-size: min(100%, 28rem);
+  inline-size: min(100%, 420px);
   min-block-size: 580px;
+  margin-inline: auto;
   padding: var(--space-6);
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-dialog);
+  box-shadow: var(--shadow-card);
 }
 
 .login__header {
@@ -263,19 +264,34 @@ async function verifyCode() {
 }
 
 .login__header h1 {
-  font-size: 1.5rem;
+  font-size: var(--font-size-22);
   line-height: 1.5;
 }
 
 .login__header p {
   color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-size: var(--font-size-14);
 }
 
 .login__purpose {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2);
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-pill);
+}
+
+.login__purpose-button {
+  box-shadow: none;
+}
+
+.login__purpose-button[aria-pressed='true'] {
+  --btn-bg: var(--color-surface);
+  --btn-bg-hover: var(--color-surface);
+  --btn-fg: var(--color-text);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
 }
 
 .login__form {
