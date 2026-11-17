@@ -721,27 +721,14 @@ async function loadMore(): Promise<void> {
   }
 }
 
-const priorityListing = computed(() => (
-  feed.value?.data.find((item) => Boolean(item.cover_image)) ?? null
+const priorityImageId = computed(() => (
+  feed.value?.data.find((item) => Boolean(item.cover_image))?.public_id ?? null
 ))
-const priorityImageId = computed(() => priorityListing.value?.public_id ?? null)
 
-useHead(() => ({
-  link: priorityListing.value?.cover_image
-    ? [{
-        key: 'listing-browser-lcp-image',
-        rel: 'preload',
-        as: 'image',
-        href: priorityListing.value.cover_image,
-        imagesrcset: priorityListing.value.cover_webp_srcset || priorityListing.value.cover_srcset || undefined,
-        imagesizes: (priorityListing.value.cover_webp_srcset || priorityListing.value.cover_srcset)
-          ? LISTING_CARD_IMAGE_SIZES
-          : undefined,
-        type: priorityListing.value.cover_webp_srcset ? 'image/webp' : undefined,
-        fetchpriority: 'high',
-      }]
-    : [],
-}))
+// No manual <link rel="preload"> for the priority cover: a preload that fails
+// (404 media) is not reused by the <img>, so the browser fetched the same
+// broken cover twice. The eager fetchpriority="high" image in ListingCard is
+// the single fetch and still leads the LCP.
 
 onBeforeUnmount(() => clearTimeout(typingTimer))
 
