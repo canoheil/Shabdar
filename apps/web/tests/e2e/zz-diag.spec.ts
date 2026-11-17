@@ -4,7 +4,7 @@ import { createListing } from './support/stack'
 // TEMPORARY diagnostic for the broken-cover duplicate request. Deleted once
 // the mechanism is known; it throws on purpose so CI prints what it saw.
 test('@diag broken cover request trace', async ({ page }) => {
-  const title = 'آگهی با تصویر شکسته در Home'
+  const title = 'آگهی تشخیصی تصویر شکسته یکتا'
   await createListing({ title, state: 'active' })
   const seen: string[] = []
   const cdp = await page.context().newCDPSession(page)
