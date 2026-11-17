@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { expect, test, type BrowserContext, type Page } from '@playwright/test'
+import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test'
 import { runSql } from './support/database'
 import { apiAs, createListing, readFixtures, type FixtureRole } from './support/stack'
 
@@ -25,6 +25,12 @@ async function applyStorage(page: Page, storagePath: string): Promise<void> {
 
 function detailPath(slug: string): string {
   return `/listings/${encodeURIComponent(slug)}`
+}
+
+async function openDisclosure(disclosure: Locator): Promise<void> {
+  if (!(await disclosure.evaluate((element) => (element as HTMLDetailsElement).open))) {
+    await disclosure.locator('summary').click()
+  }
 }
 
 async function createComment(role: FixtureRole, slug: string, body: string): Promise<CommentFixture> {
@@ -106,6 +112,8 @@ test('@blocks anonymous SSR stays unfiltered and a failed private read preserves
   await expect(comments.locator('.listing-comments__item')).toHaveCount(3)
   await expect(comments.locator('.listing-comments__count')).toHaveText('۳ دیدگاه')
   await expect(comments.locator(`[data-comment-id="${own.public_id}"]`).getByRole('button', { name: 'مسدود کردن نویسنده', exact: true })).toHaveCount(0)
+  await expect(comments.locator(`[data-comment-id="${own.public_id}"]`).locator('details.listing-comments__menu')).toHaveCount(0)
+  await openDisclosure(comments.locator(`[data-comment-id="${blocked.public_id}"]`).locator('details.listing-comments__menu'))
   await expect(comments.locator(`[data-comment-id="${blocked.public_id}"]`).getByRole('button', { name: 'مسدود کردن نویسنده', exact: true })).toBeVisible()
 
   await page.unroute(endpoint)
@@ -128,6 +136,7 @@ test('@blocks only confirmed mutations filter one viewer and failures or 401 pre
   const comments = page.locator('.listing-comments')
   await expect(comments.locator('.listing-comments__item')).toHaveCount(4)
   const targetItem = comments.locator('.listing-comments__item').filter({ hasText: 'ادمین یک' })
+  await openDisclosure(targetItem.locator('details.listing-comments__menu'))
   const blockButton = targetItem.getByRole('button', { name: 'مسدود کردن نویسنده', exact: true })
   await expect(blockButton).toBeVisible()
   // The privacy note speaks about blocked users, not "authors".
@@ -168,6 +177,7 @@ test('@blocks only confirmed mutations filter one viewer and failures or 401 pre
       body: '{"error":{"code":"unauthorized","message":"fixture"}}',
     })
   })
+  await openDisclosure(secondItem.locator('details.listing-comments__menu'))
   await secondItem.getByRole('button', { name: 'مسدود کردن نویسنده', exact: true }).click()
   await expect(secondItem).toBeVisible()
   await expect(comments.locator('.listing-comments__item')).toHaveCount(2)

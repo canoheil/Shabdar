@@ -20,6 +20,12 @@ function detailPath(slug: string): string {
   return `/listings/${encodeURIComponent(slug)}`
 }
 
+async function openDisclosure(disclosure: Locator): Promise<void> {
+  if (!(await disclosure.evaluate((element) => (element as HTMLDetailsElement).open))) {
+    await disclosure.locator('summary').click()
+  }
+}
+
 async function me(role: FixtureRole): Promise<{ public_id: string }> {
   const api = await apiAs(role)
   try {
@@ -66,12 +72,14 @@ test('@reports anonymous login and all four targets submit once with safe confir
   expect(html).not.toContain('گزارش آگهی')
   expect(html).not.toContain('ورود برای گزارش')
   await page.goto(detailPath(created.slug))
+  await openDisclosure(page.locator('details.detail__reports'))
   const anonymousListing = page.locator('[data-report-control="listing"]')
   await anonymousListing.getByRole('link', { name: 'ورود برای گزارش', exact: true }).click()
   await expect(page).toHaveURL(/\/login$/)
 
   await applyStorage(page, readFixtures().buyerStorage)
   await page.goto(detailPath(created.slug))
+  await openDisclosure(page.locator('details.detail__reports'))
   const listing = page.locator('[data-report-control="listing"]')
   const sellerControl = page.locator('[data-report-control="seller"]')
   const otherItem = page.locator(`[data-comment-id="${other.public_id}"]`)
@@ -111,6 +119,7 @@ test('@reports anonymous login and all four targets submit once with safe confir
     { control: otherItem.locator('[data-report-control="comment"]'), button: 'گزارش دیدگاه', reason: 'offensive' },
     { control: otherItem.locator('[data-report-control="author"]'), button: 'گزارش نویسنده', reason: 'abuse' },
   ]
+  await openDisclosure(otherItem.locator('details.listing-comments__menu'))
   for (const target of targets) {
     await target.control.getByRole('button', { name: target.button, exact: true }).click()
     const panel = target.control.locator('.report-control__panel')
@@ -130,6 +139,7 @@ test('@reports failures and 401 retain drafts until a confirmed retry', async ({
   const created = await createListing({ title: 'خطا و پیش‌نویس گزارش', state: 'active' })
   await applyStorage(page, readFixtures().buyerStorage)
   await page.goto(detailPath(created.slug))
+  await openDisclosure(page.locator('details.detail__reports'))
   const listing = page.locator('[data-report-control="listing"]')
   await listing.getByRole('button', { name: 'گزارش آگهی', exact: true }).click()
   const panel = listing.locator('.report-control__panel')
@@ -152,6 +162,7 @@ test('@reports failures and 401 retain drafts until a confirmed retry', async ({
   expect(await page.evaluate(() => (window as unknown as { __reportXss?: boolean }).__reportXss)).toBeUndefined()
 
   const seller = page.locator('[data-report-control="seller"]')
+  await openDisclosure(page.locator('details.detail__reports'))
   await seller.getByRole('button', { name: 'گزارش فروشنده', exact: true }).click()
   const sellerPanel = seller.locator('.report-control__panel')
   await fillReport(sellerPanel, 'abuse', 'پیش‌نویس نشست منقضی')
@@ -181,6 +192,24 @@ test('@reports self listing seller comment and author controls are omitted', asy
   await expect(ownItem.locator('[data-report-control="comment"]')).toHaveCount(0)
   await expect(ownItem.locator('[data-report-control="author"]')).toHaveCount(0)
   const otherItem = page.locator(`[data-comment-id="${other.public_id}"]`)
+  await openDisclosure(otherItem.locator('details.listing-comments__menu'))
   await expect(otherItem.getByRole('button', { name: 'گزارش دیدگاه', exact: true })).toBeVisible()
   await expect(otherItem.getByRole('button', { name: 'گزارش نویسنده', exact: true })).toBeVisible()
+})
+
+test('@reports the safety foldout and the comment menu work from the keyboard', async ({ page }) => {
+  const created = await createListing({ title: 'مسیر صفحه‌کلید گزارش', state: 'active' })
+  await createComment('admin', created.slug, 'دیدگاه برای منوی صفحه‌کلید')
+  await applyStorage(page, readFixtures().buyerStorage)
+  await page.goto(detailPath(created.slug))
+  const safety = page.locator('details.detail__reports > summary')
+  await safety.focus()
+  await expect(safety).toBeFocused()
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('button', { name: 'گزارش آگهی', exact: true })).toBeFocused()
+  const menu = page.locator('details.listing-comments__menu > summary').first()
+  await menu.focus()
+  await page.keyboard.press('Space')
+  await expect(page.locator('.listing-comments__item').first().getByRole('button', { name: 'مسدود کردن نویسنده', exact: true })).toBeVisible()
 })

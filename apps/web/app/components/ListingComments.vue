@@ -127,29 +127,38 @@
         >
           حذف دیدگاه
         </AppButton>
-        <BlockControl
-          v-if="hydrated && authStatus === 'authenticated' && !authExpired && viewer && viewer.public_id !== comment.author.public_id"
-          :target-public-id="comment.author.public_id"
-          :viewer-public-id="viewer.public_id"
-          @confirmed="applyBlock(comment.author.public_id, $event)"
-          @expired="expireBlockSession"
-        />
-        <ReportControl
+        <details
           v-if="hydrated && authStatus !== 'unavailable' && viewer?.public_id !== comment.author.public_id"
-          target-type="comment"
-          :target-id="comment.public_id"
-          control-key="comment"
-          button-label="گزارش دیدگاه"
-          :anonymous="authStatus !== 'authenticated'"
-        />
-        <ReportControl
-          v-if="hydrated && authStatus !== 'unavailable' && viewer?.public_id !== comment.author.public_id"
-          target-type="user"
-          :target-id="comment.author.public_id"
-          control-key="author"
-          button-label="گزارش نویسنده"
-          :anonymous="authStatus !== 'authenticated'"
-        />
+          class="listing-comments__menu"
+        >
+          <summary class="listing-comments__menu-summary">
+            <AppIcon name="dots-three-bold" :size="20" />
+            <span class="sr-only">گزینه‌های بیشتر</span>
+          </summary>
+          <div class="listing-comments__menu-panel">
+            <BlockControl
+              v-if="authStatus === 'authenticated' && !authExpired && viewer && viewer.public_id !== comment.author.public_id"
+              :target-public-id="comment.author.public_id"
+              :viewer-public-id="viewer.public_id"
+              @confirmed="applyBlock(comment.author.public_id, $event)"
+              @expired="expireBlockSession"
+            />
+            <ReportControl
+              target-type="comment"
+              :target-id="comment.public_id"
+              control-key="comment"
+              button-label="گزارش دیدگاه"
+              :anonymous="authStatus !== 'authenticated'"
+            />
+            <ReportControl
+              target-type="user"
+              :target-id="comment.author.public_id"
+              control-key="author"
+              button-label="گزارش نویسنده"
+              :anonymous="authStatus !== 'authenticated'"
+            />
+          </div>
+        </details>
       </li>
     </ol>
 
@@ -468,7 +477,6 @@ async function loadMore(): Promise<void> {
 }
 
 .listing-comments h2 {
-  font-size: 1.25rem;
 }
 
 .listing-comments__count {
@@ -485,7 +493,7 @@ async function loadMore(): Promise<void> {
 }
 
 .listing-comments__form label {
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .listing-comments textarea {
@@ -505,7 +513,7 @@ async function loadMore(): Promise<void> {
 
 .listing-comments__character-count {
   color: var(--color-text-muted);
-  font-size: 0.9rem;
+  font-size: var(--font-size-14);
 }
 
 .listing-comments__list {
@@ -532,7 +540,7 @@ async function loadMore(): Promise<void> {
 .listing-comments__item-header {
   inline-size: 100%;
   color: var(--color-text-muted);
-  font-size: 0.9rem;
+  font-size: var(--font-size-14);
 }
 
 .listing-comments__item-header strong {
@@ -545,4 +553,26 @@ async function loadMore(): Promise<void> {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.listing-comments__menu {
+  min-inline-size: 0;
+}
+
+.listing-comments__menu-summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.listing-comments__menu-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-block-start: var(--space-2);
+}
 </style>
+

@@ -28,6 +28,8 @@ test('@detail eight-image gallery is keyboard operable and responsively composed
   await expect(main).toHaveAttribute('loading', 'eager')
   await expect(main).toHaveAttribute('fetchpriority', 'high')
   await expect(main).toHaveCSS('object-fit', 'contain')
+  const mainBox = await gallery.locator('.listing-gallery__main').boundingBox()
+  expect(Math.abs((mainBox?.width ?? 0) / (mainBox?.height ?? 1) - 4 / 3)).toBeLessThanOrEqual(0.02)
   const thumbnails = gallery.locator('.listing-gallery__thumbnail')
   await expect(thumbnails).toHaveCount(8)
   await expect(main).toHaveAttribute('srcset', /--w960\.jpg 960w/)

@@ -2,23 +2,19 @@
   <section class="detail">
     <AppSkeleton v-if="pending" variant="detail" label="در حال بارگذاری آگهی…" />
     <AppAlert v-else-if="gone" tone="error">
-      <p>این آگهی دیگر موجود نیست.</p>
+      <p class="detail__alert-copy">این آگهی دیگر موجود نیست.</p>
       <NuxtLink to="/" class="btn btn--secondary">بازگشت به خانه</NuxtLink>
     </AppAlert>
     <AppAlert v-else-if="missing" tone="error">
-      <p>آگهی یافت نشد.</p>
+      <p class="detail__alert-copy">آگهی یافت نشد.</p>
       <NuxtLink to="/" class="btn btn--secondary">بازگشت به خانه</NuxtLink>
     </AppAlert>
     <article v-else-if="listing" class="detail__article">
       <header class="detail__header">
         <NuxtLink to="/" class="detail__back">
-          <span aria-hidden="true">→</span>
+          <AppIcon name="arrow-right-bold" :size="20" />
           بازگشت به جستجو
         </NuxtLink>
-        <div>
-          <p class="detail__category">{{ listing.category }} <span aria-hidden="true">/</span> {{ listing.city }}</p>
-          <h1>{{ listing.title }}</h1>
-        </div>
       </header>
       <div class="detail__layout">
         <ListingGallery
@@ -26,20 +22,34 @@
           :images="listing.images"
           :listing-title="listing.title"
         />
-        <aside class="detail__summary" aria-label="خلاصه و اقدامات آگهی">
+        <section class="detail__summary" aria-label="خلاصه و اقدامات آگهی">
+          <div>
+            <p class="detail__category">{{ listing.category }} <span aria-hidden="true">/</span> {{ listing.city }}</p>
+            <h1>{{ listing.title }}</h1>
+            <p class="detail__facts">
+              <AppIcon name="star-fill" :size="14" />
+              <span v-if="listing.rating_count > 0">{{ formatNumber(Math.round(listing.rating_average * 10) / 10) }} از ۵ ({{ formatNumber(listing.rating_count) }} نظر)</span>
+              <span v-else>بدون امتیاز</span>
+              <span aria-hidden="true">·</span>
+              <span>{{ formatNumber(listing.comment_count) }} دیدگاه</span>
+              <span aria-hidden="true">·</span>
+              <time :datetime="listing.published_at">{{ formatListingDay(listing.published_at, renderNow) }}</time>
+            </p>
+          </div>
           <div class="detail__price-block">
             <span class="detail__price-label">قیمت</span>
             <p class="detail__price">{{ formatPrice(listing.price_toman, listing.price_type) }}</p>
           </div>
           <p class="detail__location meta">{{ listing.city }}، {{ listing.province }} <span aria-hidden="true">·</span> {{ listing.category }}</p>
           <div class="detail__seller">
-            <span class="detail__seller-avatar" aria-hidden="true">{{ (listing.seller.display_name ?? 'ش').slice(0, 1) }}</span>
+            <span class="detail__seller-avatar avatar" aria-hidden="true">{{ (listing.seller.display_name ?? 'ش').slice(0, 1) }}</span>
             <div>
               <span class="detail__seller-label">فروشنده</span>
               <strong>{{ listing.seller.display_name ?? 'کاربر شبدر' }}</strong>
             </div>
           </div>
 
+          <div class="detail__actions">
           <div
             v-if="hydrated && !mePending && authStatus !== 'unavailable' && me?.public_id !== listing.seller.public_id"
             class="detail__contact"
@@ -80,18 +90,21 @@
             <NuxtLink
               v-if="authStatus === 'anonymous' || favoriteAuthExpired"
               to="/login"
-              class="btn"
+              class="btn detail__favorite-button"
             >
-              ورود برای ذخیره
+              <AppIcon name="heart" :size="22" />
+              <span class="sr-only">ورود برای ذخیره</span>
             </NuxtLink>
             <template v-else-if="authStatus === 'authenticated' && me">
               <AppButton
                 v-if="favorited !== undefined"
+                class="detail__favorite-button"
                 :disabled="favoritePending"
                 :aria-pressed="favorited"
                 @click="toggleFavorite"
               >
-                {{ favoritePending ? 'در حال به‌روزرسانی…' : favorited ? removeLabel : saveLabel }}
+                <AppIcon :name="favorited ? 'heart-fill' : 'heart'" :size="22" />
+                <span class="sr-only">{{ favoritePending ? 'در حال به‌روزرسانی…' : favorited ? removeLabel : saveLabel }}</span>
               </AppButton>
               <p v-else-if="!favoriteError" class="meta">در حال بررسی علاقه‌مندی…</p>
               <AppAlert v-if="favoriteError" tone="error">{{ favoriteError }}</AppAlert>
@@ -106,12 +119,17 @@
             </template>
             <p class="meta" role="status" aria-live="polite" aria-atomic="true">{{ favoriteNotice }}</p>
           </div>
+          </div>
 
-          <div
+          <details
             v-if="hydrated && !mePending && authStatus !== 'unavailable' && me?.public_id !== listing.seller.public_id"
             class="detail__reports"
           >
-            <p class="detail__reports-title">گزارش و ایمنی</p>
+            <summary class="detail__reports-title">
+              <AppIcon name="shield-check" :size="18" />
+              گزارش و ایمنی
+              <AppIcon name="caret-down-bold" :size="14" />
+            </summary>
             <div class="detail__report-row">
               <span>محتوای آگهی</span>
               <ReportControl
@@ -132,13 +150,14 @@
                 :anonymous="authStatus !== 'authenticated'"
               />
             </div>
-          </div>
-        </aside>
+          </details>
+        </section>
       </div>
       <section class="detail__body" aria-labelledby="detail-description-title">
         <h2 id="detail-description-title">توضیحات</h2>
         <p class="detail__description">{{ listing.description }}</p>
       </section>
+      <div class="detail__feedback">
       <ListingRating
         :slug="listing.slug"
         :average="listing.rating_average"
@@ -163,6 +182,7 @@
         :viewer="me"
         @expired="favoriteAuthExpired = true"
       />
+      </div>
     </article>
     <AppAlert v-else tone="error">خطایی رخ داد؛ دوباره تلاش کنید.</AppAlert>
   </section>
@@ -221,6 +241,7 @@ const commentsReadFailed = computed(() => Boolean(initialCommentsError.value))
 const gone = computed(() => error.value?.statusCode === 410)
 const missing = computed(() => error.value?.statusCode === 404)
 
+const renderNow = useState('listing-day-now', () => Date.now())
 const saveLabel = 'ذخیره در علاقه‌مندی‌ها'
 const removeLabel = 'حذف از علاقه‌مندی‌ها'
 const favorited = ref<boolean>()
@@ -452,6 +473,10 @@ useHead(() => {
   min-inline-size: 0;
 }
 
+.detail__alert-copy {
+  margin: 0;
+}
+
 .detail__header {
   display: flex;
   flex-direction: column;
@@ -465,8 +490,8 @@ useHead(() => {
   gap: var(--space-2);
   min-block-size: 44px;
   color: var(--color-text-muted);
-  font-size: 0.875rem;
-  font-weight: 550;
+  font-size: var(--font-size-14);
+  font-weight: 600;
   text-decoration: none;
 }
 
@@ -474,13 +499,7 @@ useHead(() => {
   color: var(--color-primary);
 }
 
-.detail__back > span {
-  font-size: 1.25rem;
-  line-height: 1;
-}
-
-.detail__header h1,
-.detail__header p,
+.detail__summary h1,
 .detail__summary p,
 .detail__favorite p,
 .detail__body h2,
@@ -489,10 +508,10 @@ useHead(() => {
 }
 
 .detail__category {
-  margin-block-end: var(--space-2) !important;
+  margin-block-end: var(--space-2);
   color: var(--color-accent);
-  font-size: 0.8125rem;
-  font-weight: 650;
+  font-size: var(--font-size-12);
+  font-weight: 800;
 }
 
 .detail__category > span {
@@ -500,13 +519,27 @@ useHead(() => {
   color: var(--color-text-muted);
 }
 
-.detail__header h1 {
+.detail__summary h1 {
   max-inline-size: 30ch;
-  font-size: clamp(1.75rem, 4vw, 2.75rem);
-  font-weight: 740;
+  font-size: var(--font-size-28);
+  font-weight: 800;
   line-height: 1.45;
   text-wrap: balance;
   overflow-wrap: anywhere;
+}
+
+.detail__facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin-block-start: var(--space-3);
+  font-size: var(--font-size-14);
+  color: var(--color-text-muted);
+}
+
+.detail__facts .app-icon {
+  color: var(--color-accent);
 }
 
 .detail__layout {
@@ -524,7 +557,6 @@ useHead(() => {
   min-inline-size: 0;
   padding: var(--space-5);
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-panel);
   box-shadow: var(--shadow-card);
 }
@@ -534,20 +566,19 @@ useHead(() => {
   flex-direction: column;
   gap: var(--space-1);
   padding: var(--space-4);
-  background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface));
-  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  background: var(--color-primary-soft);
   border-radius: var(--radius-card);
 }
 
 .detail__price-label,
 .detail__seller-label {
   color: var(--color-text-muted);
-  font-size: 0.75rem;
+  font-size: var(--font-size-12);
 }
 
 .detail__price {
-  font-size: clamp(1.4rem, 3vw, 1.8rem);
-  font-weight: 780;
+  font-size: var(--font-size-28);
+  font-weight: 800;
   line-height: 1.6;
   color: var(--color-primary);
 }
@@ -564,19 +595,6 @@ useHead(() => {
   border-block: 1px solid var(--color-border);
 }
 
-.detail__seller-avatar {
-  display: grid;
-  flex: 0 0 48px;
-  place-items: center;
-  inline-size: 48px;
-  block-size: 48px;
-  color: var(--color-on-primary);
-  font-size: 1.125rem;
-  font-weight: 700;
-  background: linear-gradient(145deg, var(--color-primary), var(--color-hero));
-  border-radius: 16px;
-}
-
 .detail__seller > div {
   display: flex;
   flex-direction: column;
@@ -587,11 +605,56 @@ useHead(() => {
   overflow-wrap: anywhere;
 }
 
+.detail__actions {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.detail__contact {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
 .detail__favorite {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: var(--space-3);
+}
+
+.detail__favorite-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 48px;
+  min-block-size: 48px;
+  padding: 0;
+}
+
+.detail__favorite-button:active .app-icon,
+.detail__favorite-button:active :deep(.app-icon) {
+  animation: icon-pop var(--duration-normal) var(--ease-out);
+}
+
+@keyframes icon-pop {
+  50% { transform: scale(1.25); }
+}
+
+.detail__contact-title {
+  margin: 0;
+  font-size: var(--font-size-14);
+  font-weight: 800;
+}
+
+.detail__contact-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .detail__reports {
@@ -602,30 +665,14 @@ useHead(() => {
   border-block-start: 1px solid var(--color-border);
 }
 
-.detail__contact {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding-block-start: var(--space-4);
-  border-block-start: 1px solid var(--color-border);
-}
-
-.detail__contact-title {
-  margin: 0;
-  font-size: 0.875rem;
-  font-weight: 700;
-}
-
-.detail__contact-state {
-  display: flex;
-  flex-wrap: wrap;
+.detail__reports-title {
+  display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-}
-
-.detail__reports-title {
-  font-size: 0.875rem;
-  font-weight: 700;
+  min-block-size: 44px;
+  font-size: var(--font-size-14);
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .detail__report-row {
@@ -635,21 +682,19 @@ useHead(() => {
 
 .detail__report-row > span {
   color: var(--color-text-muted);
-  font-size: 0.75rem;
+  font-size: var(--font-size-12);
 }
 
 .detail__body {
   contain: layout style;
   padding: var(--space-5);
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
 }
 
 .detail__body h2 {
   margin-block-end: var(--space-3);
-  font-size: 1.25rem;
 }
 
 .detail__description {
@@ -658,6 +703,24 @@ useHead(() => {
   line-height: 2.05;
   white-space: pre-line;
   overflow-wrap: anywhere;
+}
+
+.detail__feedback {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-card);
+}
+
+.detail__feedback :deep(.listing-rating),
+.detail__feedback :deep(.listing-comments) {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 @media (min-width: 900px) {
