@@ -357,7 +357,7 @@ test('@chat-thread listing cards link only while the listing is public', async (
   await expect(page.locator('.bubble a.listing-reference')).toHaveCount(0)
 })
 
-test('@chat-thread both sides render as a messenger: opposite sides, avatar and time per bubble', async ({ page }) => {
+test('@chat-thread both sides render as a messenger: opposite sides and a time per bubble', async ({ page }) => {
   const conversation = await buy(slugOf(readFixtures().detailPath))
   await sendMessage('buyer', conversation, { client_message_id: clientMessageId(), body: 'پیام من' })
   await sendMessage('seller', conversation, { client_message_id: clientMessageId(), body: 'پیام او' })
@@ -398,9 +398,9 @@ test('@chat-thread both sides render as a messenger: opposite sides, avatar and 
   expect(geometry.other.right, 'the two sides never overlap horizontally')
     .toBeGreaterThan(geometry.own.right)
 
-  // Every bubble carries exactly one avatar and one machine-readable time.
+  // Every bubble carries no avatar and one machine-readable time.
   for (const selector of ['.bubble--own', '.bubble--other']) {
-    await expect(page.locator(`${selector} .bubble__avatar`)).toHaveCount(1)
+    await expect(page.locator(`${selector} .bubble__avatar`)).toHaveCount(0)
     const time = page.locator(`${selector} .bubble__time`)
     await expect(time).toHaveCount(1)
     await expect(time).toHaveAttribute('datetime', /T/)

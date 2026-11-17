@@ -33,7 +33,7 @@ const title = computed(() => props.reference.title?.trim() || 'آگهی بدون
   flex-direction: column;
   gap: 2px;
   padding: var(--space-2) var(--space-3);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-12);
   line-height: 1.5;
   color: inherit;
   text-decoration: none;
@@ -52,7 +52,7 @@ a.listing-reference:focus-visible {
 }
 
 .listing-reference__label {
-  font-size: 0.6875rem;
+  font-size: var(--font-size-12);
   font-weight: 600;
   color: var(--color-text-muted);
 }
@@ -67,7 +67,7 @@ a.listing-reference:focus-visible {
 }
 
 .listing-reference__note {
-  font-size: 0.6875rem;
+  font-size: var(--font-size-12);
   color: var(--color-text-muted);
 }
 </style>

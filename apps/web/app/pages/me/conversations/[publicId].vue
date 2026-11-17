@@ -9,6 +9,7 @@
 
     <AppEmptyState
       v-else-if="authStatus === 'anonymous'"
+      mascot="full"
       title="برای دیدن گفت‌وگو وارد شوید."
       description="این صفحه فقط برای دو طرف گفت‌وگو در دسترس است."
     >
@@ -24,6 +25,7 @@
 
     <AppEmptyState
       v-else-if="unavailable"
+      mascot="full"
       title="این گفت‌وگو در دسترس نیست."
       description="ممکن است نشانی نادرست باشد یا شما یکی از دو طرف این گفت‌وگو نباشید."
     >
@@ -49,23 +51,10 @@
     <div v-else class="thread__card">
       <header class="thread__header">
         <NuxtLink to="/me/conversations" class="thread__back" aria-label="بازگشت به فهرست پیام‌ها">
-          <svg
-            width="22"
-            height="22"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <path d="M9 6l6 6-6 6" />
-          </svg>
+          <AppIcon name="arrow-right-bold" :size="22" />
         </NuxtLink>
 
-        <span class="thread__avatar" aria-hidden="true">{{ otherInitial }}</span>
+        <span class="thread__avatar avatar" aria-hidden="true">{{ otherInitial }}</span>
 
         <div class="thread__identity">
           <h1 class="thread__name">{{ otherName }}</h1>
@@ -86,18 +75,7 @@
             aria-controls="thread-menu"
             @click="toggleMenu"
           >
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <circle cx="12" cy="5" r="1.8" />
-              <circle cx="12" cy="12" r="1.8" />
-              <circle cx="12" cy="19" r="1.8" />
-            </svg>
+            <AppIcon name="dots-three-vertical-bold" :size="22" />
           </button>
           <div
             v-if="menuOpen"
@@ -534,7 +512,6 @@ useHead({
   block-size: clamp(24rem, calc(100dvh - 15rem), 46rem);
   overflow: hidden;
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
 }
@@ -559,7 +536,7 @@ useHead({
   color: var(--color-text-muted);
   background: transparent;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   text-decoration: none;
 }
 
@@ -569,16 +546,6 @@ useHead({
 }
 
 .thread__avatar {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  inline-size: 2.5rem;
-  block-size: 2.5rem;
-  font-weight: 700;
-  color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface));
-  border: 1px solid color-mix(in srgb, var(--color-primary) 26%, var(--color-border));
-  border-radius: 999px;
   user-select: none;
 }
 
@@ -591,14 +558,14 @@ useHead({
 
 .thread__name {
   margin: 0;
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: var(--font-size-16);
+  font-weight: 800;
   overflow-wrap: anywhere;
 }
 
 .thread__status {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: var(--font-size-12);
   color: var(--color-text-muted);
 }
 
@@ -616,7 +583,7 @@ useHead({
   color: var(--color-text-muted);
   background: transparent;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   cursor: pointer;
 }
 
@@ -660,11 +627,11 @@ useHead({
   align-self: center;
   margin: var(--space-2) 0;
   padding: 2px var(--space-3);
-  font-size: 0.75rem;
+  font-size: var(--font-size-12);
   color: var(--color-text-muted);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .thread__empty,
@@ -675,7 +642,7 @@ useHead({
 
 .thread__empty {
   margin: var(--space-4) 0;
-  font-size: 0.875rem;
+  font-size: var(--font-size-14);
   color: var(--color-text-muted);
 }
 
@@ -715,12 +682,12 @@ useHead({
   margin: 0 auto var(--space-2);
   padding-inline: var(--space-4);
   font: inherit;
-  font-size: 0.875rem;
+  font-size: var(--font-size-14);
   font-weight: 600;
   color: var(--color-on-primary);
   background: var(--color-primary);
   border: 1px solid var(--color-primary);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   box-shadow: var(--shadow-card);
   cursor: pointer;
 }
@@ -737,6 +704,12 @@ useHead({
 @media (min-width: 600px) {
   .thread__card {
     block-size: clamp(28rem, calc(100dvh - 12rem), 48rem);
+  }
+}
+
+@media (max-height: 31rem) {
+  .thread__card {
+    block-size: calc(100dvh - var(--shell-bottom-nav) - var(--space-10));
   }
 }
 </style>
