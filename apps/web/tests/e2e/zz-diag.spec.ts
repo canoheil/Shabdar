@@ -1,36 +1,33 @@
-import { test, expect } from '@playwright/test'
+import { test } from '@playwright/test'
 import { createListing } from './support/stack'
 
-// TEMPORARY diagnostics for the broken-cover duplicate request. Deleted once
-// the mechanism is known. Each test asserts the single-fetch ideal so the
-// pass/fail summary alone answers the question.
-const WEBP_1PX = Buffer.from('UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=', 'base64')
-
-async function trace(page: import('@playwright/test').Page, title: string, ok: boolean): Promise<string[]> {
-  const seen: string[] = []
-  await page.route('**/media/**', async (route) => {
-    seen.push(route.request().url())
-    if (ok) await route.fulfill({ status: 200, contentType: 'image/webp', headers: { 'cache-control': 'no-store' }, body: WEBP_1PX })
-    else await route.fulfill({ status: 404, body: '' })
+// TEMPORARY diagnostic. Deleted once the mechanism is known.
+test('@diag img mutation trace', async ({ page }) => {
+  const title = 'آگهی تشخیصی جهش تصویر یکتا'
+  await createListing({ title, state: 'active' })
+  await page.addInitScript(() => {
+    const w = window as unknown as { __ev: string[] }
+    w.__ev = []
+    new MutationObserver((records) => {
+      for (const r of records) {
+        if (r.type === 'attributes' && (r.target as Element).tagName === 'IMG') {
+          w.__ev.push(`attr:${r.attributeName}=${(r.target as Element).getAttribute(r.attributeName ?? '')?.slice(0, 40)}`)
+        }
+        r.addedNodes.forEach((n) => {
+          if (n.nodeType === 1 && ((n as Element).tagName === 'IMG' || (n as Element).querySelector?.('img'))) w.__ev.push('add:img')
+          if (n.nodeType === 1 && (n as Element).classList?.contains('listing-card__placeholder')) w.__ev.push('add:placeholder')
+        })
+        r.removedNodes.forEach((n) => {
+          if (n.nodeType === 1 && ((n as Element).tagName === 'IMG' || (n as Element).querySelector?.('img'))) w.__ev.push('remove:img')
+        })
+      }
+    }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['src', 'srcset', 'sizes'] })
   })
+  let feedFetches = 0
+  page.on('request', (r) => { if (new URL(r.url()).pathname === '/api/v1/listings') feedFetches++ })
+  await page.route('**/media/**', async (route) => { await route.fulfill({ status: 404, body: '' }) })
   await page.goto(`/?q=${encodeURIComponent(title)}`)
-  await page.waitForTimeout(2000)
-  return seen
-}
-
-test('@diag nojs broken cover fetches once', async ({ browser }) => {
-  const title = 'آگهی تشخیصی بدون جاوااسکریپت یکتا'
-  await createListing({ title, state: 'active' })
-  const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 375, height: 812 } })
-  const page = await context.newPage()
-  const seen = await trace(page, title, false)
-  await context.close()
-  expect(seen).toHaveLength(1)
-})
-
-test('@diag js ok cover fetches each url once', async ({ page }) => {
-  const title = 'آگهی تشخیصی موفق یکتا'
-  await createListing({ title, state: 'active' })
-  const seen = await trace(page, title, true)
-  expect(new Set(seen).size).toBe(seen.length)
+  await page.waitForTimeout(2500)
+  const ev = await page.evaluate(() => (window as unknown as { __ev: string[] }).__ev)
+  throw new Error(`DIAG-MUT feed=${feedFetches} ev=${JSON.stringify(ev.slice(0, 30))}`)
 })
