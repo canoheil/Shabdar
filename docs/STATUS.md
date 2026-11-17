@@ -65,7 +65,7 @@ Task 9 is the close-out PR.
 | 6 Account: dashboard, favourites, blocks | Done 2026-11-17, PR #30 | `820bc9d` | 44118031655, failure — 4 tests (+ 2 admin) |
 | 7 Messages: inbox, conversation | Done 2026-11-17, PR #31 | `2401640` | 44118640354, failure — same 4 tests |
 | 8 Admin, legal, error pages | Done 2026-11-17, PR #32 | `6d50eca` | 44120889394, failure — same 4 tests (169 passed); `main` after the merge, run 44121232449, identical |
-| 9 Close-out | PR #33 | `65ddef1`, `47a046d`, `03b91c5` | 44154489643 on `03b91c5`: Playwright 173/173 and client-JS budget green; Lighthouse Detail LCP median 2702.3ms vs the 2700 ceiling — final remeasure on the closing commit, see the plan's Outcome |
+| 9 Close-out | Done 2026-11-17, PR #33 | `9ced602` (verified code state) | 44158007483, **success — every gate green** |
 
 The Tasks 3–8 runs above finished after their PRs were merged (the owner's
 go-ahead came while CI was still running). Their failures were three
@@ -103,12 +103,14 @@ investigated before the push.
 | 1 Baseline | `a5e2da6` | 43691418582 | 95,634 / 96,516 | 2405.1 / 2553.3 | 0.0727 / 0.0022 | 99.5 / 72 | 1.00 / 1.00 | `h1` in `.home__intro` / gallery image | 33,341 / 33,340 |
 | 2 Foundation | `92efcde` | 43704168232 | 94,736 / 95,619 | 2405.1 / 2556.6 | 0.0789 / 0.0021 | 62 / 50.5 | 1.00 / 1.00 | first card image / gallery image | 34,642 / 34,641 |
 | 3–8 (six tasks) | see Progress | see Progress | within budget (the budget step passed in every run; exact bytes are in each run's artifacts) | not measured — Lighthouse is skipped when Playwright fails | | | | | |
-| 9 Close-out | `03b91c5` | 44154489643 | 95,527 / 96,306 | 1954.3 / 2702.3 | 0.0968 / 0.0036 | 50 / 43 | 1.00 / 1.00 | `h1` in `.home__intro` / gallery image | not measured |
+| 9 Close-out (final) | `9ced602` | 44158007483, success | 95,529 / 96,307 | 1954.9 / 2629.6 | 0.0968 / 0.0036 | 51.5 / 56.5 | 1.00 / 1.00 | `h1` in `.home__intro` / gallery image | not measured |
 
 Two numbers sit close to their lines at close-out and are worth watching:
 Home CLS 0.0968 (ceiling 0.1 — the font-swap cause from Task 2, still) and
-Detail LCP (ceiling 2700; the three runs were 2702.3, 2703.2 and 2633.3 ms,
-image-load bound under simulated throttling).
+Detail LCP (ceiling 2700; the final three runs were 2705.2, 2629.6 and
+2628.3 ms, image-load bound under simulated throttling — the previous run's
+median had landed 2.3 ms over, at 2702.3 ms, before the gallery image's
+`decoding="async"` was removed).
 
 Detail's LCP (143 ms under the ceiling after Task 2) and Home's CLS (0.021 under)
 are the two numbers with little room.

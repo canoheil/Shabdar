@@ -1237,14 +1237,17 @@ run ids and the exact failing tests are in `docs/STATUS.md`'s Progress table
 `main` after Task 8, run 44121232449, identical). They were three regressions
 from Tasks 3, 5 and 6 (dynamic `<source sizes>` hydration refetch, 1×1
 segmented radio inputs, a dropped admin nav landmark), all fixed in PR #33.
-The Task 9 run 44154489643 on `03b91c5` is the first fully green Playwright
-run of the refresh (173/173) with the client-JS budget green (Home 95,527 /
-Detail 96,306 gzip bytes against the 104,000 ceiling); its Lighthouse medians
-were Home LCP 1954.3 ms, CLS 0.0968, Detail CLS 0.0036, TBT 50/43 ms,
-accessibility 1.00/1.00 — and Detail LCP 2702.3 ms against the 2700 ceiling
-(runs 2702.3, 2703.2, 2633.3), remeasured on the closing commit. The final
-run id and numbers replace this paragraph's last sentence in `docs/STATUS.md`'s
-gate table. No gate, budget or assertion was edited at any point; the only
-config diff against `fda97b0` is the two `package.json` test lists, as §13
-requires. Hand-over (§13.1) is the owner's live-preview check at 375, 768,
-1024 and 1440 px in both themes.
+The Task 9 run 44154489643 on `03b91c5` was the first fully green Playwright
+run of the refresh (173/173) with the client-JS budget green; only its Detail
+LCP median missed, at 2702.3 ms against the 2700 ceiling. After removing
+`decoding="async"` from the gallery LCP image, the closing run **44158007483
+on `9ced602` passed every step**: Playwright 173/173, client JS Home 95,529 /
+Detail 96,307 gzip bytes (ceiling 104,000), Lighthouse medians Home LCP
+1954.9 ms / Detail 2629.6 ms (ceiling 2700), CLS 0.0968 / 0.0036 (ceiling
+0.1), TBT 51.5 / 56.5 ms, accessibility 1.00 / 1.00. `docs/STATUS.md`'s gate
+table holds the full record; the documentation commit on top of `9ced602`
+has no code change, so `9ced602` is the verified code state (the same
+convention as PR #26). No gate, budget or assertion was edited at any point;
+the only config diff against `fda97b0` is the two `package.json` test lists,
+as §13 requires. Hand-over (§13.1) is the owner's live-preview check at 375,
+768, 1024 and 1440 px in both themes, then the owner merges PR #33.
