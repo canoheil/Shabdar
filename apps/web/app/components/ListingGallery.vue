@@ -26,7 +26,6 @@
           height="900"
           loading="eager"
           fetchpriority="high"
-          decoding="async"
           :data-index="selectedIndex"
           @error="markImageFailed(selectedIndex)"
         >

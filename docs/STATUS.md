@@ -1,11 +1,13 @@
 # Status — Direct chat, national locations and historical phases
 
-Updated 2026-11-15 on Arena.ai Agent Mode: Tasks 1 and 2 of the nine-task visual
-refresh are done on branch `arena/76915f79-shabdar`: a green baseline, then the
-new foundation (colours, type and spacing scales, icons, shared parts and the
-page shell). Each page's own layout is still the old one until its task (see the
-first section). `main` itself is still red on one test since PR #25
-until PR #26, which carries that fix, is merged. Before that, updated 2026-11-11: the
+Updated 2026-11-17 on Arena.ai Agent Mode: the nine-task visual refresh is
+complete (see the first section). Tasks 1–8 are merged to `main` (PRs #26–#32);
+Task 9 (close-out) is the final PR. One correction to how Tasks 3–8 proceeded:
+they were merged on the owner's go-ahead while their CI runs were still in
+flight, and those runs later finished red on up to four tests. The failures —
+three regressions from Tasks 3, 5 and 6, listed in the first section — are
+fixed in the Task 9 PR, whose run is the refresh's final green gate. Before
+that, updated 2026-11-11: the
 launch-preparation work (Phase 14) was carried from the closed PR #23 onto
 branch `arena/c1cbe813-shabdar` and finished there; its verification record
 below is for commit `1d3c54a`. No
@@ -14,15 +16,13 @@ normal startup migrator, and `NUXT_PUBLIC_SITE_URL` must be set to the real
 HTTPS origin or every canonical and `sitemap.xml` entry will point at
 `http://127.0.0.1:3000`.
 
-## Visual refresh — Task 2 of 9 done: foundation (2026-11-15)
+## Visual refresh — all nine tasks done (2026-11-17)
 
-**Every page now has the new shell and shared parts; no page has its new layout
-yet.** The colours, the type and spacing scales, the icons, the buttons, fields,
-alerts and empty states, and the navigation are the new ones on every page. What
-is inside a page (Home's hero and cards, the listing page, the forms, the
-account, the messages, the admin pages) is still arranged as before; Tasks 3 to 8
-rebuild those one group at a time. Behaviour, routes, data and the API are
-unchanged.
+**Every page now runs the new system in both themes.** The colours, the type
+and spacing scales, the icons, the buttons, fields, alerts and empty states,
+the navigation, and every page's own layout are the new ones. Behaviour,
+routes, data and the API are unchanged. `design-system/shabdar/MASTER.md`
+describes the system as shipped.
 
 - The owner asked for a full visual pass ("ugly and dead"). A review of the current
   site on sample data found seven causes; the owner chose the «گرم و خانگی»
@@ -42,28 +42,51 @@ unchanged.
 - Reference images (before / approved proposal) are in
   `design-system/shabdar/refresh-2026-11/`. They are mockups rendered from static
   HTML with sample data, not screenshots of the app.
-- `design-system/shabdar/MASTER.md` still describes the Phase 7 system. The spec
-  lists which of its rules the refresh replaces; the file is rewritten at close-out.
+- `design-system/shabdar/MASTER.md` was rewritten at close-out (Task 9) to
+  describe the shipped system; the six Phase-7 rules spec §9 names are gone,
+  its accessibility, privacy, performance and Shabdarak rules stand.
 - Notifications (Phase 15) stays the next product domain; the owner decides the
   order.
 
 ### Progress
 
-Pull request #26 was opened on 2026-11-15 at the owner's request. It carries
-Tasks 1 and 2. Its head commit is documentation only and has no CI run of its
-own; `92efcde` is the verified code state.
+Tasks 1 and 2 shipped in PR #26 (opened 2026-11-15 at the owner's request; its
+head commit is documentation only and has no CI run of its own, `92efcde` is
+the verified code state). Tasks 3–8 followed in PRs #27–#32, one per task.
+Task 9 is the close-out PR.
 
 | Task | State | Commit | CI run |
 |---|---|---|---|
-| 1 Green baseline | Done 2026-11-15 | `a5e2da6` | 43691418582, success |
-| 2 Foundation: tokens, icons, shared parts, shell | Done 2026-11-15 | `86738a0`, `92efcde` | 43704168232, success (43701510977 on `86738a0` failed on one test) |
-| 3 Home, category, city | Not started; waits for the owner | | |
-| 4 Listing detail | Not started | | |
-| 5 Forms: post, login, advertising | Not started | | |
-| 6 Account: dashboard, favourites, blocks | Not started | | |
-| 7 Messages: inbox, conversation | Not started | | |
-| 8 Admin, legal, error pages | Not started | | |
-| 9 Close-out | Not started | | |
+| 1 Green baseline | Done 2026-11-15, PR #26 | `a5e2da6` | 43691418582, success |
+| 2 Foundation: tokens, icons, shared parts, shell | Done 2026-11-15, PR #26 | `86738a0`, `92efcde` | 43704168232, success (43701510977 on `86738a0` failed on one test) |
+| 3 Home, category, city | Done 2026-11-17, PR #27 | `248281a` | 44111270837, failure — 1 test (broken covers, below) |
+| 4 Listing detail | Done 2026-11-17, PR #28 | `cff125a` | 44112642288, failure — same 1 test |
+| 5 Forms: post, login, advertising | Done 2026-11-17, PR #29 | `b3b02da` | 44115080958, failure — 2 tests (+ `@quality post`) |
+| 6 Account: dashboard, favourites, blocks | Done 2026-11-17, PR #30 | `820bc9d` | 44118031655, failure — 4 tests (+ 2 admin) |
+| 7 Messages: inbox, conversation | Done 2026-11-17, PR #31 | `2401640` | 44118640354, failure — same 4 tests |
+| 8 Admin, legal, error pages | Done 2026-11-17, PR #32 | `6d50eca` | 44120889394, failure — same 4 tests (169 passed); `main` after the merge, run 44121232449, identical |
+| 9 Close-out | PR #33 | `65ddef1`, `47a046d`, `03b91c5` | 44154489643 on `03b91c5`: Playwright 173/173 and client-JS budget green; Lighthouse Detail LCP median 2702.3ms vs the 2700 ceiling — final remeasure on the closing commit, see the plan's Outcome |
+
+The Tasks 3–8 runs above finished after their PRs were merged (the owner's
+go-ahead came while CI was still running). Their failures were three
+regressions, all fixed in Task 9:
+
+- `@home broken covers use a neutral failure placeholder without retry loops`
+  (from Task 3): a broken cover was fetched twice. Task 3 had turned the card
+  `<source>` element's `sizes` into a Vue binding; during hydration Vue
+  re-assigns dynamic DOM props, and re-assigning `source.sizes` makes the
+  browser re-run candidate selection — a fresh fetch for an already-broken
+  image (a loaded image is not refetched, which is why only the broken cover
+  showed it). Verified with CDP initiator traces and a no-JavaScript control
+  run in temporary diagnostic tests (since deleted). The attribute is static
+  again, and the manual LCP preload in `ListingBrowser` was also removed:
+  the eager `fetchpriority="high"` card image is the single fetch.
+- `@quality post … matrix` (from Task 5): the segmented price control's
+  visually hidden radio inputs were 1×1px and counted as visible targets
+  below the 44px floor. The input now covers its whole label.
+- `@admin-moderation …` and `@admin-trust …` (from Task 6): the dashboard
+  restyle dropped the `<nav aria-label="ناوبری مدیریت">` landmark the suite
+  navigates by. It is restored as its own list card.
 
 ### Gate numbers per task
 
@@ -79,6 +102,13 @@ investigated before the push.
 | Before PR #25 (last green on `main`) | `9ba038e` | 43616929450 | 99,578 / 100,464 | 2404.4 / 2556.7 | 0.0727 / 0.0022 | 122 / 86 | 1.00 / 1.00 | `h1` in `.home__intro` / gallery image | not measured |
 | 1 Baseline | `a5e2da6` | 43691418582 | 95,634 / 96,516 | 2405.1 / 2553.3 | 0.0727 / 0.0022 | 99.5 / 72 | 1.00 / 1.00 | `h1` in `.home__intro` / gallery image | 33,341 / 33,340 |
 | 2 Foundation | `92efcde` | 43704168232 | 94,736 / 95,619 | 2405.1 / 2556.6 | 0.0789 / 0.0021 | 62 / 50.5 | 1.00 / 1.00 | first card image / gallery image | 34,642 / 34,641 |
+| 3–8 (six tasks) | see Progress | see Progress | within budget (the budget step passed in every run; exact bytes are in each run's artifacts) | not measured — Lighthouse is skipped when Playwright fails | | | | | |
+| 9 Close-out | `03b91c5` | 44154489643 | 95,527 / 96,306 | 1954.3 / 2702.3 | 0.0968 / 0.0036 | 50 / 43 | 1.00 / 1.00 | `h1` in `.home__intro` / gallery image | not measured |
+
+Two numbers sit close to their lines at close-out and are worth watching:
+Home CLS 0.0968 (ceiling 0.1 — the font-swap cause from Task 2, still) and
+Detail LCP (ceiling 2700; the three runs were 2702.3, 2703.2 and 2633.3 ms,
+image-load bound under simulated throttling).
 
 Detail's LCP (143 ms under the ceiling after Task 2) and Home's CLS (0.021 under)
 are the two numbers with little room.
@@ -86,8 +116,8 @@ are the two numbers with little room.
 - Home's CLS rose from 0.0727 to 0.0789 in Task 2. The cause is the old one: when
   the web font replaces the fallback font, the first screen moves by 70px. The new
   shell starts the page 20 to 33px higher, so more of the moved content is on the
-  first screen. Task 3 rebuilds that first screen and has to bring the number
-  down.
+  first screen. Task 3 rebuilt that first screen; the final CLS is in the Task 9
+  row above.
 - Home's three LCP runs were 1698.6, 2409.1 and 2405.1 ms at the baseline and
   2552.0, 2405.1 and 2403.2 ms after Task 2. The median is the same. The diagnosed
   run had the `h1` as its LCP element at the baseline (1698.6 ms) and the first
