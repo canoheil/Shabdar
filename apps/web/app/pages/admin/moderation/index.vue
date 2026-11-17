@@ -401,7 +401,7 @@ useHead({ title: 'مدیریت دیدگاه | مدیریت شبدر' })
 }
 
 .admin-moderation__header h1 {
-  font-size: 1.75rem;
+  font-size: var(--font-size-28);
 }
 
 .rescan-panel,
@@ -439,6 +439,6 @@ useHead({ title: 'مدیریت دیدگاه | مدیریت شبدر' })
   flex-direction: column;
   gap: var(--space-1);
   color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-size: var(--font-size-14);
 }
 </style>

@@ -141,13 +141,8 @@ useHead({
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
-  max-inline-size: 46rem;
+  max-inline-size: 68ch;
   margin-inline: auto;
-  padding: var(--space-6);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
 }
 
 .legal__header {
@@ -158,15 +153,15 @@ useHead({
 
 .legal__kicker {
   margin: 0;
-  font-size: 0.8125rem;
-  font-weight: 700;
+  font-size: var(--font-size-12);
+  font-weight: 800;
   color: var(--color-primary);
   letter-spacing: 0.04em;
 }
 
 .legal h1 {
   margin: 0;
-  font-size: clamp(1.6rem, 4vw, 2.1rem);
+  font-size: var(--font-size-28);
   line-height: 1.4;
 }
 
@@ -177,7 +172,7 @@ useHead({
 }
 
 .legal__updated {
-  font-size: 0.875rem;
+  font-size: var(--font-size-14);
   color: var(--color-text-muted);
 }
 
@@ -187,13 +182,14 @@ useHead({
 
 .legal__toc {
   padding: var(--space-4);
-  background: var(--color-surface-muted);
-  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
 }
 
 .legal__toc h2 {
   margin: 0 0 var(--space-2);
-  font-size: 1rem;
+  font-size: var(--font-size-16);
 }
 
 .legal__toc ol {
@@ -226,7 +222,8 @@ useHead({
 
 .legal h2 {
   margin: 0;
-  font-size: 1.125rem;
+  font-size: var(--font-size-22);
+  font-weight: 800;
   scroll-margin-block-start: var(--space-6);
 }
 
@@ -246,7 +243,7 @@ useHead({
 
 .legal__note {
   padding: var(--space-3);
-  font-size: 0.875rem;
+  font-size: var(--font-size-14);
   line-height: 1.9;
   color: var(--color-warning);
   background: var(--color-warning-bg);

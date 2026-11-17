@@ -362,7 +362,7 @@ async function removeListing(): Promise<void> {
 }
 
 .review__header h1 {
-  font-size: 1.75rem;
+  font-size: var(--font-size-28);
 }
 
 .review__status {
@@ -370,7 +370,7 @@ async function removeListing(): Promise<void> {
   color: var(--color-info);
   background: var(--color-info-bg);
   border-radius: var(--radius-control);
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .review__facts,
@@ -408,7 +408,7 @@ async function removeListing(): Promise<void> {
 
 .review__facts dt {
   color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-size: var(--font-size-14);
 }
 
 .review__facts dd {
@@ -428,7 +428,7 @@ async function removeListing(): Promise<void> {
 .review__images h2,
 .review__attribution h2,
 .review__actions h2 {
-  font-size: 1.125rem;
+  font-size: var(--font-size-18);
 }
 
 .review__grid {
@@ -462,7 +462,7 @@ async function removeListing(): Promise<void> {
 
 .review-image__error {
   color: var(--color-error);
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .review-image__confirm {

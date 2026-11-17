@@ -207,11 +207,11 @@ async function reject(publicId: string) {
 }
 
 .queue__header h1 {
-  font-size: 1.75rem;
+  font-size: var(--font-size-28);
 }
 
 .queue__section h2 {
-  font-size: 1.25rem;
+  font-size: var(--font-size-22);
 }
 
 .cards {
@@ -244,7 +244,7 @@ async function reject(publicId: string) {
 }
 
 .card__title {
-  font-weight: 700;
+  font-weight: 800;
   overflow-wrap: anywhere;
 }
 

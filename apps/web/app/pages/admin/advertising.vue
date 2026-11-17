@@ -487,8 +487,8 @@ useHead({ title: 'مدیریت تبلیغات | شبدر' })
   color: var(--color-text-muted);
   background: var(--color-surface-muted);
   border-radius: var(--radius-pill);
-  font-size: 0.75rem;
-  font-weight: 700;
+  font-size: var(--font-size-12);
+  font-weight: 800;
 }
 
 .advertising-slot__state[data-enabled="true"] {
@@ -573,7 +573,7 @@ useHead({ title: 'مدیریت تبلیغات | شبدر' })
 
 .advertising-request__phone {
   color: var(--color-primary);
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .advertising-request__details {
