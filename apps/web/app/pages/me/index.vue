@@ -5,7 +5,7 @@
         <h1>داشبورد فروشنده</h1>
         <p class="meta">وضعیت آگهی‌ها و ذخیره‌های دریافتی را یک‌جا ببینید.</p>
       </div>
-      <NuxtLink to="/post" class="btn">ثبت آگهی</NuxtLink>
+      <NuxtLink to="/post" class="btn btn--accent">ثبت آگهی</NuxtLink>
     </header>
 
     <AppSkeleton v-if="mePending" variant="text" label="در حال بارگذاری…" />
@@ -13,28 +13,67 @@
     <AppEmptyState
       v-else-if="authStatus === 'anonymous'"
       title="برای دیدن داشبورد وارد شوید."
+      mascot="full"
     >
       <NuxtLink to="/login" class="btn">ورود</NuxtLink>
     </AppEmptyState>
 
     <template v-else-if="authStatus === 'authenticated' && me">
       <div class="dashboard__welcome">
+        <span class="avatar avatar--b" aria-hidden="true">{{ (me.display_name ?? 'ش').slice(0, 1) }}</span>
         <p class="dashboard__hello">خوش آمدید، {{ me.display_name ?? 'کاربر شبدر' }}</p>
-        <NuxtLink to="/me/favorites" class="btn btn--secondary">علاقه‌مندی‌های من</NuxtLink>
-        <NuxtLink to="/me/blocks" class="btn btn--secondary">مدیریت مسدودشدگان</NuxtLink>
       </div>
 
-      <nav v-if="me.is_admin" class="dashboard__admin" aria-label="ناوبری مدیریت">
-        <NuxtLink to="/admin/queue">صف بررسی</NuxtLink>
-        <NuxtLink to="/admin/reports">گزارش‌ها</NuxtLink>
-        <NuxtLink to="/admin/moderation">مدیریت دیدگاه</NuxtLink>
-        <NuxtLink to="/admin/moderation/rules">قوانین دیدگاه</NuxtLink>
-        <NuxtLink to="/admin/advertising">مدیریت تبلیغات</NuxtLink>
-        <NuxtLink to="/admin/users">کاربران</NuxtLink>
+      <nav class="dashboard__links" aria-label="پیوندهای حساب">
+        <NuxtLink to="/me/favorites" class="dashboard__link">
+          <AppIcon name="heart-duotone" :size="22" />
+          <span>علاقه‌مندی‌های من</span>
+          <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
+        </NuxtLink>
+        <NuxtLink to="/me/blocks" class="dashboard__link">
+          <AppIcon name="shield-check-duotone" :size="22" />
+          <span>مدیریت مسدودشدگان</span>
+          <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
+        </NuxtLink>
+        <template v-if="me.is_admin">
+          <NuxtLink to="/admin/queue" class="dashboard__link">
+            <AppIcon name="clipboard-text-duotone" :size="22" />
+            <span>صف بررسی</span>
+            <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
+          </NuxtLink>
+          <NuxtLink to="/admin/reports" class="dashboard__link">
+            <AppIcon name="flag-duotone" :size="22" />
+            <span>گزارش‌ها</span>
+            <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
+          </NuxtLink>
+          <NuxtLink to="/admin/moderation" class="dashboard__link">
+            <AppIcon name="chat-circle-duotone" :size="22" />
+            <span>مدیریت دیدگاه</span>
+            <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
+          </NuxtLink>
+          <NuxtLink to="/admin/moderation/rules" class="dashboard__link">
+            <AppIcon name="info-fill" :size="22" />
+            <span>قوانین دیدگاه</span>
+            <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
+          </NuxtLink>
+          <NuxtLink to="/admin/advertising" class="dashboard__link">
+            <AppIcon name="tag-duotone" :size="22" />
+            <span>مدیریت تبلیغات</span>
+            <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
+          </NuxtLink>
+          <NuxtLink to="/admin/users" class="dashboard__link">
+            <AppIcon name="user-circle" :size="22" />
+            <span>کاربران</span>
+            <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
+          </NuxtLink>
+        </template>
       </nav>
 
       <ul class="stats" aria-label="خلاصهٔ آگهی‌ها">
         <li v-for="tile in tiles" :key="tile.label" class="stat">
+          <span class="stat__icon" :class="`stat__icon--${tile.tint}`" aria-hidden="true">
+            <AppIcon :name="tile.icon" :size="24" />
+          </span>
           <span class="stat__value">{{ tile.value }}</span>
           <span class="stat__label">{{ tile.label }}</span>
         </li>
@@ -70,6 +109,7 @@
         </AppAlert>
         <AppEmptyState
           v-else-if="myListings.length === 0"
+          mascot="full"
           :title="statusFilter === 'all' ? 'هنوز آگهی‌ای ثبت نکرده‌اید.' : 'آگهی‌ای با این وضعیت ندارید.'"
           :description="statusFilter === 'all' ? 'اولین آگهی را ذخیره کنید و برای بررسی ارسال نمایید.' : 'وضعیت دیگری را انتخاب کنید یا همهٔ آگهی‌ها را ببینید.'"
         >
@@ -94,7 +134,7 @@
                 دلیل رد: {{ item.rejection_reason }}
               </p>
             </div>
-            <span class="badge" :data-status="item.status">{{ statusLabel(item.status) }}</span>
+            <span class="badge" :data-status="item.status"><AppIcon :name="statusIcon(item.status)" :size="13" />{{ statusLabel(item.status) }}</span>
             <div v-if="confirmingDeleteId === item.public_id" class="mine__actions mine__actions--confirm">
               <span>حذف «{{ item.title }}» قطعی است؟</span>
               <AppButton
@@ -114,13 +154,13 @@
               <NuxtLink
                 v-if="canEdit(item)"
                 :to="`/post?edit=${item.public_id}`"
-                class="btn btn--secondary"
+                class="btn btn--soft"
               >
                 ویرایش
               </NuxtLink>
               <AppButton
                 v-if="canSubmit(item)"
-                variant="secondary"
+                variant="soft"
                 :loading="pendingAction === `${item.public_id}:submit`"
                 :disabled="pendingAction !== null"
                 @click="transitionListing(item, 'submit')"
@@ -129,7 +169,7 @@
               </AppButton>
               <AppButton
                 v-if="item.status === 'active'"
-                variant="secondary"
+                variant="soft"
                 :loading="pendingAction === `${item.public_id}:mark-sold`"
                 :disabled="pendingAction !== null"
                 @click="transitionListing(item, 'mark-sold')"
@@ -138,7 +178,7 @@
               </AppButton>
               <AppButton
                 v-if="item.status === 'active'"
-                variant="secondary"
+                variant="soft"
                 :loading="pendingAction === `${item.public_id}:archive`"
                 :disabled="pendingAction !== null"
                 @click="transitionListing(item, 'archive')"
@@ -147,7 +187,7 @@
               </AppButton>
               <AppButton
                 v-if="canDelete(item)"
-                variant="danger"
+                variant="danger-quiet"
                 :data-delete-trigger="item.public_id"
                 :disabled="pendingAction !== null"
                 @click="askDelete(item)"
@@ -323,10 +363,10 @@ async function deleteListing(item: ApiListingOut): Promise<void> {
 }
 
 const tiles = computed(() => [
-  { label: 'فعال', value: formatNumber(summary.value?.active_count ?? 0) },
-  { label: 'در انتظار تأیید', value: formatNumber(summary.value?.pending_count ?? 0) },
-  { label: 'فروخته‌شده', value: formatNumber(summary.value?.sold_count ?? 0) },
-  { label: 'ذخیرهٔ آگهی‌های من', value: formatNumber(summary.value?.favorite_count ?? 0) },
+  { label: 'فعال', value: formatNumber(summary.value?.active_count ?? 0), icon: 'check-circle-duotone' as const, tint: 'b' },
+  { label: 'در انتظار تأیید', value: formatNumber(summary.value?.pending_count ?? 0), icon: 'clock-duotone' as const, tint: 'a' },
+  { label: 'فروخته‌شده', value: formatNumber(summary.value?.sold_count ?? 0), icon: 'tag-duotone' as const, tint: 'c' },
+  { label: 'ذخیرهٔ آگهی‌های من', value: formatNumber(summary.value?.favorite_count ?? 0), icon: 'heart-duotone' as const, tint: 'a' },
 ])
 
 const STATUS_LABELS: Record<string, string> = {
@@ -337,6 +377,13 @@ const STATUS_LABELS: Record<string, string> = {
   sold: 'فروخته‌شده',
   archived: 'بایگانی',
   removed: 'حذف‌شده',
+}
+
+function statusIcon(status: string) {
+  if (status === 'active') return 'check-circle-fill' as const
+  if (status === 'pending') return 'clock-fill' as const
+  if (status === 'rejected') return 'x-circle-fill' as const
+  return 'minus-circle-fill' as const
 }
 
 function statusLabel(status: string): string {
@@ -360,39 +407,55 @@ function statusLabel(status: string): string {
   gap: var(--space-3);
 }
 
-.dashboard__header {
+.dashboard__header,
+.dashboard__welcome {
   padding: var(--space-5);
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
 }
 
-.dashboard__admin {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
+.dashboard__welcome {
+  justify-content: flex-start;
 }
 
-.dashboard__admin a {
-  display: inline-flex;
+.dashboard__links {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2);
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.dashboard__link {
+  display: flex;
   align-items: center;
-  min-block-size: 44px;
+  gap: var(--space-3);
+  min-block-size: 48px;
   padding-inline: var(--space-3);
+  font-weight: 600;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.dashboard__link + .dashboard__link {
+  border-block-start: 1px solid var(--color-border);
+}
+
+.dashboard__link:hover {
+  color: var(--color-primary);
+}
+
+.dashboard__link-caret {
+  margin-inline-start: auto;
+  color: var(--color-text-muted);
 }
 
 .dashboard__header h1,
 .dashboard__header p,
 .dashboard__hello {
   margin: 0;
-}
-
-.dashboard__header h1 {
-  font-size: 1.75rem;
 }
 
 .dashboard__hello {
@@ -416,8 +479,7 @@ function statusLabel(status: string): string {
   min-inline-size: 0;
   overflow: hidden;
   padding: var(--space-5);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--color-primary) 6%, var(--color-surface)), var(--color-surface));
-  border: 1px solid var(--color-border);
+  background: var(--color-surface);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
 }
@@ -432,15 +494,38 @@ function statusLabel(status: string): string {
   border-radius: var(--radius-pill);
 }
 
+.stat__icon {
+  display: grid;
+  place-items: center;
+  inline-size: 44px;
+  block-size: 44px;
+  border-radius: var(--radius-control);
+}
+
+.stat__icon--a {
+  color: var(--color-ink-a);
+  background: var(--color-tint-a);
+}
+
+.stat__icon--b {
+  color: var(--color-ink-b);
+  background: var(--color-tint-b);
+}
+
+.stat__icon--c {
+  color: var(--color-ink-c);
+  background: var(--color-tint-c);
+}
+
 .stat__value {
-  font-size: 1.65rem;
-  font-weight: 700;
+  font-size: var(--font-size-22);
+  font-weight: 800;
   color: var(--color-primary);
 }
 
 .stat__label {
   color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-size: var(--font-size-14);
 }
 
 .dashboard__listings {
@@ -463,13 +548,12 @@ function statusLabel(status: string): string {
 
 .dashboard__listings h2 {
   margin: 0;
-  font-size: 1.25rem;
 }
 
 .dashboard__notice {
   margin: 0;
   color: var(--color-primary);
-  font-size: 0.9375rem;
+  font-size: var(--font-size-14);
 }
 
 .mine {
@@ -489,7 +573,6 @@ function statusLabel(status: string): string {
   gap: var(--space-3);
   padding: var(--space-4);
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
 }
@@ -510,7 +593,7 @@ function statusLabel(status: string): string {
   display: inline-flex;
   align-items: center;
   min-block-size: 44px;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--color-text);
   overflow-wrap: anywhere;
 }
@@ -533,41 +616,40 @@ function statusLabel(status: string): string {
 
 .mine__actions :deep(.btn) {
   min-block-size: 44px;
-  font-size: 0.875rem;
+  font-size: var(--font-size-14);
 }
 
 .mine__actions--confirm > span {
   flex: 1 1 15rem;
-  font-size: 0.9375rem;
+  font-size: var(--font-size-14);
   overflow-wrap: anywhere;
 }
 
 .badge {
   flex: none;
   padding: var(--space-1) var(--space-3);
-  font-size: 0.8125rem;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-12);
   font-weight: 600;
   color: var(--color-text);
   background: var(--color-surface-muted);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .badge[data-status='active'] {
   color: var(--color-primary);
-  border-color: var(--color-primary);
 }
 
 .badge[data-status='pending'] {
   color: var(--color-warning);
   background: var(--color-warning-bg);
-  border-color: var(--color-warning);
 }
 
 .badge[data-status='rejected'] {
   color: var(--color-error);
   background: var(--color-error-bg);
-  border-color: var(--color-error);
 }
 
 @media (min-width: 768px) {
