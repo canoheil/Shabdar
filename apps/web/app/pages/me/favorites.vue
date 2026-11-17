@@ -13,6 +13,7 @@
     <AppEmptyState
       v-else-if="authStatus === 'anonymous'"
       title="برای دیدن علاقه‌مندی‌های خود وارد شوید."
+      mascot="full"
     >
       <NuxtLink to="/login" class="btn">ورود</NuxtLink>
     </AppEmptyState>
@@ -35,6 +36,7 @@
       <template v-else>
         <AppEmptyState
           v-if="items.length === 0 && !hasMore"
+          mascot="full"
           title="هنوز آگهی‌ای ذخیره نکرده‌اید."
           description="از صفحهٔ آگهی‌ها، موارد دلخواه را برای مراجعهٔ بعدی ذخیره کنید."
         >
@@ -47,10 +49,12 @@
               <template #actions>
                 <AppButton
                   variant="secondary"
+                  class="favorites__remove"
                   :disabled="removingId !== null"
+                  :aria-label="removingId === item.public_id ? 'در حال حذف…' : 'حذف از علاقه‌مندی‌ها'"
                   @click="removeFavorite(item)"
                 >
-                  {{ removingId === item.public_id ? 'در حال حذف…' : 'حذف از علاقه‌مندی‌ها' }}
+                  <AppIcon name="heart-fill" :size="20" />
                 </AppButton>
               </template>
             </ListingCard>
@@ -188,7 +192,6 @@ useHead({ title: 'علاقه‌مندی‌های من | شبدر' })
 }
 
 .favorites__header h1 {
-  font-size: 1.75rem;
 }
 
 .favorites__back {
@@ -199,7 +202,7 @@ useHead({ title: 'علاقه‌مندی‌های من | شبدر' })
 
 .favorites__cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
   margin: 0;
   padding: 0;
@@ -220,5 +223,39 @@ useHead({ title: 'علاقه‌مندی‌های من | شبدر' })
 
 .favorites__more {
   align-self: center;
+}
+.favorites :deep(.listing-card) {
+  position: relative;
+}
+
+.favorites :deep(.listing-card__actions) {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: var(--space-3);
+  inset-inline-start: var(--space-3);
+  margin: 0;
+}
+
+.favorites__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  padding: 0;
+  color: var(--color-accent);
+  border-radius: 50%;
+}
+
+@media (min-width: 700px) {
+  .favorites__cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .favorites__cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 </style>

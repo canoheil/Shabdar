@@ -9,7 +9,7 @@
     </header>
 
     <AppSkeleton v-if="mePending" variant="text" label="در حال بارگذاری…" />
-    <AppEmptyState v-else-if="authStatus === 'anonymous'" title="برای مدیریت کاربران مسدودشده وارد شوید.">
+    <AppEmptyState v-else-if="authStatus === 'anonymous'" title="برای مدیریت کاربران مسدودشده وارد شوید." mascot="full">
       <NuxtLink to="/login" class="btn">ورود</NuxtLink>
     </AppEmptyState>
 
@@ -25,17 +25,19 @@
       <template v-else>
         <AppEmptyState
           v-if="items.length === 0 && !hasMore"
+          mascot="full"
           title="هنوز کاربری را مسدود نکرده‌اید."
           description="می‌توانید از کنار دیدگاه‌ها، نویسنده را برای خودتان مسدود کنید."
         />
         <ul v-else class="blocks-page__list">
           <li v-for="item in items" :key="item.public_id" :data-block-id="item.public_id" class="blocks-page__item">
+            <span class="avatar" aria-hidden="true">{{ (item.display_name ?? 'ش').slice(0, 1) }}</span>
             <div>
               <strong>{{ item.display_name ?? 'کاربر شبدر' }}</strong>
               <p class="meta">مسدودشده در {{ formatCommentDate(item.blocked_at) }}</p>
             </div>
             <AppButton
-              variant="secondary"
+              variant="soft"
               :loading="removingId === item.public_id"
               :disabled="removingId !== null"
               @click="unblock(item)"
@@ -175,7 +177,6 @@ useHead({ title: 'کاربران مسدودشده | شبدر' })
 }
 
 .blocks-page__header h1 {
-  font-size: 1.75rem;
 }
 
 .blocks-page__back {
@@ -187,18 +188,25 @@ useHead({ title: 'کاربران مسدودشده | شبدر' })
 .blocks-page__list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
   margin: 0;
-  padding: 0;
+  padding: var(--space-2);
   list-style: none;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
 }
 
 .blocks-page__item {
   min-inline-size: 0;
   padding: var(--space-4);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
+}
+
+.blocks-page__item + .blocks-page__item {
+  border-block-start: 1px solid var(--color-border);
+}
+
+.blocks-page__item > div {
+  flex: 1;
 }
 
 .blocks-page__item > div {
