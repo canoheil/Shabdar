@@ -5,7 +5,7 @@ refresh are done on branch `arena/76915f79-shabdar`: a green baseline, then the
 new foundation (colours, type and spacing scales, icons, shared parts and the
 page shell). Each page's own layout is still the old one until its task (see the
 first section). `main` itself is still red on one test since PR #25
-until that fix is merged. Before that, updated 2026-11-11: the
+until PR #26, which carries that fix, is merged. Before that, updated 2026-11-11: the
 launch-preparation work (Phase 14) was carried from the closed PR #23 onto
 branch `arena/c1cbe813-shabdar` and finished there; its verification record
 below is for commit `1d3c54a`. No
@@ -48,6 +48,10 @@ unchanged.
   order.
 
 ### Progress
+
+Pull request #26 was opened on 2026-11-15 at the owner's request. It carries
+Tasks 1 and 2. Its head commit is documentation only and has no CI run of its
+own; `92efcde` is the verified code state.
 
 | Task | State | Commit | CI run |
 |---|---|---|---|
@@ -160,9 +164,9 @@ are the two numbers with little room.
   49 with the same strict-mode violation as CI; with line 49 fixed it failed at line
   46; with both fixed, 2 of 2 passed. CI run 43691418582 on `a5e2da6`: every step
   green, Playwright 168 passed, Lighthouse and the client-JS budget passed.
-- **`main` is still red.** The fix is on this branch only. Merging this branch as it
-  stands (documents plus the two-line test fix) would make `main` green before the
-  redesign starts; that is the owner's call.
+- **`main` is still red.** The fix is on this branch only, now in PR #26 together
+  with Task 2. Merging that PR makes `main` green and ships the new shell around
+  the old page layouts; when to merge is the owner's call.
 
 ### What can be checked locally, and what only CI can say
 
