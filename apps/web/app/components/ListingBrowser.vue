@@ -752,7 +752,7 @@ defineExpose({ applyNow })
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 20px;
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-card);
 }
 
 .browser__search-submit {
@@ -793,7 +793,7 @@ defineExpose({ applyNow })
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-card);
   cursor: pointer;
   transition: color var(--duration-fast), background-color var(--duration-fast), border-color var(--duration-fast), transform var(--duration-normal) var(--ease-out);
   display: inline-flex;

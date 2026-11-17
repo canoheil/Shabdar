@@ -194,7 +194,7 @@ function onStarKeydown(event: KeyboardEvent, stars: number): void {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-card);
 }
 
 .listing-rating__heading {
