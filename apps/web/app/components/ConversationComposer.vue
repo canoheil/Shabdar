@@ -37,16 +37,7 @@
         :aria-busy="sending ? 'true' : undefined"
         :aria-label="sendLabel"
       >
-        <svg
-          width="22"
-          height="22"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z" />
-        </svg>
+        <AppIcon name="paper-plane-right-fill" :size="22" class="composer__send-icon" />
       </button>
     </div>
 
@@ -260,7 +251,7 @@ onBeforeUnmount(stopWaitTimer)
   color: var(--color-text);
   background: var(--color-surface-muted);
   border: 1px solid var(--color-border);
-  border-radius: 22px;
+  border-radius: var(--radius-pill);
   resize: none;
   field-sizing: content;
 }
@@ -284,7 +275,7 @@ onBeforeUnmount(stopWaitTimer)
   color: var(--color-on-primary);
   background: var(--color-primary);
   border: 1px solid var(--color-primary);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   cursor: pointer;
 }
 
@@ -310,20 +301,20 @@ onBeforeUnmount(stopWaitTimer)
 }
 
 .composer__wait {
-  font-size: 0.75rem;
+  font-size: var(--font-size-12);
   font-weight: 600;
   color: var(--color-text-muted);
 }
 
 .composer__counter {
-  font-size: 0.75rem;
+  font-size: var(--font-size-12);
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
 .composer__counter--over {
   color: var(--color-danger);
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .composer__chip {
@@ -332,7 +323,7 @@ onBeforeUnmount(stopWaitTimer)
   justify-content: space-between;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-2);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-12);
   background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
   border: 1px solid color-mix(in srgb, var(--color-primary) 24%, var(--color-border));
   border-radius: var(--radius-control);
@@ -347,7 +338,7 @@ onBeforeUnmount(stopWaitTimer)
   min-inline-size: 44px;
   min-block-size: 44px;
   font: inherit;
-  font-size: 1.125rem;
+  font-size: var(--font-size-18);
   line-height: 1;
   color: var(--color-text-muted);
   background: transparent;
@@ -377,5 +368,8 @@ onBeforeUnmount(stopWaitTimer)
   display: inline-flex;
   align-items: center;
   min-block-size: 44px;
+}
+.composer__send-icon {
+  transform: scaleX(-1);
 }
 </style>

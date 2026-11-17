@@ -254,6 +254,10 @@ h3 {
   margin: 0;
 }
 
+.shell:has(.thread) .shell__footer {
+  display: none;
+}
+
 .shell__footer-links {
   display: flex;
   flex-wrap: wrap;

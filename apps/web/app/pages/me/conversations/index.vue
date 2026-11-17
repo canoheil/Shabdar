@@ -17,6 +17,7 @@
 
     <AppEmptyState
       v-else-if="authStatus === 'anonymous'"
+      mascot="full"
       title="برای دیدن پیام‌ها وارد شوید."
       description="گفت‌وگوهای شما پس از ورود به حساب نمایش داده می‌شوند."
     >
@@ -50,6 +51,7 @@
       <template v-else>
         <AppEmptyState
           v-if="items.length === 0 && !hasMoreOlder"
+          mascot="full"
           title="هنوز گفت‌وگویی ندارید."
           description="از صفحهٔ هر آگهی می‌توانید با آگهی‌دهنده گفت‌وگو را آغاز کنید."
         >
@@ -190,7 +192,6 @@ useHead({
 }
 
 .inbox__header h1 {
-  font-size: 1.75rem;
 }
 
 .inbox__back {
@@ -202,10 +203,16 @@ useHead({
 .inbox__list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
   margin: 0;
-  padding: 0;
+  padding: var(--space-1);
   list-style: none;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.inbox__list > * + * {
+  border-block-start: 1px solid var(--color-border);
 }
 
 .inbox__state {
