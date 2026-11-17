@@ -1,5 +1,7 @@
 <template>
   <div class="browser">
+    <div class="browser__hero" :class="{ 'browser__hero--emerald': emeraldHero }">
+      <slot name="intro" />
     <form id="search" class="browser__search" role="search" @submit.prevent="applyNow">
       <AppField id="listing-search" label="جستجو" class="browser__search-field">
         <template #default="{ id, describedBy, ariaInvalid }">
@@ -9,7 +11,7 @@
             class="field__input"
             type="search"
             name="q"
-            placeholder="نام کالا، مهارت یا طعم دلخواه…"
+            placeholder="دنبال چه می‌گردید؟"
             maxlength="100"
             :aria-describedby="describedBy"
             :aria-invalid="ariaInvalid"
@@ -17,7 +19,10 @@
           >
         </template>
       </AppField>
-      <AppButton type="submit" class="browser__search-submit">جستجو</AppButton>
+      <AppButton type="submit" variant="accent" class="browser__search-submit">
+        <AppIcon name="magnifying-glass-bold" :size="20" />
+        <span class="browser__search-submit-text">جستجو</span>
+      </AppButton>
       <button
         ref="filterButton"
         type="button"
@@ -25,7 +30,8 @@
         aria-haspopup="dialog"
         @click="openMobileFilters"
       >
-        فیلترها
+        <AppIcon name="sliders-horizontal-bold" :size="20" />
+        <span class="browser__filter-open-text">فیلترها</span>
       </button>
       <div class="browser__desktop-filters">
         <AppField v-if="!lockedCategory" id="category-filter" label="دسته">
@@ -150,6 +156,7 @@
         </AppField>
       </div>
     </form>
+    </div>
 
     <div class="browser__categories" role="group" aria-label="دسته‌بندی‌ها">
       <NuxtLink
@@ -157,15 +164,21 @@
         class="browser__category-button"
         :aria-current="category === '' ? 'page' : undefined"
       >
+        <span class="browser__category-tile browser__category-tile--a" aria-hidden="true">
+          <AppIcon :name="categoryIcon('')" :size="24" />
+        </span>
         همه
       </NuxtLink>
       <NuxtLink
-        v-for="item in categories?.data ?? []"
+        v-for="(item, index) in categories?.data ?? []"
         :key="item.slug"
         :to="categoryHref(item.slug)"
         class="browser__category-button"
         :aria-current="category === item.slug ? 'page' : undefined"
       >
+        <span class="browser__category-tile" :class="`browser__category-tile--${'abc'[index % 3]}`" aria-hidden="true">
+          <AppIcon :name="categoryIcon(item.slug)" :size="24" />
+        </span>
         {{ item.name_fa }}
       </NuxtLink>
     </div>
@@ -393,6 +406,8 @@ const props = withDefaults(defineProps<{
   kicker?: string
   /// Home shows its own hero and the advertising slot; clean URLs keep it lean.
   showAdvertising?: boolean
+  /// Home's intro sits on the emerald hero; category and city keep paper.
+  emeraldHero?: boolean
 }>(), {
   lockedCategory: '',
   lockedCity: '',
@@ -400,6 +415,7 @@ const props = withDefaults(defineProps<{
   heading: 'آگهی‌های تازه',
   kicker: 'تازه‌های شبدر',
   showAdvertising: false,
+  emeraldHero: false,
 })
 
 const sortOptions = SORT_OPTIONS
@@ -740,28 +756,66 @@ defineExpose({ applyNow })
   min-inline-size: 0;
 }
 
+.browser__hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-inline-size: 0;
+}
+
+.browser__hero--emerald {
+  padding: var(--space-5);
+  color: var(--color-hero-text);
+  background:
+    radial-gradient(circle at 10% 0%, rgb(110 231 183 / 0.17), transparent 34%),
+    linear-gradient(135deg, var(--color-hero) 0%, var(--color-hero-deep) 82%);
+  border: 1px solid var(--color-hero-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-lifted);
+}
+
 .browser__search {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: end;
-  gap: var(--space-3);
+  gap: var(--space-2);
   padding: var(--space-3);
   color: var(--color-text);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 20px;
+  border-radius: var(--radius-panel);
   box-shadow: var(--shadow-card);
 }
 
+.browser__search-field :deep(.app-field__label) {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .browser__search-submit {
-  min-inline-size: 5rem;
+  min-inline-size: 48px;
   min-block-size: 48px;
 }
 
+.browser__search-submit-text,
+.browser__filter-open-text {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .browser__filter-open {
-  grid-column: 1 / -1;
+  min-inline-size: 48px;
+  min-block-size: 48px;
 }
 
 .browser__desktop-filters {
@@ -772,7 +826,7 @@ defineExpose({ applyNow })
 
 .browser__categories {
   display: flex;
-  gap: var(--space-2);
+  gap: var(--space-3);
   overflow-x: auto;
   padding: var(--space-1) var(--space-1) var(--space-2);
   scrollbar-width: thin;
@@ -780,37 +834,61 @@ defineExpose({ applyNow })
 }
 
 .browser__category-button {
+  display: inline-flex;
   flex: none;
-  /* Keep the measured target above 44px after subpixel browser rounding. */
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  min-inline-size: 64px;
   min-block-size: 45px;
-  padding-inline: var(--space-5);
+  padding: 0;
   font: inherit;
-  font-size: 0.875rem;
-  font-weight: 550;
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  line-height: 1.5;
   color: var(--color-text);
   white-space: nowrap;
   text-decoration: none;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-card);
+  background: transparent;
+  border: 0;
   cursor: pointer;
-  transition: color var(--duration-fast), background-color var(--duration-fast), border-color var(--duration-fast), transform var(--duration-normal) var(--ease-out);
-  display: inline-flex;
-  align-items: center;
+  transition: color var(--duration-fast), transform var(--duration-normal) var(--ease-out);
+}
+
+.browser__category-tile {
+  display: grid;
+  place-items: center;
+  inline-size: 52px;
+  block-size: 52px;
+  border-radius: var(--radius-control);
+}
+
+.browser__category-tile--a {
+  color: var(--color-ink-a);
+  background: var(--color-tint-a);
+}
+
+.browser__category-tile--b {
+  color: var(--color-ink-b);
+  background: var(--color-tint-b);
+}
+
+.browser__category-tile--c {
+  color: var(--color-ink-c);
+  background: var(--color-tint-c);
 }
 
 .browser__category-button:hover {
   color: var(--color-primary);
-  border-color: var(--color-primary);
   transform: translateY(-1px);
 }
 
 .browser__category-button[aria-current='page'] {
-  color: var(--color-on-primary);
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  box-shadow: 0 5px 14px color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
+}
+
+.browser__category-button[aria-current='page'] .browser__category-tile {
+  box-shadow: var(--ring-focus);
 }
 
 .browser__filter-dialog {
@@ -829,13 +907,21 @@ defineExpose({ applyNow })
   backdrop-filter: blur(4px);
 }
 
+@media (max-width: 699.98px) {
+  .browser__filter-dialog {
+    inset-block-end: 0;
+    inset-inline: 0;
+    inline-size: 100%;
+    margin: auto auto 0;
+  }
+}
+
 .browser__dialog-header {
   padding: var(--space-5) var(--space-5) 0;
 }
 
 .browser__dialog-header h2 {
   margin: 0;
-  font-size: 1.25rem;
 }
 
 .browser__dialog-form {
@@ -872,24 +958,25 @@ defineExpose({ applyNow })
 .browser__results-kicker {
   margin: 0 0 var(--space-1);
   color: var(--color-accent);
-  font-size: 0.75rem;
-  font-weight: 700;
+  font-size: var(--font-size-12);
+  font-weight: 800;
 }
 
 .browser__results-header h2 {
   margin: 0;
-  font-size: clamp(1.35rem, 3vw, 1.75rem);
   line-height: 1.5;
 }
 
 .browser__result-count {
-  padding-block-end: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-pill);
 }
 
 .browser__cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr));
-  gap: var(--space-5);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -897,6 +984,10 @@ defineExpose({ applyNow })
 
 .browser__cards > li {
   min-inline-size: 0;
+}
+
+.browser__cards > li.browser__advertising {
+  grid-column: 1 / -1;
 }
 
 .browser__pagination {
@@ -920,6 +1011,12 @@ defineExpose({ applyNow })
   margin: 0;
 }
 
+@media (min-width: 700px) {
+  .browser__cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (min-width: 768px) {
   .browser__filter-open {
     display: none;
@@ -935,11 +1032,26 @@ defineExpose({ applyNow })
   .browser__search {
     padding: var(--space-4);
   }
+
+  .browser__search-submit-text {
+    position: static;
+    inline-size: auto;
+    block-size: auto;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
 }
 
 @media (min-width: 1200px) {
   .browser__desktop-filters {
     grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .browser__cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 </style>

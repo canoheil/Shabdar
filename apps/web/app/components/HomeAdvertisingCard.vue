@@ -9,10 +9,12 @@
         aria-label="بستن فرصت تبلیغاتی"
         @click="$emit('dismiss')"
       >
-        بستن
+        <AppIcon name="x-bold" :size="16" />
+        <span class="sr-only">بستن</span>
       </button>
       <span v-else class="home-ad__preview">پیش‌نمایش</span>
     </div>
+    <BrandMascot v-if="internal" pose="full" class="home-ad__mascot" />
     <h3 id="home-ad-title">{{ slot.title }}</h3>
     <p>{{ slot.body }}</p>
     <NuxtLink v-if="internal" :to="destination" class="home-ad__cta">
@@ -55,7 +57,7 @@ const internal = computed(() => destination.value.startsWith('/'))
   gap: var(--space-3);
   block-size: 100%;
   padding: var(--space-5);
-  background: var(--color-surface);
+  background: var(--color-accent-soft);
   border: 1px dashed var(--color-primary);
   border-radius: var(--radius-card);
 }
@@ -71,8 +73,8 @@ const internal = computed(() => destination.value.startsWith('/'))
 .home-ad__label,
 .home-ad__preview {
   color: var(--color-primary);
-  font-size: 0.75rem;
-  font-weight: 700;
+  font-size: var(--font-size-12);
+  font-weight: 800;
 }
 
 .home-ad__dismiss {
@@ -84,20 +86,26 @@ const internal = computed(() => destination.value.startsWith('/'))
   cursor: pointer;
 }
 
+.home-ad__mascot {
+  inline-size: 56px;
+  block-size: 56px;
+  color: var(--color-accent);
+}
+
 .home-ad h3,
 .home-ad p {
   margin: 0;
 }
 
 .home-ad h3 {
-  font-size: 1.05rem;
+  font-size: var(--font-size-18);
   line-height: 1.7;
 }
 
 .home-ad p {
   flex: 1;
   color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-size: var(--font-size-14);
   line-height: 1.9;
   white-space: pre-line;
 }
@@ -107,7 +115,7 @@ const internal = computed(() => destination.value.startsWith('/'))
   align-items: center;
   min-block-size: 44px;
   color: var(--color-primary);
-  font-weight: 700;
+  font-weight: 800;
   text-decoration: underline;
   text-underline-offset: 0.25rem;
 }

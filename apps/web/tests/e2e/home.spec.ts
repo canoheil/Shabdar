@@ -347,7 +347,7 @@ test('@home long titles, neutral no-cover media and one real high-priority cover
   const noCover = page.locator('.listing-card').filter({ hasText: longTitle })
   await expect(noCover).toBeVisible()
   await expect(noCover.getByText('بدون تصویر', { exact: true })).toBeVisible()
-  await expect(noCover.getByText('بررسی‌شده برای انتشار', { exact: true })).toBeVisible()
+  await expect(noCover.getByText('بررسی‌شده برای انتشار', { exact: true })).toHaveCount(0)
   await expect(noCover.locator('time')).toHaveAttribute('datetime', /.+/)
   await expect(noCover.locator('img')).toHaveCount(0)
   const highPriority = page.locator('.listing-card img[fetchpriority="high"]')
@@ -378,7 +378,7 @@ test('@home mobile cover transfers a real responsive WebP derivative, not the or
   await expect(image).toHaveAttribute('srcset', /--w960\.jpg 960w/)
   const source = page.locator('.listing-card').filter({ hasText: title }).locator('source[type="image/webp"]')
   await expect(source).toHaveAttribute('srcset', /--w480\.webp 480w/)
-  await expect.poll(() => image.evaluate((element) => element.currentSrc)).toContain('--w480.webp')
+  await expect.poll(() => image.evaluate((element) => element.currentSrc)).toContain('--w240.webp')
   expect(mediaRequests.some((url) => new URL(url).pathname.endsWith('.png'))).toBe(false)
   await expectNoOverflow(page)
 })
@@ -396,4 +396,40 @@ test('@home broken covers use a neutral failure placeholder without retry loops'
   await expect(fixtureCard.getByText('تصویر در دسترس نیست', { exact: true })).toBeVisible()
   await expect(fixtureCard.locator('img')).toHaveCount(0)
   expect(new Set(mediaRequests).size).toBe(mediaRequests.length)
+})
+
+test('@home card photos are centred square crops, never stretched', async ({ page }) => {
+  const title = 'آگهی قاب مربع شبدر'
+  await createListing({ title, state: 'active' })
+  await page.setViewportSize({ width: 375, height: 812 })
+  await page.goto(`/?q=${encodeURIComponent(title)}`)
+  await expect(page.locator('.listing-card__image').first()).toHaveCSS('object-fit', 'cover')
+  const box = await page.locator('.listing-card__media').first().boundingBox()
+  expect(Math.abs((box?.width ?? 0) - (box?.height ?? 99))).toBeLessThanOrEqual(1)
+})
+
+test('@home a twelve-digit price and an unbroken title stay inside the two-column card at 320px', async ({ page }) => {
+  const term = 'آگهی نوشتهٔ بی‌فاصلهٔ شبدر'
+  await createListing({ title: `${term} ${'ک'.repeat(48)}`, priceToman: 999_999_999_999, imageCount: 0, state: 'active' })
+  await page.setViewportSize({ width: 320, height: 568 })
+  await page.goto(`/?q=${encodeURIComponent(term)}`)
+  const card = page.locator('.listing-card').filter({ hasText: term })
+  await expect(card).toBeVisible()
+  expect((await card.boundingBox())?.width ?? 999).toBeLessThanOrEqual(160)
+  const clipped = await card.evaluate((element) => [...element.querySelectorAll<HTMLElement>('.listing-card__title, .listing-card__price')]
+    .filter((node) => node.scrollWidth > node.clientWidth + 1).map((node) => node.className))
+  expect(clipped).toEqual([])
+  await expectNoOverflow(page)
+  await expectTouchTargets(page)
+})
+
+test('@home a device clock 36 hours ahead of the server causes no hydration mismatch', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (message) => { if (/hydrat|mismatch/i.test(message.text())) errors.push(message.text()) })
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.clock.setFixedTime(new Date(Date.now() + 36 * 60 * 60 * 1000))
+  await page.goto('/')
+  await expect(page.locator('.listing-card time').first()).toBeVisible()
+  await page.waitForFunction(() => document.documentElement.classList.contains('fonts-enhanced'))
+  expect(errors).toEqual([])
 })
