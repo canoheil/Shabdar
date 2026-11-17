@@ -3,6 +3,7 @@
     <div class="listing-rating__heading">
       <h2 id="listing-rating-title">امتیازها</h2>
       <p class="listing-rating__summary" aria-live="polite" aria-atomic="true">
+        <AppIcon name="star-fill" :size="16" />
         {{ summary }}
       </p>
     </div>
@@ -46,7 +47,7 @@
               @click="choose(stars)"
               @keydown="onStarKeydown($event, stars)"
             >
-              <span aria-hidden="true">{{ (myStars ?? 0) >= stars ? '★' : '☆' }}</span>
+              <AppIcon :name="(myStars ?? 0) >= stars ? 'star-fill' : 'star'" :size="28" />
             </button>
           </div>
           <AppButton
@@ -211,21 +212,18 @@ function onStarKeydown(event: KeyboardEvent, stars: number): void {
 }
 
 .listing-rating h2 {
-  font-size: 1.25rem;
 }
 
 .listing-rating__summary {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  font-weight: 700;
+  font-weight: 800;
   color: var(--color-primary);
 }
 
-.listing-rating__summary::before {
-  content: '★';
+.listing-rating__summary .app-icon {
   color: var(--color-accent);
-  font-size: 1.25rem;
 }
 
 .listing-rating__stars {
@@ -249,9 +247,12 @@ function onStarKeydown(event: KeyboardEvent, stars: number): void {
   cursor: pointer;
 }
 
-.listing-rating__star span {
-  font-size: 1.8rem;
-  line-height: 1;
+.listing-rating__star:active .app-icon {
+  animation: icon-pop var(--duration-normal) var(--ease-out);
+}
+
+@keyframes icon-pop {
+  50% { transform: scale(1.25); }
 }
 
 .listing-rating__star[aria-checked="true"],

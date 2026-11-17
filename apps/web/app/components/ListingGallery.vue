@@ -43,7 +43,7 @@
         :disabled="selectedIndex === 0"
         @click="moveImage(-1)"
       >
-        قبلی
+        <AppIcon name="caret-right-bold" :size="20" />
       </button>
       <button
         v-if="images.length > 1"
@@ -53,7 +53,7 @@
         :disabled="selectedIndex === images.length - 1"
         @click="moveImage(1)"
       >
-        بعدی
+        <AppIcon name="caret-left-bold" :size="20" />
       </button>
       <span v-if="images.length" class="listing-gallery__counter" aria-hidden="true">
         {{ formatNumber(selectedIndex + 1) }} / {{ formatNumber(images.length) }}
