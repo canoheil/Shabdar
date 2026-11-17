@@ -1,28 +1,33 @@
 <template>
   <section class="clean-list">
-    <nav class="clean-list__breadcrumb" aria-label="مسیر">
-      <NuxtLink to="/">خانه</NuxtLink>
-      <span aria-hidden="true">/</span>
-      <span>{{ city.province_name_fa }}</span>
-      <span aria-hidden="true">/</span>
-      <span aria-current="page">{{ city.name_fa }}</span>
-    </nav>
-
-    <header class="clean-list__header">
-      <p class="clean-list__kicker">آگهی‌های شهر</p>
-      <h1>آگهی‌های {{ city.name_fa }}</h1>
-      <p class="clean-list__copy">
-        آگهی‌های فعال {{ city.name_fa }}، استان {{ city.province_name_fa }}؛
-        با جستجو، دسته و بازهٔ قیمت محدودترش کنید.
-      </p>
-    </header>
 
     <ListingBrowser
       :locked-city="city.slug"
       :locked-province="city.province_slug"
       kicker="شهر انتخاب‌شده"
       :heading="`آگهی‌های ${city.name_fa}`"
-    />
+    >
+      <template #intro>
+        <div class="clean-list__intro">
+      <nav class="clean-list__breadcrumb" aria-label="مسیر">
+        <NuxtLink to="/">خانه</NuxtLink>
+        <span aria-hidden="true">/</span>
+        <span>{{ city.province_name_fa }}</span>
+        <span aria-hidden="true">/</span>
+        <span aria-current="page">{{ city.name_fa }}</span>
+      </nav>
+
+      <header class="clean-list__header">
+        <p class="clean-list__kicker">آگهی‌های شهر</p>
+        <h1>آگهی‌های {{ city.name_fa }}</h1>
+        <p class="clean-list__copy">
+          آگهی‌های فعال {{ city.name_fa }}، استان {{ city.province_name_fa }}؛
+          با جستجو، دسته و بازهٔ قیمت محدودترش کنید.
+        </p>
+      </header>
+        </div>
+      </template>
+    </ListingBrowser>
   </section>
 </template>
 
@@ -63,12 +68,18 @@ useHead(() => ({
   min-inline-size: 0;
 }
 
+.clean-list__intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
 .clean-list__breadcrumb {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  font-size: 0.875rem;
+  font-size: var(--font-size-14);
   color: var(--color-text-muted);
 }
 
@@ -84,13 +95,6 @@ useHead(() => ({
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-5);
-  color: var(--color-hero-text);
-  background:
-    radial-gradient(circle at 8% 0%, rgb(110 231 183 / 0.16), transparent 36%),
-    linear-gradient(135deg, var(--color-hero) 0%, var(--color-hero-deep) 84%);
-  border: 1px solid var(--color-hero-border);
-  border-radius: var(--radius-panel);
 }
 
 .clean-list h1,
@@ -98,21 +102,16 @@ useHead(() => ({
   margin: 0;
 }
 
-.clean-list h1 {
-  font-size: clamp(1.5rem, 4vw, 2.1rem);
-  line-height: 1.45;
-}
-
 .clean-list__kicker {
-  color: var(--color-hero-accent);
-  font-size: 0.8125rem;
-  font-weight: 700;
+  color: var(--color-accent);
+  font-size: var(--font-size-12);
+  font-weight: 800;
 }
 
 .clean-list__copy {
   max-inline-size: 44rem;
-  color: var(--color-hero-muted);
-  font-size: 0.9375rem;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-14);
   line-height: 1.95;
 }
 </style>

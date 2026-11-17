@@ -9,7 +9,7 @@
           <source
             type="image/webp"
             :srcset="listing.cover_webp_srcset"
-            sizes="(min-width: 1440px) 280px, (min-width: 1024px) 25vw, (min-width: 600px) 33vw, calc(100vw - 64px)"
+            :sizes="imageSizes"
           >
           <img
             ref="imageElement"
@@ -46,14 +46,16 @@
           class="listing-card__rating"
           aria-hidden="true"
         >
-          <span class="listing-card__rating-star">★</span>
+          <AppIcon name="star-fill" :size="13" />
           {{ formatNumber(Math.round(listing.rating_average * 10) / 10) }}
         </span>
       </span>
+      <span class="listing-card__category" aria-hidden="true">{{ listing.category }}</span>
       <h3 class="listing-card__title">{{ listing.title }}</h3>
     </NuxtLink>
     <p class="listing-card__price">{{ formatPrice(listing.price_toman, listing.price_type) }}</p>
     <p class="listing-card__meta">
+      <AppIcon name="map-pin" :size="14" />
       <NuxtLink
         v-if="cityLink && cityHref"
         :to="cityHref"
@@ -63,11 +65,8 @@
       </NuxtLink>
       <span v-else>{{ listing.city }}</span>
       <span aria-hidden="true">·</span>
-      <span>{{ listing.category }}</span>
-    </p>
-    <p class="listing-card__context">
-      <time :datetime="listing.published_at">{{ formatListingDate(listing.published_at) }}</time>
-      <span>بررسی‌شده برای انتشار</span>
+      <time :datetime="listing.published_at">{{ dayLabel }}</time>
+      <span class="sr-only">{{ listing.category }}</span>
     </p>
     <div v-if="$slots.actions" class="listing-card__actions">
       <slot name="actions" />
@@ -99,6 +98,9 @@ const jpegSrcsetAttributes = computed(() => (
     ? { srcset: props.listing.cover_srcset, sizes: imageSizes }
     : {}
 ))
+const renderNow = useState('listing-day-now', () => Date.now())
+const dayLabel = computed(() => formatListingDay(props.listing.published_at, renderNow.value))
+
 const imageFailed = ref(false)
 const imageElement = ref<HTMLImageElement | null>(null)
 watch(() => props.listing.public_id, () => {
@@ -110,7 +112,10 @@ function checkHydratedImage(): void {
   // An SSR image can fail before Vue attaches its error listener.
   if (image?.complete && image.naturalWidth === 0) markImageFailed()
 }
-onMounted(checkHydratedImage)
+onMounted(() => {
+  checkHydratedImage()
+  if (Date.now() - renderNow.value > 3_600_000) renderNow.value = Date.now()
+})
 
 function markImageFailed(): void {
   imageFailed.value = true

@@ -4,7 +4,7 @@ import { test } from 'node:test'
 
 const WEB = new URL('../../', import.meta.url).pathname
 // Files already on the new scale. Each task appends its files; Task 9 replaces the list with ['app/'].
-const SCOPE = ['app/assets/css/main.css', 'app/layouts/', 'app/components/App', 'app/error.vue']
+const SCOPE = ['app/assets/css/main.css', 'app/layouts/', 'app/components/App', 'app/error.vue', 'app/pages/index.vue', 'app/pages/category/', 'app/pages/city/', 'app/components/ListingBrowser.vue', 'app/components/ListingCard.vue', 'app/components/HomeAdvertisingCard.vue']
 
 const files = readdirSync(`${WEB}app`, { recursive: true })
   .map((name) => `app/${name}`)

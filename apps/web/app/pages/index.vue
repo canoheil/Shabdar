@@ -1,31 +1,44 @@
 <template>
   <section class="home">
-    <div class="home__hero">
-      <div class="home__hero-layout">
-        <header class="home__intro">
-          <p class="home__eyebrow"><span aria-hidden="true" /> بازارچهٔ آگهی‌های ایران</p>
-          <h1>چیزهای خوب را همین نزدیکی <em>جستجو</em> کنید</h1>
-          <p class="home__intro-copy">از طعم‌های خانگی و صنایع دستی تا مهارت‌های محلی؛ آگهی‌های تازه را از آدم‌های اطراف خودتان پیدا کنید.</p>
-          <ul class="home__hero-points" aria-label="ویژگی‌های شبدر">
-            <li>{{ formatNumber(categoryCount) }} دستهٔ محلی</li>
-            <li>شهرهای سراسر ایران</li>
-            <li>دیدن آگهی‌ها بدون ورود</li>
-          </ul>
-        </header>
-        <div class="home__hero-emblem" aria-hidden="true">
-          <span class="home__hero-emblem-ring">
-            <BrandMascot />
-          </span>
-          <span>محلی، صمیمی، نزدیک</span>
-        </div>
-      </div>
-    </div>
-
     <ListingBrowser
       kicker="تازه‌های شبدر"
       heading="آگهی‌های تازه"
       show-advertising
-    />
+      emerald-hero
+    >
+      <template #intro>
+        <header class="home__intro">
+          <p class="home__eyebrow"><AppIcon name="map-pin-fill" :size="14" /> بازارچهٔ آگهی‌های ایران</p>
+          <h1>چیزهای خوب را همین نزدیکی <em>جستجو</em> کنید</h1>
+          <p class="home__intro-copy">از طعم‌های خانگی و صنایع دستی تا مهارت‌های محلی؛ آگهی‌های تازه را از آدم‌های اطراف خودتان پیدا کنید.</p>
+          <BrandMascot pose="full" class="home__mascot" />
+        </header>
+      </template>
+    </ListingBrowser>
+
+    <section class="home__trust" aria-label="اعتماد و ایمنی">
+      <div class="home__trust-item">
+        <AppIcon name="shield-check-duotone" :size="28" />
+        <div>
+          <strong>بررسی پیش از انتشار</strong>
+          <p>هر آگهی قبل از نمایش بازبینی می‌شود.</p>
+        </div>
+      </div>
+      <div class="home__trust-item">
+        <AppIcon name="chat-circle-duotone" :size="28" />
+        <div>
+          <strong>گفت‌وگو داخل شبدر</strong>
+          <p>بدون نیاز به دادن شمارهٔ تماس.</p>
+        </div>
+      </div>
+      <div class="home__trust-item">
+        <AppIcon name="flag-duotone" :size="28" />
+        <div>
+          <strong>گزارش و مسدودسازی</strong>
+          <p>مزاحمت را گزارش کنید یا کاربر را مسدود کنید.</p>
+        </div>
+      </div>
+    </section>
 
     <aside class="home__account" aria-label="حساب کاربری">
       <template v-if="mePending">
@@ -37,12 +50,13 @@
           <p class="meta">آگهی‌های خود را مدیریت کنید یا مورد تازه‌ای ثبت کنید.</p>
         </div>
         <div class="home__actions">
-          <NuxtLink to="/post" class="btn">ثبت آگهی</NuxtLink>
+          <NuxtLink to="/post" class="btn btn--accent">ثبت آگهی</NuxtLink>
           <AppButton variant="secondary" :loading="loggingOut" @click="logout">خروج</AppButton>
         </div>
       </template>
       <template v-else-if="authStatus === 'anonymous'">
         <div>
+          <h2 class="home__account-title">شما هم چیزی برای عرضه دارید؟</h2>
           <strong>برای ثبت آگهی وارد شوید.</strong>
           <p class="meta">جستجو و دیدن آگهی‌ها بدون ورود هم ممکن است.</p>
         </div>
@@ -93,63 +107,19 @@ async function logout(): Promise<void> {
   min-inline-size: 0;
 }
 
-.home__hero {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  padding: var(--space-5);
-  color: var(--color-hero-text);
-  background:
-    radial-gradient(circle at 10% 0%, rgb(110 231 183 / 0.17), transparent 34%),
-    linear-gradient(135deg, var(--color-hero) 0%, var(--color-hero-deep) 82%);
-  border: 1px solid var(--color-hero-border);
-  border-radius: var(--radius-panel);
-  box-shadow: var(--shadow-lifted);
-}
-
-.home__hero::before {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  content: '';
-  opacity: 0.24;
-  background-image: radial-gradient(rgb(255 255 255 / 0.32) 0.75px, transparent 0.75px);
-  background-size: 18px 18px;
-  mask-image: linear-gradient(to left, #000, transparent 70%);
-}
-
-.home__hero::after {
-  position: absolute;
-  z-index: -1;
-  inset-block-start: -7rem;
-  inset-inline-end: -5rem;
-  inline-size: 18rem;
-  block-size: 18rem;
-  content: '';
-  border: 1px solid rgb(243 200 118 / 0.2);
-  border-radius: 50%;
-  box-shadow: 0 0 0 2.5rem rgb(255 255 255 / 0.025), 0 0 0 5rem rgb(255 255 255 / 0.02);
-}
-
-.home__hero-layout {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: center;
-  gap: var(--space-6);
-}
-
 .home__intro {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   min-inline-size: 0;
+  color: var(--color-hero-text);
 }
 
 .home__intro h1,
 .home__intro p,
-.home__account p {
+.home__account p,
+.home__trust p {
   margin: 0;
 }
 
@@ -158,23 +128,14 @@ async function logout(): Promise<void> {
   align-items: center;
   gap: var(--space-2);
   color: var(--color-hero-accent);
-  font-size: 0.8125rem;
-  font-weight: 650;
-}
-
-.home__eyebrow > span {
-  inline-size: 8px;
-  block-size: 8px;
-  content: '';
-  background: currentColor;
-  border-radius: 50%;
-  box-shadow: 0 0 0 5px rgb(243 200 118 / 0.12);
+  font-size: var(--font-size-12);
+  font-weight: 600;
 }
 
 .home__intro h1 {
   max-inline-size: 16ch;
-  font-size: clamp(1.85rem, 5.2vw, 3.1rem);
-  font-weight: 780;
+  font-size: var(--font-size-36);
+  font-weight: 800;
   line-height: 1.34;
   text-wrap: balance;
 }
@@ -187,41 +148,61 @@ async function logout(): Promise<void> {
 .home__intro-copy {
   max-inline-size: 43rem;
   color: var(--color-hero-muted);
-  font-size: 0.9375rem;
+  font-size: var(--font-size-16);
   line-height: 2;
 }
 
-.home__hero-points {
+@media (max-width: 699.98px) {
+  .home__intro-copy {
+    display: none;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1279.98px) {
+  .home__intro-copy {
+    display: none;
+  }
+}
+
+.home__mascot {
+  inline-size: 72px;
+  block-size: 72px;
+  color: var(--color-hero-accent);
+  transform-origin: 50% 90%;
+  animation: mascot-greet calc(var(--duration-normal) * 4) var(--ease-out);
+}
+
+@keyframes mascot-greet {
+  0% { transform: translateY(10px) rotate(-10deg); }
+  55% { transform: translateY(-3px) rotate(6deg); }
+}
+
+.home__trust {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.home__trust-item {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-5);
-  margin: var(--space-1) 0 0;
-  padding: 0;
-  color: var(--color-hero-muted);
-  font-size: 0.75rem;
-  list-style: none;
+  align-items: flex-start;
+  gap: var(--space-3);
+  color: var(--color-primary);
 }
 
-.home__hero-points li {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+.home__trust-item strong {
+  display: block;
+  font-size: var(--font-size-16);
+  font-weight: 800;
+  color: var(--color-text);
 }
 
-.home__hero-points li::before {
-  inline-size: 5px;
-  block-size: 5px;
-  content: '';
-  background: var(--color-hero-accent);
-  border-radius: 50%;
-}
-
-.home__hero-points li:last-child {
-  display: none;
-}
-
-.home__hero-emblem {
-  display: none;
+.home__trust-item p {
+  font-size: var(--font-size-14);
+  color: var(--color-text-muted);
 }
 
 .home__account {
@@ -232,19 +213,27 @@ async function logout(): Promise<void> {
   justify-content: space-between;
   gap: var(--space-4);
   padding: var(--space-5);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-inline-start: 4px solid var(--color-accent);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
+  color: var(--color-hero-text);
+  background: linear-gradient(135deg, var(--color-hero) 0%, var(--color-hero-deep) 82%);
+  border: 1px solid var(--color-hero-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-lifted);
+}
+
+.home__account-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-22);
+  font-weight: 800;
+  color: var(--color-hero-text);
 }
 
 .home__account strong {
-  font-size: 1.0625rem;
+  font-size: var(--font-size-18);
 }
 
 .home__account .meta {
   margin-block-start: var(--space-1);
+  color: var(--color-hero-muted);
 }
 
 .home__actions {
@@ -253,68 +242,13 @@ async function logout(): Promise<void> {
   gap: var(--space-2);
 }
 
-@media (min-width: 600px) {
-  .home__hero-layout {
-    grid-template-columns: minmax(0, 1fr) 9.5rem;
-  }
-
-  .home__hero-points li:last-child {
-    display: flex;
-  }
-
-  .home__hero-emblem {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-3);
-    color: var(--color-hero-muted);
-    font-size: 0.75rem;
-    text-align: center;
-  }
-
-  .home__hero-emblem-ring {
-    display: grid;
-    place-items: center;
-    inline-size: 8.5rem;
-    block-size: 8.5rem;
-    color: var(--color-hero-accent);
-    background: rgb(255 255 255 / 0.07);
-    border: 1px solid rgb(255 255 255 / 0.14);
-    border-radius: 42% 58% 54% 46% / 48% 42% 58% 52%;
-    box-shadow: inset 0 0 0 12px rgb(255 255 255 / 0.025);
-    transform: rotate(-5deg);
-  }
-
-  .home__hero-emblem :deep(.brand-mascot) {
-    inline-size: 84px;
-    block-size: 84px;
-    color: var(--color-hero-accent);
-    transform: rotate(5deg);
-  }
-}
-
 @media (min-width: 768px) {
-  .home__hero {
-    padding: var(--space-6);
+  .home__trust {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .home__intro-copy {
-    font-size: 1rem;
-  }
-}
-
-@media (min-width: 1200px) {
-  .home__hero {
-    padding: var(--space-8);
-  }
-
-  .home__hero-layout {
-    grid-template-columns: minmax(0, 1fr) 12rem;
-  }
-
-  .home__hero-emblem-ring {
-    inline-size: 10rem;
-    block-size: 10rem;
+  .home__intro h1 {
+    font-size: var(--font-size-display);
   }
 }
 </style>

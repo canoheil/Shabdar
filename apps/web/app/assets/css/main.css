@@ -941,7 +941,7 @@ select.field__input {
   flex-direction: column;
   min-inline-size: 0;
   block-size: 100%;
-  padding: var(--space-2);
+  overflow: hidden;
   background: var(--color-surface);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
@@ -955,7 +955,6 @@ select.field__input {
   min-inline-size: 0;
   color: var(--color-text);
   text-decoration: none;
-  border-radius: var(--radius-control);
 }
 
 .listing-card__media {
@@ -964,12 +963,11 @@ select.field__input {
   align-items: center;
   justify-content: center;
   inline-size: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1 / 1;
   overflow: hidden;
   color: var(--color-text-muted);
   text-align: center;
   background: var(--color-surface-muted);
-  border-radius: var(--radius-control);
 }
 
 .listing-card__picture {
@@ -1043,33 +1041,53 @@ select.field__input {
   border-radius: var(--radius-pill);
 }
 
-.listing-card__rating-star {
+.listing-card__rating .app-icon {
   color: var(--color-hero-accent);
 }
 
+.listing-card__category {
+  margin: var(--space-3) var(--space-4) 0;
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
 .listing-card__title {
-  margin: var(--space-3) var(--space-2) 0;
+  display: -webkit-box;
+  margin: var(--space-1) var(--space-4) 0;
+  overflow: hidden;
   font-size: var(--font-size-16);
   font-weight: 600;
   line-height: 1.75;
+  min-block-size: calc(var(--font-size-16) * 1.75 * 2);
   overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   transition: color var(--duration-fast);
 }
 
 .listing-card__price {
-  margin: var(--space-3) var(--space-4) 0;
-  font-size: var(--font-size-18);
+  margin: var(--space-2) var(--space-4) 0;
+  font-size: var(--font-size-16);
   font-weight: 800;
   color: var(--color-primary);
+  overflow-wrap: anywhere;
 }
 
 .listing-card__meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-1) var(--space-2);
-  margin: var(--space-1) var(--space-4) 0;
+  margin: var(--space-1) var(--space-4) var(--space-4);
   font-size: var(--font-size-14);
   color: var(--color-text-muted);
+}
+
+@media (min-width: 700px) {
+  .listing-card__price {
+    font-size: var(--font-size-18);
+  }
 }
 
 .listing-card__city-link {
@@ -1084,21 +1102,6 @@ select.field__input {
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
   text-underline-offset: 0.25em;
-}
-
-.listing-card__context {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: var(--space-1) var(--space-2);
-  margin: var(--space-1) var(--space-4) var(--space-2);
-  font-size: var(--font-size-12);
-  line-height: 1.8;
-  color: var(--color-text-muted);
-}
-
-.listing-card__context > span {
-  color: var(--color-primary);
 }
 
 .listing-card__actions {
