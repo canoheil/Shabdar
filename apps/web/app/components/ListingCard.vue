@@ -6,10 +6,15 @@
           v-if="listing.cover_image && !imageFailed && listing.cover_webp_srcset"
           class="listing-card__picture"
         >
+          <!-- `sizes` stays a static attribute, not a binding: Vue assigns
+               dynamic DOM props again during hydration, and re-assigning
+               `source.sizes` makes the browser re-run candidate selection —
+               a second fetch when the cover is broken. The value is
+               LISTING_CARD_IMAGE_SIZES (app/utils/images.ts); keep them equal. -->
           <source
             type="image/webp"
             :srcset="listing.cover_webp_srcset"
-            :sizes="imageSizes"
+            sizes="(min-width: 1440px) 272px, (min-width: 1280px) 232px, (min-width: 1024px) 229px, (min-width: 700px) 235px, calc((100vw - 48px) / 2)"
           >
           <img
             ref="imageElement"
