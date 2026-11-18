@@ -66,6 +66,9 @@
             </NuxtLink>
           </li>
           <template v-if="user?.is_admin">
+            <li class="shell__nav-item shell__nav-item--admin" aria-hidden="true">
+              <span class="shell__nav-heading">مدیریت</span>
+            </li>
             <li v-for="item in adminLinks" :key="item.to" class="shell__nav-item shell__nav-item--admin">
               <NuxtLink :to="item.to" class="shell__nav-action">
                 <span class="shell__nav-icon">

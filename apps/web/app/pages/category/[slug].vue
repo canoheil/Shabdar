@@ -3,25 +3,25 @@
 
     <ListingBrowser
       :locked-category="slug"
-      kicker="دستهٔ انتخاب‌شده"
-      :heading="`آگهی‌های ${categoryName}`"
+      kicker="نتیجهٔ جستجو در دسته"
+      heading="آگهی‌های این دسته"
     >
       <template #intro>
         <div class="clean-list__intro">
-      <nav class="clean-list__breadcrumb" aria-label="مسیر">
-        <NuxtLink to="/">خانه</NuxtLink>
-        <span aria-hidden="true">/</span>
-        <span aria-current="page">{{ categoryName }}</span>
-      </nav>
+          <nav class="clean-list__breadcrumb" aria-label="مسیر">
+            <NuxtLink to="/">خانه</NuxtLink>
+            <span aria-hidden="true">/</span>
+            <span aria-current="page">{{ categoryName }}</span>
+          </nav>
 
-      <header class="clean-list__header">
-        <p class="clean-list__kicker">دستهٔ آگهی</p>
-        <h1>آگهی‌های {{ categoryName }}</h1>
-        <p class="clean-list__copy">
-          همهٔ آگهی‌های فعال این دسته در سراسر ایران؛ با جستجو، شهر و بازهٔ قیمت
-          محدودترش کنید.
-        </p>
-      </header>
+          <header class="clean-list__header">
+            <p class="clean-list__kicker">دستهٔ آگهی</p>
+            <h1>آگهی‌های {{ categoryName }}</h1>
+            <p class="clean-list__copy">
+              همهٔ آگهی‌های فعال این دسته در سراسر ایران؛ با جستجو، شهر و بازهٔ قیمت
+              محدودترش کنید.
+            </p>
+          </header>
         </div>
       </template>
     </ListingBrowser>
@@ -95,10 +95,21 @@ useHead(() => ({
   margin: 0;
 }
 
+/* The breadcrumb, the kicker and the heading are one block above the search;
+   the kicker is a quiet label, not a second coloured heading competing with the
+   h1 right below it. */
 .clean-list__kicker {
-  color: var(--color-accent);
+  margin: 0;
+  color: var(--color-text-muted);
   font-size: var(--font-size-12);
-  font-weight: 800;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.clean-list__header h1 {
+  font-size: var(--font-size-28);
+  line-height: 1.4;
+  text-wrap: balance;
 }
 
 .clean-list__copy {
@@ -106,5 +117,11 @@ useHead(() => ({
   color: var(--color-text-muted);
   font-size: var(--font-size-14);
   line-height: 1.95;
+}
+
+@media (min-width: 700px) {
+  .clean-list__header h1 {
+    font-size: var(--font-size-36);
+  }
 }
 </style>

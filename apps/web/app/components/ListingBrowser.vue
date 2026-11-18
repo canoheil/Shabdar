@@ -321,8 +321,8 @@
           <p class="browser__results-kicker">{{ kicker }}</p>
           <h2 id="listing-results-title">{{ heading }}</h2>
         </div>
-        <p v-if="!feedPending && !feedError" class="browser__result-count meta">
-          {{ items.length.toLocaleString('fa-IR') }} نتیجهٔ نمایش‌داده‌شده
+        <p v-if="!feedPending && !feedError" class="browser__result-count">
+          {{ items.length.toLocaleString('fa-IR') }} آگهی
         </p>
       </div>
       <AppSkeleton
@@ -761,19 +761,35 @@ defineExpose({ applyNow })
   box-shadow: var(--shadow-lifted);
 }
 
+/* The search sits on the emerald band as one white pill: the field, the submit
+   and the mobile filter trigger share it, instead of three separate boxes
+   stacked on a coloured background. */
 .browser__search {
   position: relative;
   z-index: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: end;
+  align-items: center;
   gap: var(--space-2);
-  padding: var(--space-3);
+  padding: var(--space-2);
   color: var(--color-text);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-panel);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-lifted);
+}
+
+/* Only the search field itself sits on the muted ground; the inline filter
+   fields below keep their own white surface and outlined edge. */
+.browser__search-field :deep(.field__input) {
+  min-block-size: 48px;
+  background-color: var(--color-surface-muted);
+  border-color: transparent;
+}
+
+.browser__search-field :deep(.field__input:focus) {
+  background-color: var(--color-surface);
+  border-color: var(--color-control-border);
 }
 
 .browser__search-field :deep(.app-field__label) {
@@ -811,11 +827,16 @@ defineExpose({ applyNow })
   gap: var(--space-3);
 }
 
+/* The row bleeds to the viewport edge on a phone so the last chip is not cut in
+   half by the main column's padding, and it keeps a visible scrollbar at every
+   width instead of hiding the overflow. */
 .browser__categories {
   display: flex;
-  gap: var(--space-3);
+  gap: var(--space-2);
   overflow-x: auto;
-  padding: var(--space-1) var(--space-1) var(--space-2);
+  margin-inline: calc(var(--space-4) * -1);
+  padding: var(--space-1) var(--space-4) var(--space-3);
+  scroll-snap-type: inline proximity;
   scrollbar-width: thin;
   scrollbar-color: var(--color-border) transparent;
 }
@@ -826,9 +847,9 @@ defineExpose({ applyNow })
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  min-inline-size: 64px;
+  min-inline-size: 68px;
   min-block-size: 45px;
-  padding: 0;
+  padding: var(--space-1) var(--space-1) 0;
   font: inherit;
   font-size: var(--font-size-12);
   font-weight: 600;
@@ -838,7 +859,9 @@ defineExpose({ applyNow })
   text-decoration: none;
   background: transparent;
   border: 0;
+  border-radius: var(--radius-card);
   cursor: pointer;
+  scroll-snap-align: start;
   transition: color var(--duration-fast), transform var(--duration-normal) var(--ease-out);
 }
 
@@ -847,7 +870,9 @@ defineExpose({ applyNow })
   place-items: center;
   inline-size: 52px;
   block-size: 52px;
+  border: 1.5px solid transparent;
   border-radius: var(--radius-control);
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
 }
 
 .browser__category-tile--a {
@@ -870,12 +895,21 @@ defineExpose({ applyNow })
   transform: translateY(-1px);
 }
 
+/* The current chip is told apart three ways — weight, colour and a drawn
+   border — because a ring alone was too quiet beside the tinted tiles. */
 .browser__category-button[aria-current='page'] {
+  font-weight: 800;
   color: var(--color-primary);
 }
 
 .browser__category-button[aria-current='page'] .browser__category-tile {
+  border-color: var(--color-primary);
   box-shadow: var(--ring-focus);
+}
+
+.browser__category-button:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
 .browser__filter-dialog {
@@ -933,13 +967,37 @@ defineExpose({ applyNow })
   min-inline-size: 0;
 }
 
+/* The feed's skeleton mirrors the real card grid (2 / 3 / 4 columns), so the
+   page does not reflow when results replace the placeholders. */
+.browser__results :deep(.app-skeleton--card) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+@media (min-width: 700px) {
+  .browser__results :deep(.app-skeleton--card) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-4);
+  }
+}
+
+@media (min-width: 1280px) {
+  .browser__results :deep(.app-skeleton--card) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* The feed's own heading sits on a hairline, so the screen after the hero reads
+   as a new region rather than a continuation of the search bar. */
 .browser__results-header {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-2) var(--space-3);
   margin-block-end: var(--space-5);
+  padding-block-end: var(--space-3);
+  border-block-end: 1px solid var(--color-border);
 }
 
 .browser__results-kicker {
@@ -947,6 +1005,7 @@ defineExpose({ applyNow })
   color: var(--color-accent);
   font-size: var(--font-size-12);
   font-weight: 800;
+  letter-spacing: 0.04em;
 }
 
 .browser__results-header h2 {
@@ -956,14 +1015,18 @@ defineExpose({ applyNow })
 
 .browser__result-count {
   padding: var(--space-1) var(--space-3);
-  background: var(--color-surface-muted);
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  color: var(--color-ink-a);
+  white-space: nowrap;
+  background: var(--color-tint-a);
   border-radius: var(--radius-pill);
 }
 
 .browser__cards {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
+  gap: var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1001,23 +1064,35 @@ defineExpose({ applyNow })
 @media (min-width: 700px) {
   .browser__cards {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-4);
+  }
+
+  .browser__categories {
+    margin-inline: 0;
+    padding-inline: var(--space-1);
   }
 }
 
-@media (min-width: 768px) {
+/* The design system's breakpoints are 700, 1024 and 1280 (§4). The filter
+   controls switch from the dialog to the inline row at 1024 — the same width at
+   which the shell grows its sidebar — so no width exists where both shown. */
+@media (min-width: 1024px) {
   .browser__filter-open {
     display: none;
   }
 
-  .browser__desktop-filters {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    padding-block-start: var(--space-4);
-    border-block-start: 1px solid var(--color-border);
+  .browser__search {
+    padding: var(--space-3);
   }
 
-  .browser__search {
-    padding: var(--space-4);
+  .browser__desktop-filters {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-3);
+    margin-block-start: var(--space-1);
+    padding: var(--space-4) var(--space-1) var(--space-1);
+    border-block-start: 1px solid var(--color-border);
   }
 
   .browser__search-submit-text {
@@ -1030,13 +1105,11 @@ defineExpose({ applyNow })
   }
 }
 
-@media (min-width: 1200px) {
+@media (min-width: 1280px) {
   .browser__desktop-filters {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
-}
 
-@media (min-width: 1280px) {
   .browser__cards {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }

@@ -26,46 +26,69 @@
 
       <nav class="dashboard__links" aria-label="پیوندهای حساب">
         <NuxtLink to="/me/favorites" class="dashboard__link">
-          <AppIcon name="heart-duotone" :size="22" />
-          <span>علاقه‌مندی‌های من</span>
+          <span class="dashboard__link-icon" aria-hidden="true">
+            <AppIcon name="heart-duotone" :size="22" />
+          </span>
+          <span class="dashboard__link-label">علاقه‌مندی‌های من</span>
           <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
         </NuxtLink>
         <NuxtLink to="/me/blocks" class="dashboard__link">
-          <AppIcon name="shield-check-duotone" :size="22" />
-          <span>مدیریت مسدودشدگان</span>
+          <span class="dashboard__link-icon" aria-hidden="true">
+            <AppIcon name="shield-check-duotone" :size="22" />
+          </span>
+          <span class="dashboard__link-label">مدیریت مسدودشدگان</span>
+          <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
+        </NuxtLink>
+        <NuxtLink to="/me/conversations" class="dashboard__link">
+          <span class="dashboard__link-icon" aria-hidden="true">
+            <AppIcon name="chat-circle-duotone" :size="22" />
+          </span>
+          <span class="dashboard__link-label">پیام‌ها</span>
           <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
         </NuxtLink>
       </nav>
 
-      <nav v-if="me.is_admin" class="dashboard__links" aria-label="ناوبری مدیریت">
+      <nav v-if="me.is_admin" class="dashboard__links dashboard__links--admin" aria-label="ناوبری مدیریت">
           <NuxtLink to="/admin/queue" class="dashboard__link">
-            <AppIcon name="clipboard-text-duotone" :size="22" />
-            <span>صف بررسی</span>
+            <span class="dashboard__link-icon" aria-hidden="true">
+              <AppIcon name="clipboard-text-duotone" :size="22" />
+            </span>
+            <span class="dashboard__link-label">صف بررسی</span>
             <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
           </NuxtLink>
           <NuxtLink to="/admin/reports" class="dashboard__link">
-            <AppIcon name="flag-duotone" :size="22" />
-            <span>گزارش‌ها</span>
+            <span class="dashboard__link-icon" aria-hidden="true">
+              <AppIcon name="flag-duotone" :size="22" />
+            </span>
+            <span class="dashboard__link-label">گزارش‌ها</span>
             <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
           </NuxtLink>
           <NuxtLink to="/admin/moderation" class="dashboard__link">
-            <AppIcon name="chat-circle-duotone" :size="22" />
-            <span>مدیریت دیدگاه</span>
+            <span class="dashboard__link-icon" aria-hidden="true">
+              <AppIcon name="chat-circle-duotone" :size="22" />
+            </span>
+            <span class="dashboard__link-label">مدیریت دیدگاه</span>
             <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
           </NuxtLink>
           <NuxtLink to="/admin/moderation/rules" class="dashboard__link">
-            <AppIcon name="info-fill" :size="22" />
-            <span>قوانین دیدگاه</span>
+            <span class="dashboard__link-icon" aria-hidden="true">
+              <AppIcon name="info-fill" :size="22" />
+            </span>
+            <span class="dashboard__link-label">قوانین دیدگاه</span>
             <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
           </NuxtLink>
           <NuxtLink to="/admin/advertising" class="dashboard__link">
-            <AppIcon name="tag-duotone" :size="22" />
-            <span>مدیریت تبلیغات</span>
+            <span class="dashboard__link-icon" aria-hidden="true">
+              <AppIcon name="tag-duotone" :size="22" />
+            </span>
+            <span class="dashboard__link-label">مدیریت تبلیغات</span>
             <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
           </NuxtLink>
           <NuxtLink to="/admin/users" class="dashboard__link">
-            <AppIcon name="user-circle" :size="22" />
-            <span>کاربران</span>
+            <span class="dashboard__link-icon" aria-hidden="true">
+              <AppIcon name="user-circle" :size="22" />
+            </span>
+            <span class="dashboard__link-label">کاربران</span>
             <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
           </NuxtLink>
       </nav>
@@ -423,29 +446,55 @@ function statusLabel(status: string): string {
 .dashboard__links {
   display: flex;
   flex-direction: column;
+  gap: var(--space-1);
   padding: var(--space-2);
   background: var(--color-surface);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
 }
 
+.dashboard__links--admin {
+  padding: var(--space-2);
+}
+
 .dashboard__link {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  min-block-size: 48px;
-  padding-inline: var(--space-3);
+  min-block-size: 52px;
+  padding: var(--space-1) var(--space-2);
   font-weight: 600;
   color: var(--color-text);
   text-decoration: none;
+  border-radius: var(--radius-control);
+  transition: background-color var(--duration-fast), color var(--duration-fast);
 }
 
 .dashboard__link + .dashboard__link {
   border-block-start: 1px solid var(--color-border);
+  border-start-start-radius: 0;
+  border-start-end-radius: 0;
+}
+
+.dashboard__link-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: 40px;
+  block-size: 40px;
+  color: var(--color-ink-b);
+  background: var(--color-tint-b);
+  border-radius: var(--radius-small);
+}
+
+.dashboard__link-label {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
 }
 
 .dashboard__link:hover {
   color: var(--color-primary);
+  background: var(--color-surface-muted);
 }
 
 .dashboard__link-caret {
@@ -653,7 +702,7 @@ function statusLabel(status: string): string {
   background: var(--color-error-bg);
 }
 
-@media (min-width: 768px) {
+@media (min-width: 700px) {
   .stats {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }

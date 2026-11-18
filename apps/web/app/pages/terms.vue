@@ -151,18 +151,30 @@ useHead({
   gap: var(--space-2);
 }
 
+.legal__header {
+  padding-block-end: var(--space-2);
+  border-block-end: 1px solid var(--color-border);
+}
+
 .legal__kicker {
   margin: 0;
   font-size: var(--font-size-12);
-  font-weight: 800;
-  color: var(--color-primary);
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--color-accent);
+  letter-spacing: 0.06em;
 }
 
 .legal h1 {
   margin: 0;
   font-size: var(--font-size-28);
   line-height: 1.4;
+  text-wrap: balance;
+}
+
+@media (min-width: 700px) {
+  .legal h1 {
+    font-size: var(--font-size-36);
+  }
 }
 
 .legal__updated,
@@ -180,6 +192,8 @@ useHead({
   line-height: 1.9;
 }
 
+/* The index is a set of jump chips, not a numbered wall: it is read once, at
+   the top, and every entry is a 44px target. */
 .legal__toc {
   padding: var(--space-4);
   background: var(--color-surface);
@@ -189,19 +203,24 @@ useHead({
 
 .legal__toc h2 {
   margin: 0 0 var(--space-2);
-  font-size: var(--font-size-16);
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
 }
 
 .legal__toc ol {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2) var(--space-4);
+  gap: var(--space-1);
   margin: 0;
-  padding-inline-start: var(--space-4);
+  padding: 0;
+  list-style: none;
+  counter-reset: toc;
 }
 
 .legal__toc li {
-  line-height: 2;
+  line-height: 1.6;
 }
 
 /* The site-wide touch-target gate applies to these in-page links too, so the
@@ -214,10 +233,29 @@ useHead({
   min-block-size: 44px;
 }
 
+.legal__toc a {
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-text);
+  text-decoration: none;
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-pill);
+}
+
+.legal__toc a:hover {
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+/* Each section opens on a hairline, so a long legal page has visible chapters
+   instead of one unbroken column of paragraphs. */
 .legal section {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  padding-block-start: var(--space-5);
+  border-block-start: 1px solid var(--color-border);
 }
 
 .legal h2 {
@@ -227,9 +265,18 @@ useHead({
   scroll-margin-block-start: var(--space-6);
 }
 
+.legal section:first-of-type {
+  padding-block-start: 0;
+  border-block-start: 0;
+}
+
 .legal p {
   margin: 0;
   line-height: 1.95;
+}
+
+.legal section > h2 {
+  color: var(--color-text);
 }
 
 .legal ul {

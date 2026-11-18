@@ -182,7 +182,19 @@ useHead({ title: 'کاربران مسدودشده | شبدر' })
 .blocks-page__back {
   display: inline-flex;
   align-items: center;
+  gap: var(--space-1);
   min-block-size: 44px;
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  border-radius: var(--radius-pill);
+}
+
+.blocks-page__back:hover {
+  color: var(--color-primary);
+  background: var(--color-surface-muted);
 }
 
 .blocks-page__list {

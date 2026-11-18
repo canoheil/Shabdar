@@ -230,18 +230,20 @@ async function verifyCode() {
   display: flex;
   justify-content: center;
   inline-size: 100%;
+  padding-block: var(--space-4);
 }
 
+/* The card is the whole screen on a phone and a focused 420px column on a
+   desktop, so it never stretches into an empty sheet. */
 .login__panel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-5);
   inline-size: min(100%, 420px);
-  min-block-size: 580px;
   margin-inline: auto;
   padding: var(--space-6);
   background: var(--color-surface);
-  border-radius: var(--radius-dialog);
+  border-radius: var(--radius-panel);
   box-shadow: var(--shadow-card);
 }
 
@@ -249,6 +251,8 @@ async function verifyCode() {
   display: flex;
   align-items: center;
   gap: var(--space-4);
+  padding-block-end: var(--space-4);
+  border-block-end: 1px solid var(--color-border);
 }
 
 .login__mascot {
@@ -296,9 +300,12 @@ async function verifyCode() {
 
 .login__form {
   display: flex;
-  flex: 1;
   flex-direction: column;
   gap: var(--space-4);
+}
+
+.login__form :deep(.btn) {
+  min-block-size: 50px;
 }
 
 .login__input {
@@ -327,19 +334,9 @@ async function verifyCode() {
   text-underline-offset: 0.2em;
 }
 
-@media (max-width: 420px) {
+@media (min-width: 700px) {
   .login__panel {
-    padding: var(--space-4);
-  }
-
-  .login__header {
-    align-items: flex-start;
-  }
-
-  .login__mascot {
-    flex-basis: 64px;
-    inline-size: 64px;
-    block-size: 64px;
+    margin-block: var(--space-8);
   }
 }
 </style>

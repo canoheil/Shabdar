@@ -125,7 +125,13 @@ radii; the design-system unit test enforces the scale.
   buttons: `--glow-primary`, `--glow-accent`. Focus on a field adds
   `--ring-focus`.
 - Main content uses `max-inline-size: 75rem` (1200px at a 16px root); layout
-  breakpoints are 700, 1024 and 1280px.
+  breakpoints are 700, 1024 and 1280px. These three are the only ones: a
+  narrower or wider step (480, 600, 760, 768, 800, 900, 1200) is not a
+  breakpoint choice but a drift, and the 2026-11-18 pass folded every one of
+  them back onto this scale. Below 700px a page is one column; 700px is the
+  first multi-column step; 1024px adds the sidebar and swaps the feed's filter
+  dialog for its inline row; 1280px is the widest card grid and the display
+  headline.
 - Use logical properties and Grid. Fixed/sticky navigation has matching content
   insets and safe-area padding.
 - Touch targets are at least 44px in every theme and viewport. A visually

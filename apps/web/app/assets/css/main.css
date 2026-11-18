@@ -55,6 +55,14 @@ a {
   text-underline-offset: 0.2em;
 }
 
+/* A pointer is not a keyboard: a focused control must not lose its ring, and an
+   in-page link jump must never hide its target behind the docked tab bar. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 /* A page opens with a plain h1 and a muted line (.meta): no hero and no header card. */
 h1,
 h2,
@@ -148,6 +156,15 @@ h3 {
   padding-block: var(--space-2) var(--space-1);
 }
 
+/* On a phone the brand block is the whole top bar, so it keeps a fixed height
+   and a hairline: without one the page began with floating text. */
+@media (max-width: 1023.98px) {
+  .shell__header {
+    min-block-size: 64px;
+    background: var(--color-bg);
+  }
+}
+
 .shell__brand {
   display: inline-flex;
   align-items: center;
@@ -234,9 +251,17 @@ h3 {
 .shell__main {
   flex: 1;
   inline-size: 100%;
-  max-inline-size: 80rem;
+  /* The design system's content measure (MASTER.md §4): 75rem, not 80rem, so a
+     four-card row keeps its intended card width and long copy keeps its measure. */
+  max-inline-size: 75rem;
   margin-inline: auto;
   padding-block: var(--space-2) calc(var(--space-6) + var(--shell-bottom-nav) + env(safe-area-inset-bottom, 0px));
+}
+
+/* An in-page anchor (#search, a legal ToC entry) must not land under the mobile
+   tab bar or flush against the top edge. */
+[id] {
+  scroll-margin-block-start: var(--space-4);
 }
 
 .shell__footer {
@@ -415,9 +440,25 @@ h3 {
   }
 
   .shell__nav-item:not(.shell__nav-item--admin) + .shell__nav-item--admin {
-    margin-block-start: var(--space-2);
+    margin-block-start: var(--space-3);
     padding-block-start: var(--space-3);
     border-block-start: 1px solid var(--color-border);
+  }
+
+  /* The admin rows are a quieter size than the marketplace rows, so the two
+     groups are told apart by weight and colour, not only by a hairline. */
+  .shell__nav-item--admin .shell__nav-action {
+    font-size: var(--font-size-14);
+    color: var(--color-text-muted);
+  }
+
+  .shell__nav-heading {
+    display: block;
+    padding: var(--space-1) 14px 0;
+    font-size: var(--font-size-12);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
   }
 
   .shell__nav-action {
@@ -428,6 +469,8 @@ h3 {
   }
 
   .shell__nav-action[aria-current='page'] {
+    font-weight: 800;
+    color: var(--color-primary);
     background: var(--color-primary-soft);
   }
 
@@ -806,10 +849,10 @@ select.field__input {
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-8) var(--space-5);
+  padding: var(--space-10) var(--space-5);
   text-align: center;
   background: var(--color-surface);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-panel);
   box-shadow: var(--shadow-card);
 }
 
@@ -827,13 +870,15 @@ select.field__input {
 }
 
 .app-empty-state__title {
+  max-inline-size: 24ch;
   margin: 0;
-  font-size: var(--font-size-18);
-  line-height: 1.6;
+  font-size: var(--font-size-22);
+  line-height: 1.55;
+  text-wrap: balance;
 }
 
 .app-empty-state__description {
-  max-inline-size: 34ch;
+  max-inline-size: 42ch;
   margin: 0;
   font-size: var(--font-size-14);
   line-height: 1.9;
@@ -1053,6 +1098,7 @@ select.field__input {
   margin: var(--space-3) var(--space-4) 0;
   font-size: var(--font-size-12);
   font-weight: 600;
+  line-height: 1.5;
   color: var(--color-accent);
 }
 
@@ -1070,27 +1116,36 @@ select.field__input {
   transition: color var(--duration-fast);
 }
 
+/* The price is the second thing a shopper reads after the photo, so it owns a
+   size of its own above the title's. */
 .listing-card__price {
   margin: var(--space-2) var(--space-4) 0;
-  font-size: var(--font-size-16);
+  font-size: var(--font-size-18);
   font-weight: 800;
+  line-height: 1.6;
   color: var(--color-primary);
   overflow-wrap: anywhere;
 }
 
+/* Location and age sit on a hairline, so the price block above them reads as one
+   unit and the row is not mistaken for part of the title. The block padding
+   keeps the last row off the card's rounded bottom edge. */
 .listing-card__meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1) var(--space-2);
-  margin: var(--space-1) var(--space-4) var(--space-4);
+  margin: var(--space-3) 0 0;
+  padding: var(--space-2) var(--space-4) var(--space-3);
   font-size: var(--font-size-14);
+  line-height: 1.7;
   color: var(--color-text-muted);
+  border-block-start: 1px solid var(--color-border);
 }
 
-@media (min-width: 700px) {
+@media (min-width: 1280px) {
   .listing-card__price {
-    font-size: var(--font-size-18);
+    font-size: var(--font-size-22);
   }
 }
 
@@ -1099,14 +1154,18 @@ select.field__input {
   align-items: center;
   /* The shared 44×44 touch-target gate applies to every visible control, and a
      short city name («رشت») is only ~28px wide on its own. Padding supplies the
-     missing pointer target without moving the text off the card's grid. */
+     missing pointer target without moving the text off the card's grid; the
+     negative block margin absorbs the extra height so the row keeps its rhythm. */
   min-inline-size: 44px;
   min-block-size: 44px;
+  margin-block: calc(var(--space-2) * -1);
   color: inherit;
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
   text-underline-offset: 0.25em;
+  text-decoration-thickness: 1px;
 }
+
 
 .listing-card__actions {
   display: flex;
@@ -1126,9 +1185,22 @@ select.field__input {
   }
 
   .listing-card__link:hover .listing-card__title,
+  .listing-card:hover .listing-card__price,
   .listing-card__city-link:hover {
-    color: var(--color-primary);
+    color: var(--color-primary-hover);
   }
+}
+
+/* The card is one link over the photo and the title; the ring must sit on the
+   card itself, or it is clipped by the media's `overflow: hidden`. */
+.listing-card:focus-within {
+  box-shadow: var(--shadow-lifted);
+}
+
+.listing-card__link:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: -3px;
+  border-radius: var(--radius-card);
 }
 
 /* ---------- components/ListingGallery.vue ---------- */
@@ -1289,19 +1361,26 @@ select.field__input {
 
 /* ---------- error.vue ---------- */
 
+/* A standalone sheet: without the surface the 404 floated as loose text on the
+   page and read like an unfinished route. */
 .error-page {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-4);
-  max-inline-size: 42rem;
+  gap: var(--space-3);
+  max-inline-size: 34rem;
   margin-inline: auto;
-  padding-block: var(--space-10);
+  margin-block-start: var(--space-6);
+  padding: var(--space-8) var(--space-6);
+  background: var(--color-surface);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-card);
 }
 
 .error-page__mascot {
-  inline-size: 96px;
-  block-size: 96px;
+  inline-size: 88px;
+  block-size: 88px;
+  margin-block-end: var(--space-1);
 }
 
 .error-page__status,
@@ -1309,8 +1388,12 @@ select.field__input {
   margin: 0;
 }
 
+/* The status is a label over the sentence, not a big display number: the
+   message is what the visitor needs to act on. */
 .error-page__status {
+  font-size: var(--font-size-14);
   font-weight: 800;
+  letter-spacing: 0.08em;
   color: var(--color-accent);
 }
 
@@ -1322,7 +1405,8 @@ select.field__input {
 .error-page__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  margin-block-start: var(--space-3);
 }
 
 @media (prefers-reduced-motion: reduce) {

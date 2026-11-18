@@ -279,7 +279,7 @@ useHead({
   resize: vertical;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 699.98px) {
   .advertising-page {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-4);
