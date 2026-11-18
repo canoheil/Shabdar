@@ -21,17 +21,20 @@
         <path d="M37 82L33 89" />
         <path d="M59 82L63 89" />
       </g>
-      <path d="M48 31V23" fill="none" stroke="var(--color-primary)" stroke-width="5" stroke-linecap="round" />
-      <path d="M46 24C35 25 28 19 28 10C38 9 46 14 46 24Z" fill="var(--color-primary)" />
-      <path d="M50 23C53 13 63 9 73 12C71 21 62 27 50 23Z" fill="var(--color-primary)" />
+      <!-- Broad, simple shapes stay legible even at the header's small size. -->
+      <path d="M48 34V23" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" />
+      <path d="M47 25C35 27 26 20 26 10C37 8 46 14 47 25Z" fill="currentColor" />
+      <path d="M49 24C53 12 64 8 75 11C73 22 62 28 49 24Z" fill="currentColor" />
       <path
         class="brand-mascot__body"
-        d="M48 27C33 28 22 42 20 58C18 75 31 86 49 86C66 86 78 74 77 58C76 43 63 30 48 27Z"
+        d="M48 27C33 28 21 40 19 57C17 75 30 87 48 87C66 87 79 75 77 57C75 40 63 28 48 27Z"
         fill="currentColor"
       />
-      <ellipse cx="39" cy="54" rx="3" ry="4.5" fill="var(--color-hero-deep)" />
-      <ellipse cx="60" cy="54" rx="3" ry="4.5" fill="var(--color-hero-deep)" />
-      <path d="M42 65Q48 70 54 65" fill="none" stroke="var(--color-hero-deep)" stroke-width="3" stroke-linecap="round" />
+      <g class="brand-mascot__face" fill="var(--color-hero-deep)" stroke="var(--color-hero-deep)">
+        <ellipse cx="38" cy="54" rx="3.2" ry="4.2" stroke="none" />
+        <ellipse cx="58" cy="54" rx="3.2" ry="4.2" stroke="none" />
+        <path d="M41 66Q48 72 55 66" fill="none" stroke-width="3.5" stroke-linecap="round" />
+      </g>
     </g>
     <g v-if="pose === 'search'">
       <circle cx="17" cy="43" r="12" fill="var(--color-on-primary)" stroke="var(--color-text)" stroke-width="4" />

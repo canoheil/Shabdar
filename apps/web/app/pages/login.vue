@@ -311,7 +311,7 @@ async function verifyCode() {
 /* Give the phone and PIN steps the same working area, not a fixed panel height.
    Longer translations and errors can still grow the card. */
 .login__form {
-  min-block-size: 16rem;
+  min-block-size: 18rem;
   justify-content: center;
   display: flex;
   flex-direction: column;

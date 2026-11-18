@@ -73,7 +73,7 @@ test('@auth persistent /me 500 is unavailable with retry, never a false Login', 
 
 test('@auth real 401 establishes the anonymous state', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByText('برای ثبت آگهی وارد شوید.', { exact: true })).toBeVisible()
+  await expect(page.getByText('برای ثبت آگهی وارد شوید؛ جستجو و دیدن آگهی‌ها بدون ورود هم ممکن است.', { exact: true })).toBeVisible()
   await expect(page.getByRole('navigation', { name: 'ناوبری اصلی' }).getByRole('link', { name: 'ورود', exact: true })).toBeVisible()
 })
 

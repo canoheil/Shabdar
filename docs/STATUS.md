@@ -1,5 +1,34 @@
 # Status — Direct chat, national locations and historical phases
 
+## Main CI failure follow-up (2026-11-18)
+
+Main run 44304927558 failed three real-stack Playwright tests. The anonymous
+Home assertion expected obsolete exact copy; it now checks the current copy.
+The login phone and code forms no longer reserve enough equal height for a
+full international phone number and the resend actions: the shared minimum is
+now 18rem, while errors and longer content can still grow. A new fixture-based
+regression test reproduces the CI geometry mismatch and passes after the fix.
+The invalid-code test now mocks the OTP request as well as verification so it
+cannot inherit a resend cooldown when the preceding real-OTP test fails early.
+The cooldown was a plausible cause of the third failure, not independently
+confirmed from the CI log.
+
+Typecheck, production build, 56 unit tests and eight selected fixture-backed
+Playwright tests passed, including anonymous Home, login geometry/error paths,
+brand and responsive login accessibility. Full Rust/MariaDB real-stack tests
+and the three-run Lighthouse gate have not been run locally and must pass in CI.
+
+## Shabdarak mark refinement (2026-11-18)
+
+Following the owner's approval, the shared Shabdarak SVG has fuller sprout
+leaves, a softer rounded body and a clearer friendly face. After owner feedback,
+the face uses deep forest rather than white in light mode, and stays dark in
+both themes; the favicon uses matching geometry.
+The existing mark, full and search poses and accessible-label behavior remain.
+Nuxt typecheck, production build, 56 unit tests and all three fixture-backed
+brand Playwright tests passed. The header was visually reviewed at 390px in
+both themes. Full real-stack and Lighthouse checks were not run for this change.
+
 ## Compact category rail (2026-11-18)
 
 At the owner's request, the category rail scrollbar is hidden below 1024px
