@@ -1,2 +1,10 @@
-/target
-/data
+# Rust
+target/
+
+# Data
+data/
+
+# Env
+.env
+.env.local
+.env.*.local

@@ -1316,6 +1316,7 @@ lives outside the repo; the durable form of those assertions is
   at 375 px on the VM (not a physical phone).
 - Revisit search performance once the active feed passes ~100k rows; until
   then the measured `LIKE` scan is the accepted design (see Decisions).
+- **Local Testing Scripts:** Created `run_backend.py` and `run_frontend.py` at the project root for running the Rust backend API and Nuxt frontend locally with Python.
 
 ## Phase statuses
 
