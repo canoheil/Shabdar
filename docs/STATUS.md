@@ -1,5 +1,14 @@
 # Status — Direct chat, national locations and historical phases
 
+## Category storefront continuity (2026-11-18)
+
+Following owner feedback, selecting a category now keeps the same illustrated
+emerald search storefront as Home, with a category-specific H1 and unchanged
+canonical category route and filtering. A shared intro component keeps both
+pages visually aligned. Typecheck, production build, 56 unit tests and three
+selected fixture-backed Playwright tests passed; category was visually checked
+at 320, 390 and 1440px. The full real-stack and Lighthouse gates remain pending.
+
 ## Storefront polish — approved direction (2026-11-18)
 
 The owner approved the illustrated neighborhood-market direction. Home now has

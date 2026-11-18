@@ -18,7 +18,11 @@ test('@home search-led hierarchy and visible categories work at mobile and deskt
   await expect(categories.getByRole('link')).toHaveCount(8)
   await expect(categories.getByRole('link', { name: 'همه', exact: true })).toHaveAttribute('aria-current', 'page')
   const firstCategory = categories.getByRole('link').nth(1)
+  await expect(page.locator('.browser__hero--emerald .browser__stall img')).toBeVisible()
   await firstCategory.click()
+  await expect(page.locator('.browser__hero--emerald .browser__stall img')).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('آگهی‌های')
+  await expect(page.getByRole('searchbox', { name: 'جستجو', exact: true })).toBeVisible()
   await expect(firstCategory).toHaveAttribute('aria-current', 'page')
   // With no other filter active the chip is a clean canonical URL.
   await expect(page).toHaveURL(/\/category\/[^/?]+$/)
