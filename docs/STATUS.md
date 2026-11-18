@@ -1,5 +1,13 @@
 # Status — Direct chat, national locations and historical phases
 
+## Compact category rail (2026-11-18)
+
+At the owner's request, the category rail scrollbar is hidden below 1024px
+while touch and keyboard scrolling remain available. Typecheck, production
+build, 56 unit tests and three selected fixture-backed Playwright tests passed,
+including keyboard access to the last category and responsive light/dark axe.
+The full real-stack and Lighthouse gates remain pending.
+
 ## Category storefront continuity (2026-11-18)
 
 Following owner feedback, selecting a category now keeps the same illustrated

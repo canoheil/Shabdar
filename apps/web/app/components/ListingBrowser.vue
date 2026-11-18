@@ -914,6 +914,11 @@ defineExpose({ applyNow })
 .browser__error { align-items: center; justify-content: space-between; }
 .browser__error p { margin: 0; }
 
+/* Hide the track on compact screens without disabling touch, wheel or keyboard scrolling. */
+@media (max-width: 1023.98px) {
+  .browser__categories { scrollbar-width: none; }
+  .browser__categories::-webkit-scrollbar { display: none; }
+}
 @media (max-width: 699.98px) {
   .browser__masthead { display: none; }
   .browser__hero--emerald { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); padding: var(--space-4); }

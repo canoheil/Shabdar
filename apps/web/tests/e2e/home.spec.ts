@@ -54,6 +54,23 @@ test('@home search-led hierarchy and visible categories work at mobile and deskt
   await expect(desktopFilters.getByLabel('استان', { exact: true })).toBeVisible()
 })
 
+test('@home compact category rail hides its scrollbar but remains keyboard scrollable', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 812 })
+  await page.goto('/')
+  const rail = page.locator('.browser__categories')
+  await expect(rail).toHaveCSS('scrollbar-width', 'none')
+  expect(await rail.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true)
+  const lastCategory = rail.getByRole('link').last()
+  await lastCategory.focus()
+  await expect(lastCategory).toBeFocused()
+  const isInView = await lastCategory.evaluate(el => {
+    const item = el.getBoundingClientRect()
+    const railBounds = el.parentElement!.getBoundingClientRect()
+    return item.left >= railBounds.left - 1 && item.right <= railBounds.right + 1
+  })
+  expect(isInView).toBe(true)
+})
+
 test('@home national province and city filters load real locations and survive reload', async ({ page }) => {
   const title = 'آگهی سراسری در تهران'
   await createListing({
