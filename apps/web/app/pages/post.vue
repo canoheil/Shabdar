@@ -601,10 +601,12 @@ async function submitForReview(): Promise<void> {
 
 .post__price-option input {
   position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
   margin: 0;
   opacity: 0;
+  cursor: pointer;
 }
 
 .post__price-readback {

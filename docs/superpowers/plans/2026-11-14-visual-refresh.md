@@ -1222,3 +1222,32 @@ Expected: green on this commit with every gate unedited.
 The owner looks at the live preview at 375, 768, 1024 and 1440px in both themes (§13.1). Then
 follow `verification-before-completion` and `finishing-a-development-branch`. The owner opens
 the PR.
+
+## Outcome (2026-11-17)
+
+All nine tasks shipped. Tasks 1–2 landed in PR #26 (`9b04fc6`), then one PR per
+task: #27 Task 3 (`248281a`), #28 Task 4 (`cff125a`), #29 Task 5 (`b3b02da`),
+#30 Task 6 (`820bc9d`), #31 Task 7 (`2401640`), #32 Task 8 (`6d50eca`), and
+Task 9 in PR #33.
+
+One process correction, recorded honestly: the owner merged PRs #27–#32 on
+go-ahead while their CI runs were still in flight. Those runs finished red —
+run ids and the exact failing tests are in `docs/STATUS.md`'s Progress table
+(44111270837, 44112642288, 44115080958, 44118031655, 44118640354, 44120889394;
+`main` after Task 8, run 44121232449, identical). They were three regressions
+from Tasks 3, 5 and 6 (dynamic `<source sizes>` hydration refetch, 1×1
+segmented radio inputs, a dropped admin nav landmark), all fixed in PR #33.
+The Task 9 run 44154489643 on `03b91c5` was the first fully green Playwright
+run of the refresh (173/173) with the client-JS budget green; only its Detail
+LCP median missed, at 2702.3 ms against the 2700 ceiling. After removing
+`decoding="async"` from the gallery LCP image, the closing run **44158007483
+on `9ced602` passed every step**: Playwright 173/173, client JS Home 95,529 /
+Detail 96,307 gzip bytes (ceiling 104,000), Lighthouse medians Home LCP
+1954.9 ms / Detail 2629.6 ms (ceiling 2700), CLS 0.0968 / 0.0036 (ceiling
+0.1), TBT 51.5 / 56.5 ms, accessibility 1.00 / 1.00. `docs/STATUS.md`'s gate
+table holds the full record; the documentation commit on top of `9ced602`
+has no code change, so `9ced602` is the verified code state (the same
+convention as PR #26). No gate, budget or assertion was edited at any point;
+the only config diff against `fda97b0` is the two `package.json` test lists,
+as §13 requires. Hand-over (§13.1) is the owner's live-preview check at 375,
+768, 1024 and 1440 px in both themes, then the owner merges PR #33.

@@ -2,10 +2,11 @@
 
 **Date:** 2026-11-14
 
-**Status:** Direction and screens approved in conversation, one mockup round at a
-time (Home, Listing detail, then post form + dashboard + messages). The owner
-approved this spec on 2026-11-14 and the plan on 2026-11-15. Implementation follows
-the plan one task at a time; `docs/STATUS.md` says which tasks are done.
+**Status:** Implemented. Direction and screens approved in conversation, one mockup
+round at a time (Home, Listing detail, then post form + dashboard + messages). The
+owner approved this spec on 2026-11-14 and the plan on 2026-11-15. All nine tasks
+of the plan shipped; `docs/STATUS.md` records the commits, the CI runs and the
+measured gate numbers, and the plan's "Outcome" section closes the work.
 
 **Plan:** [`docs/superpowers/plans/2026-11-14-visual-refresh.md`](../plans/2026-11-14-visual-refresh.md).
 Its section "Corrections to the spec" lists what planning found (among them: `main`

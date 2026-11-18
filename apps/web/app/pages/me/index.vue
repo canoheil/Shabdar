@@ -35,7 +35,9 @@
           <span>مدیریت مسدودشدگان</span>
           <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
         </NuxtLink>
-        <template v-if="me.is_admin">
+      </nav>
+
+      <nav v-if="me.is_admin" class="dashboard__links" aria-label="ناوبری مدیریت">
           <NuxtLink to="/admin/queue" class="dashboard__link">
             <AppIcon name="clipboard-text-duotone" :size="22" />
             <span>صف بررسی</span>
@@ -66,7 +68,6 @@
             <span>کاربران</span>
             <AppIcon name="caret-left-bold" :size="14" class="dashboard__link-caret" />
           </NuxtLink>
-        </template>
       </nav>
 
       <ul class="stats" aria-label="خلاصهٔ آگهی‌ها">
