@@ -495,7 +495,7 @@ async function removeListing(): Promise<void> {
   margin-block-start: var(--space-4);
 }
 
-@media (max-width: 480px) {
+@media (max-width: 699.98px) {
   .review__header {
     flex-direction: column;
   }

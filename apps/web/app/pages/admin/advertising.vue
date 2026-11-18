@@ -588,13 +588,13 @@ useHead({ title: 'مدیریت تبلیغات | شبدر' })
   gap: var(--space-3);
 }
 
-@media (max-width: 800px) {
+@media (max-width: 699.98px) {
   .advertising-slot__workspace {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 699.98px) {
   .advertising-slot,
   .advertising-requests {
     padding: var(--space-4);

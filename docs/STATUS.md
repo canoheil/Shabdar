@@ -1,22 +1,80 @@
 # Status — Direct chat, national locations and historical phases
 
+## Design pass — hierarchy, rhythm and breakpoint repair (2026-11-18)
+
+A second presentation-only pass on `arena/53a5a2a1-shabdar`, after the owner
+reported the site still looked wrong. It changes no route, data, API, auth or
+test contract: every class name, id, accessible name and label the Playwright
+suite selects is unchanged. The palette and type scales were audited first and
+left alone — all 26 text pairs still clear 4.5:1 (4.68 minimum in light) — so the
+defects fixed here are structural, not colour.
+
+What was actually wrong, and what changed:
+
+1. **The measure was off-spec.** `master` allowed 1200px (§4) but the shell
+   rendered 1280px, so four-card rows and long copy both broke their intended
+   width. `.shell__main` is back to 75rem.
+2. **The feed's filter controls switched at an undocumented 768px.** MASTER.md
+   names 700/1024/1280 only; thirteen other breakpoints existed across the app
+   (480, 600, 760, 768, 800, 900, 1200). The inline filter row now appears at
+   1024px with the sidebar, and the rest are folded onto the documented scale.
+3. **The listing card buried the price.** A card had four competing text styles
+   and the price sat one step above body copy. The price is now `--font-size-18`
+   (22px from 1280), the location/age row sits on a hairline with real bottom
+   padding, the whole card takes the focus ring instead of clipping it inside
+   the photo's `overflow: hidden`, and the skeleton mirrors the real 2/3/4-column
+   grid so the feed does not reflow when results land.
+4. **The current category chip was almost invisible** next to eight tinted
+   tiles. It now carries weight, colour and a drawn border, and the scroller
+   bleeds to the screen edge with a visible scrollbar and scroll-snap.
+5. **Home's hero was a masthead, not a storefront.** It is now a two-column
+   composition — sentence, supporting line and two real facts (the live
+   category count) on one side, Shabdarak on the other — with the lead hidden
+   only where it was already hidden. The trust strip became three labelled
+   tinted tiles with hairline separation on a phone, the account band gained the
+   dashboard path back, and its quiet button took hero colours so the saffron
+   «ثبت آگهی» stays the single loud action on the page.
+6. **Detail repeated itself.** The category appeared above the title *and* in
+   the location line. The category is now one saffron chip; the location is one
+   muted line with a pin. The price block became a baseline-aligned band, the
+   seller block a sand card, and the two-column split moved from 900/1200 to
+   1024/1280.
+7. **Category and city pages printed the same heading twice** (page `h1` and
+   feed `h2`). The feed now says «آگهی‌های این دسته/این شهر» under its own
+   kicker, so the `h1` keeps its exact text the tests assert.
+8. **The 404 floated as loose text.** It is now a sheet with the status as a
+   label over the sentence, and in-page anchors (`#search`, legal ToC entries)
+   get `scroll-margin` so the docked tab bar cannot hide them.
+9. **Unfinished details:** an empty `.favorites__header h1` rule and an empty
+   `.inbox__header h1` rule are gone; the three "back to dashboard" links are one
+   quiet style; the legal index is a set of jump chips and its sections open on
+   hairlines; the post form counts title characters, the login card lost its
+   forced 580px height, and the thread fills the viewport it is given.
+
+Verification in this sandbox: `nuxi typecheck` clean, `npm run build` clean, and
+`npm run test:unit` green (37/37, including the design-system token-scale gate
+and the icon-sprite gate). The real-stack Playwright, Lighthouse and client-JS
+budget gates need MariaDB and a Chromium download, neither of which this sandbox
+has; they are unchanged in code and must run in CI before merge. `scripts/`
+gained `visual-fixture-api.mjs` (wired as `npm run dev:fixture-api`) — a
+local-only fixture API so the real production build can be reviewed on sample
+data without the Rust service. It is not imported by the app and ships nothing.
+
+## Visual refresh — all nine tasks done (2026-11-17)
+
 Updated 2026-11-17 on Arena.ai Agent Mode: the nine-task visual refresh is
-complete (see the first section). Tasks 1–8 are merged to `main` (PRs #26–#32);
+complete (see this section). Tasks 1–8 are merged to `main` (PRs #26–#32);
 Task 9 (close-out) is the final PR. One correction to how Tasks 3–8 proceeded:
 they were merged on the owner's go-ahead while their CI runs were still in
 flight, and those runs later finished red on up to four tests. The failures —
-three regressions from Tasks 3, 5 and 6, listed in the first section — are
-fixed in the Task 9 PR, whose run is the refresh's final green gate. Before
-that, updated 2026-11-11: the
+three regressions from Tasks 3, 5 and 6 — are fixed in the Task 9 PR, whose run
+is the refresh's final green gate. Before that, updated 2026-11-11: the
 launch-preparation work (Phase 14) was carried from the closed PR #23 onto
 branch `arena/c1cbe813-shabdar` and finished there; its verification record
-below is for commit `1d3c54a`. No
-production rollout is implied: migrations still have to be applied through the
-normal startup migrator, and `NUXT_PUBLIC_SITE_URL` must be set to the real
-HTTPS origin or every canonical and `sitemap.xml` entry will point at
-`http://127.0.0.1:3000`.
-
-## Visual refresh — all nine tasks done (2026-11-17)
+below is for commit `1d3c54a`. No production rollout is implied: migrations
+still have to be applied through the normal startup migrator, and
+`NUXT_PUBLIC_SITE_URL` must be set to the real HTTPS origin or every canonical
+and `sitemap.xml` entry will point at `http://127.0.0.1:3000`.
 
 **Every page now runs the new system in both themes.** The colours, the type
 and spacing scales, the icons, the buttons, fields, alerts and empty states,

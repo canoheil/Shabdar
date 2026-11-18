@@ -509,7 +509,10 @@ useHead({
   display: flex;
   flex-direction: column;
   min-inline-size: 0;
-  block-size: clamp(24rem, calc(100dvh - 15rem), 46rem);
+  /* Fills the space the shell leaves: the mobile tab bar, the header and the
+     composer all keep their own room, so the history never sits half a screen
+     tall behind a scroller. */
+  block-size: clamp(26rem, calc(100dvh - 13rem), 48rem);
   overflow: hidden;
   background: var(--color-surface);
   border-radius: var(--radius-card);
@@ -701,7 +704,7 @@ useHead({
   border-block-start: 1px solid var(--color-border);
 }
 
-@media (min-width: 600px) {
+@media (min-width: 700px) {
   .thread__card {
     block-size: clamp(28rem, calc(100dvh - 12rem), 48rem);
   }

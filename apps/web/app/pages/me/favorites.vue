@@ -191,19 +191,29 @@ useHead({ title: 'علاقه‌مندی‌های من | شبدر' })
   margin: 0;
 }
 
-.favorites__header h1 {
-}
-
+/* A quiet back link, not a second call to action beside the page title. */
 .favorites__back {
   display: inline-flex;
   align-items: center;
+  gap: var(--space-1);
   min-block-size: 44px;
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  border-radius: var(--radius-pill);
+}
+
+.favorites__back:hover {
+  color: var(--color-primary);
+  background: var(--color-surface-muted);
 }
 
 .favorites__cards {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
+  gap: var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -250,6 +260,7 @@ useHead({ title: 'علاقه‌مندی‌های من | شبدر' })
 @media (min-width: 700px) {
   .favorites__cards {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-4);
   }
 }
 

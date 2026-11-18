@@ -191,13 +191,22 @@ useHead({
   margin: 0;
 }
 
-.inbox__header h1 {
-}
-
 .inbox__back {
   display: inline-flex;
   align-items: center;
+  gap: var(--space-1);
   min-block-size: 44px;
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  border-radius: var(--radius-pill);
+}
+
+.inbox__back:hover {
+  color: var(--color-primary);
+  background: var(--color-surface-muted);
 }
 
 .inbox__list {

@@ -4,27 +4,27 @@
     <ListingBrowser
       :locked-city="city.slug"
       :locked-province="city.province_slug"
-      kicker="شهر انتخاب‌شده"
-      :heading="`آگهی‌های ${city.name_fa}`"
+      kicker="نتیجهٔ جستجو در شهر"
+      heading="آگهی‌های این شهر"
     >
       <template #intro>
         <div class="clean-list__intro">
-      <nav class="clean-list__breadcrumb" aria-label="مسیر">
-        <NuxtLink to="/">خانه</NuxtLink>
-        <span aria-hidden="true">/</span>
-        <span>{{ city.province_name_fa }}</span>
-        <span aria-hidden="true">/</span>
-        <span aria-current="page">{{ city.name_fa }}</span>
-      </nav>
+          <nav class="clean-list__breadcrumb" aria-label="مسیر">
+            <NuxtLink to="/">خانه</NuxtLink>
+            <span aria-hidden="true">/</span>
+            <span>{{ city.province_name_fa }}</span>
+            <span aria-hidden="true">/</span>
+            <span aria-current="page">{{ city.name_fa }}</span>
+          </nav>
 
-      <header class="clean-list__header">
-        <p class="clean-list__kicker">آگهی‌های شهر</p>
-        <h1>آگهی‌های {{ city.name_fa }}</h1>
-        <p class="clean-list__copy">
-          آگهی‌های فعال {{ city.name_fa }}، استان {{ city.province_name_fa }}؛
-          با جستجو، دسته و بازهٔ قیمت محدودترش کنید.
-        </p>
-      </header>
+          <header class="clean-list__header">
+            <p class="clean-list__kicker">آگهی‌های شهر</p>
+            <h1>آگهی‌های {{ city.name_fa }}</h1>
+            <p class="clean-list__copy">
+              آگهی‌های فعال {{ city.name_fa }}، استان {{ city.province_name_fa }}؛
+              با جستجو، دسته و بازهٔ قیمت محدودترش کنید.
+            </p>
+          </header>
         </div>
       </template>
     </ListingBrowser>
@@ -102,10 +102,21 @@ useHead(() => ({
   margin: 0;
 }
 
+/* The breadcrumb, the kicker and the heading are one block above the search;
+   the kicker is a quiet label, not a second coloured heading competing with the
+   h1 right below it. */
 .clean-list__kicker {
-  color: var(--color-accent);
+  margin: 0;
+  color: var(--color-text-muted);
   font-size: var(--font-size-12);
-  font-weight: 800;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.clean-list__header h1 {
+  font-size: var(--font-size-28);
+  line-height: 1.4;
+  text-wrap: balance;
 }
 
 .clean-list__copy {
@@ -113,5 +124,11 @@ useHead(() => ({
   color: var(--color-text-muted);
   font-size: var(--font-size-14);
   line-height: 1.95;
+}
+
+@media (min-width: 700px) {
+  .clean-list__header h1 {
+    font-size: var(--font-size-36);
+  }
 }
 </style>

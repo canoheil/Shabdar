@@ -459,7 +459,7 @@ useHead({ title: 'قوانین دیدگاه | مدیریت شبدر' })
   border-block-start: 1px solid var(--color-border);
 }
 
-@media (min-width: 768px) {
+@media (min-width: 700px) {
   .admin-rule-create__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

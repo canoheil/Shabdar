@@ -24,7 +24,7 @@
         />
         <section class="detail__summary" aria-label="خلاصه و اقدامات آگهی">
           <div>
-            <p class="detail__category">{{ listing.category }} <span aria-hidden="true">/</span> {{ listing.city }}</p>
+            <p class="detail__category">{{ listing.category }}</p>
             <h1>{{ listing.title }}</h1>
             <p class="detail__facts">
               <AppIcon name="star-fill" :size="14" />
@@ -40,7 +40,10 @@
             <span class="detail__price-label">قیمت</span>
             <p class="detail__price">{{ formatPrice(listing.price_toman, listing.price_type) }}</p>
           </div>
-          <p class="detail__location meta">{{ listing.city }}، {{ listing.province }} <span aria-hidden="true">·</span> {{ listing.category }}</p>
+          <p class="detail__location">
+            <AppIcon name="map-pin" :size="14" />
+            <span>{{ listing.city }}، {{ listing.province }}</span>
+          </p>
           <div class="detail__seller">
             <span class="detail__seller-avatar avatar" aria-hidden="true">{{ (listing.seller.display_name ?? 'ش').slice(0, 1) }}</span>
             <div>
@@ -508,15 +511,16 @@ useHead(() => {
 }
 
 .detail__category {
-  margin-block-end: var(--space-2);
-  color: var(--color-accent);
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  color: var(--color-ink-a);
   font-size: var(--font-size-12);
-  font-weight: 800;
-}
-
-.detail__category > span {
-  margin-inline: var(--space-2);
-  color: var(--color-text-muted);
+  font-weight: 600;
+  line-height: 1.6;
+  background: var(--color-tint-a);
+  border-radius: var(--radius-pill);
 }
 
 .detail__summary h1 {
@@ -545,7 +549,7 @@ useHead(() => {
 .detail__layout {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-5);
   min-inline-size: 0;
 }
 
@@ -561,11 +565,26 @@ useHead(() => {
   box-shadow: var(--shadow-card);
 }
 
+/* The location repeats the category that already sits above the title, so it is
+   shown once, quietly, beside the fact row instead of as its own paragraph. */
+.detail__location {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-12);
+}
+
+.detail__location .app-icon {
+  color: var(--color-accent);
+}
+
 .detail__price-block {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-4);
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   background: var(--color-primary-soft);
   border-radius: var(--radius-card);
 }
@@ -576,23 +595,33 @@ useHead(() => {
   font-size: var(--font-size-12);
 }
 
-.detail__price {
-  font-size: var(--font-size-28);
-  font-weight: 800;
-  line-height: 1.6;
+.detail__price-block .detail__price-label {
   color: var(--color-primary);
+  font-weight: 600;
 }
 
-.detail__location {
-  line-height: 1.8;
+.detail__price {
+  margin: 0;
+  font-size: var(--font-size-28);
+  font-weight: 800;
+  line-height: 1.4;
+  color: var(--color-primary);
+  text-align: end;
 }
 
 .detail__seller {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding-block: var(--space-4);
-  border-block: 1px solid var(--color-border);
+  padding: var(--space-3);
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-card);
+}
+
+.detail__seller .avatar {
+  inline-size: 44px;
+  block-size: 44px;
+  font-size: var(--font-size-16);
 }
 
 .detail__seller > div {
@@ -723,7 +752,7 @@ useHead(() => {
   box-shadow: none;
 }
 
-@media (min-width: 900px) {
+@media (min-width: 1024px) {
   .detail__layout {
     display: grid;
     grid-template-columns: minmax(0, 1.6fr) minmax(18rem, 1fr);
@@ -737,7 +766,7 @@ useHead(() => {
   }
 }
 
-@media (min-width: 1200px) {
+@media (min-width: 1280px) {
   .detail__layout {
     gap: var(--space-8);
   }

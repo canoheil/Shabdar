@@ -106,6 +106,12 @@
                   :aria-invalid="ariaInvalid"
                   required
                 >
+                <p
+                  v-if="form.title.length > 0"
+                  class="post__counter"
+                  :class="{ 'post__counter--near': form.title.length >= 140 }"
+                  aria-hidden="true"
+                >{{ formatNumber(form.title.length) }} از ۱۶۰ نویسه</p>
               </template>
             </AppField>
             <AppField
@@ -609,6 +615,19 @@ async function submitForReview(): Promise<void> {
   cursor: pointer;
 }
 
+.post__counter {
+  margin: 0;
+  font-size: var(--font-size-12);
+  line-height: 1.6;
+  color: var(--color-text-muted);
+  text-align: end;
+}
+
+.post__counter--near {
+  color: var(--color-warning);
+  font-weight: 600;
+}
+
 .post__price-readback {
   margin: 0;
   font-size: var(--font-size-14);
@@ -755,6 +774,7 @@ async function submitForReview(): Promise<void> {
   .post__fields {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-4);
   }
 
   .post__fields > :nth-child(n + 4) {
@@ -764,17 +784,6 @@ async function submitForReview(): Promise<void> {
   .post__previews {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
-}
-
-@media (min-width: 768px) {
-  .post__header {
-    padding: var(--space-8);
-  }
-
-  .post__section {
-    padding: var(--space-6);
-  }
-
 
   .post__upload-guide {
     flex-direction: row;
@@ -789,6 +798,12 @@ async function submitForReview(): Promise<void> {
   .post__upload-guide ul {
     max-inline-size: 15rem;
     justify-content: flex-end;
+  }
+}
+
+@media (min-width: 1024px) {
+  .post__section {
+    padding: var(--space-6);
   }
 }
 </style>
