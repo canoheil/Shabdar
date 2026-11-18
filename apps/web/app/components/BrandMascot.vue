@@ -30,7 +30,7 @@
         d="M48 27C33 28 21 40 19 57C17 75 30 87 48 87C66 87 79 75 77 57C75 40 63 28 48 27Z"
         fill="currentColor"
       />
-      <g class="brand-mascot__face" fill="var(--color-on-primary)" stroke="var(--color-on-primary)">
+      <g class="brand-mascot__face" fill="var(--color-hero-deep)" stroke="var(--color-hero-deep)">
         <ellipse cx="38" cy="54" rx="3.2" ry="4.2" stroke="none" />
         <ellipse cx="58" cy="54" rx="3.2" ry="4.2" stroke="none" />
         <path d="M41 66Q48 72 55 66" fill="none" stroke-width="3.5" stroke-linecap="round" />

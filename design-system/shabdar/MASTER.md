@@ -175,7 +175,7 @@ The user selected concept 1 on 2026-10-24; its reference is
 `design-system/shabdar/concepts/shabdarak.png`. Keep its rounded body,
 two-leaf sprout, minimal face, and search magnifier, but translate them to
 flat SVG geometry without the reference's raster shading or highlights. The
-face uses the on-primary token so its features remain clear in both themes;
+face uses the deep-forest token so its features remain clear in both themes;
 the favicon mirrors the mark geometry in the light palette.
 
 Allowed production variants:

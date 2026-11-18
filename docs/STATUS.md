@@ -3,8 +3,9 @@
 ## Shabdarak mark refinement (2026-11-18)
 
 Following the owner's approval, the shared Shabdarak SVG has fuller sprout
-leaves, a softer rounded body and a clearer friendly face. Face features use
-on-primary for contrast in both themes; the favicon uses matching geometry.
+leaves, a softer rounded body and a clearer friendly face. After owner feedback,
+the face uses deep forest rather than white in light mode, and stays dark in
+both themes; the favicon uses matching geometry.
 The existing mark, full and search poses and accessible-label behavior remain.
 Nuxt typecheck, production build, 56 unit tests and all three fixture-backed
 brand Playwright tests passed. The header was visually reviewed at 390px in
