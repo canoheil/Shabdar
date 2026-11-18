@@ -29,9 +29,9 @@
         d="M48 27C33 28 22 42 20 58C18 75 31 86 49 86C66 86 78 74 77 58C76 43 63 30 48 27Z"
         fill="currentColor"
       />
-      <ellipse cx="39" cy="54" rx="3" ry="4.5" fill="var(--color-text)" />
-      <ellipse cx="60" cy="54" rx="3" ry="4.5" fill="var(--color-text)" />
-      <path d="M42 65Q48 70 54 65" fill="none" stroke="var(--color-text)" stroke-width="3" stroke-linecap="round" />
+      <ellipse cx="39" cy="54" rx="3" ry="4.5" fill="var(--color-hero-deep)" />
+      <ellipse cx="60" cy="54" rx="3" ry="4.5" fill="var(--color-hero-deep)" />
+      <path d="M42 65Q48 70 54 65" fill="none" stroke="var(--color-hero-deep)" stroke-width="3" stroke-linecap="round" />
     </g>
     <g v-if="pose === 'search'">
       <circle cx="17" cy="43" r="12" fill="var(--color-on-primary)" stroke="var(--color-text)" stroke-width="4" />

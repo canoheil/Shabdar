@@ -9,7 +9,7 @@ function isFeedRequest(url: string): boolean {
 test('@home search-led hierarchy and visible categories work at mobile and desktop', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 })
   await page.goto('/')
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('جستجو')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('از دلِ محله')
   await expect(page.getByRole('searchbox', { name: 'جستجو', exact: true })).toBeVisible()
   const categories = page.locator('.browser__categories')
   await expect(categories).toBeVisible()
@@ -18,7 +18,11 @@ test('@home search-led hierarchy and visible categories work at mobile and deskt
   await expect(categories.getByRole('link')).toHaveCount(8)
   await expect(categories.getByRole('link', { name: 'همه', exact: true })).toHaveAttribute('aria-current', 'page')
   const firstCategory = categories.getByRole('link').nth(1)
+  await expect(page.locator('.browser__hero--emerald .browser__stall img')).toBeVisible()
   await firstCategory.click()
+  await expect(page.locator('.browser__hero--emerald .browser__stall img')).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('آگهی‌های')
+  await expect(page.getByRole('searchbox', { name: 'جستجو', exact: true })).toBeVisible()
   await expect(firstCategory).toHaveAttribute('aria-current', 'page')
   // With no other filter active the chip is a clean canonical URL.
   await expect(page).toHaveURL(/\/category\/[^/?]+$/)
@@ -29,20 +33,42 @@ test('@home search-led hierarchy and visible categories work at mobile and deskt
 
   await page.setViewportSize({ width: 1024, height: 900 })
   const desktopFilters = page.locator('.browser__desktop-filters')
+  const disclosure = page.getByRole('button', { name: 'فیلترها', exact: true })
+  await expect(desktopFilters).toBeHidden()
+  await expect(disclosure).toHaveAttribute('aria-expanded', 'false')
+  await disclosure.click()
   await expect(desktopFilters).toBeVisible()
   // The category is fixed by the /category/{slug} path, so that one control is
   // intentionally absent; every other filter stays available.
   await expect(desktopFilters.getByLabel('دسته', { exact: true })).toHaveCount(0)
   await expect(desktopFilters.getByLabel('استان', { exact: true })).toBeVisible()
   await expect(desktopFilters.getByLabel('شهر', { exact: true })).toBeVisible()
-  await expect(desktopFilters.getByLabel('مرتب‌سازی', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'فیلترها', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('combobox', { name: 'مرتب‌سازی', exact: true })).toBeVisible()
+  await expect(disclosure).toHaveAttribute('aria-expanded', 'true')
   await expectNoOverflow(page)
 
   // Home itself still offers every filter, including the category select.
   await page.goto('/')
+  await disclosure.click()
   await expect(desktopFilters.getByLabel('دسته', { exact: true })).toBeVisible()
   await expect(desktopFilters.getByLabel('استان', { exact: true })).toBeVisible()
+})
+
+test('@home compact category rail hides its scrollbar but remains keyboard scrollable', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 812 })
+  await page.goto('/')
+  const rail = page.locator('.browser__categories')
+  await expect(rail).toHaveCSS('scrollbar-width', 'none')
+  expect(await rail.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true)
+  const lastCategory = rail.getByRole('link').last()
+  await lastCategory.focus()
+  await expect(lastCategory).toBeFocused()
+  const isInView = await lastCategory.evaluate(el => {
+    const item = el.getBoundingClientRect()
+    const railBounds = el.parentElement!.getBoundingClientRect()
+    return item.left >= railBounds.left - 1 && item.right <= railBounds.right + 1
+  })
+  expect(isInView).toBe(true)
 })
 
 test('@home national province and city filters load real locations and survive reload', async ({ page }) => {
@@ -59,6 +85,7 @@ test('@home national province and city filters load real locations and survive r
   await expect(page.locator('.home__intro')).not.toContainText('گیلان')
   await expect(page.locator('.home__intro')).not.toContainText('رشت')
 
+  await page.getByRole('button', { name: 'فیلترها', exact: true }).click()
   const filters = page.locator('.browser__desktop-filters')
   const province = filters.getByLabel('استان', { exact: true })
   const city = filters.getByLabel('شهر', { exact: true })
@@ -80,7 +107,10 @@ test('@home national province and city filters load real locations and survive r
   await expect(city).toHaveValue('tehran')
   await expect(cards).toHaveCount(1)
 
-  await province.selectOption('gilan')
+  const quickProvince = page.getByRole('combobox', { name: 'محدوده‌ی بازارچه', exact: true })
+  await expect(quickProvince).toHaveValue('tehran')
+  await quickProvince.selectOption('gilan')
+  await expect(province).toHaveValue('gilan')
   await expect(city).toHaveValue('')
   await expect(page).toHaveURL(/[?&]province=gilan(?:&|$)/)
   await expect(page).not.toHaveURL(/[?&]city=/)
@@ -91,6 +121,7 @@ test('@home national province and city filters load real locations and survive r
 test('@home city-loading failure keeps the selected province and retries real options', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 900 })
   await page.goto('/')
+  await page.getByRole('button', { name: 'فیلترها', exact: true }).click()
   const filters = page.locator('.browser__desktop-filters')
   const province = filters.getByLabel('استان', { exact: true })
   const city = filters.getByLabel('شهر', { exact: true })
@@ -213,6 +244,7 @@ test('@home desktop price filters update results and Back restores values', asyn
   await page.goto(`/?q=${encodeURIComponent(term)}`)
   const cards = page.locator('.listing-card')
   await expect(cards).toHaveCount(3)
+  await page.getByRole('button', { name: 'فیلترها', exact: true }).click()
   const min = page.getByLabel('کمترین قیمت (تومان)', { exact: true })
   const max = page.getByLabel('بیشترین قیمت (تومان)', { exact: true })
 

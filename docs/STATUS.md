@@ -1,5 +1,48 @@
 # Status — Direct chat, national locations and historical phases
 
+## Compact category rail (2026-11-18)
+
+At the owner's request, the category rail scrollbar is hidden below 1024px
+while touch and keyboard scrolling remain available. Typecheck, production
+build, 56 unit tests and three selected fixture-backed Playwright tests passed,
+including keyboard access to the last category and responsive light/dark axe.
+The full real-stack and Lighthouse gates remain pending.
+
+## Category storefront continuity (2026-11-18)
+
+Following owner feedback, selecting a category now keeps the same illustrated
+emerald search storefront as Home, with a category-specific H1 and unchanged
+canonical category route and filtering. A shared intro component keeps both
+pages visually aligned. Typecheck, production build, 56 unit tests and three
+selected fixture-backed Playwright tests passed; category was visually checked
+at 320, 390 and 1440px. The full real-stack and Lighthouse gates remain pending.
+
+## Storefront polish — approved direction (2026-11-18)
+
+The owner approved the illustrated neighborhood-market direction. Home now has
+an emerald search area, local stall illustration, category aisle and clearer
+listing cards; the shell, category/city headings, detail, login and advertising
+were adjusted to match. Both themes and narrow screens remain supported. The
+sample listings and generated product photographs are **only** served by the
+read-only visual fixture API; production still uses its own listing data.
+No runtime dependencies or API changes were added.
+
+Verification on this branch: Nuxt typecheck, production build and 56 unit tests
+passed. A selected 26-test Playwright suite passed against the local visual
+fixture (including responsive light/dark axe checks, navigation, Home search
+and filters, login error handling and legal links). Browser review covered Home
+at 320, 390, 1280 and 1440px, plus detail and both themes. Cold fixture route
+scripts measured 96,825 gzip bytes for Home and 96,786 for detail; the baseline
+comparison and private-route chunk check passed. One exploratory mobile
+Lighthouse run on fixture Home measured LCP 2,629ms, CLS 0.0085, TBT 83.5ms,
+and accessibility 1.0; this is not the configured three-run real-stack gate.
+
+**Remaining before merge:** run the full real-stack Playwright and three-run
+Lighthouse gates against Rust/MariaDB and real test fixtures in CI. The local
+preview is read-only and does not verify real authentication, posting, or
+backend persistence. Previous sections document separate completed work and
+are not evidence for this pass.
+
 ## Design pass — hierarchy, rhythm and breakpoint repair (2026-11-18)
 
 A second presentation-only pass on `arena/53a5a2a1-shabdar`, after the owner

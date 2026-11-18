@@ -2,10 +2,10 @@
   <div class="shell">
     <header class="shell__header">
       <NuxtLink to="/" class="shell__brand">
-        <BrandMascot />
+        <span class="shell__brand-mark"><BrandMascot /></span>
         <span class="shell__brand-copy">
           <span>شبدر</span>
-          <small class="shell__brand-tagline" aria-hidden="true">بازارچهٔ نزدیک شما</small>
+          <small class="shell__brand-tagline" aria-hidden="true">بازارچه‌ی محلی ایران</small>
         </span>
       </NuxtLink>
       <div class="shell__theme">
@@ -13,6 +13,7 @@
       </div>
       <nav class="shell__nav" aria-label="ناوبری اصلی">
         <ul class="shell__nav-list">
+          <li class="shell__group-label" aria-hidden="true">گشت‌وگذار</li>
           <li class="shell__nav-item">
             <NuxtLink to="/" class="shell__nav-action">
               <span class="shell__nav-icon">
@@ -35,9 +36,10 @@
               <span class="shell__nav-icon">
                 <AppIcon name="plus-circle-fill" :size="22" />
               </span>
-              <span>ثبت</span>
+              <span><span>ثبت</span><span class="shell__desktop-label"> آگهی</span></span>
             </NuxtLink>
           </li>
+          <li class="shell__group-label shell__group-label--section" aria-hidden="true">شبدر من</li>
           <li class="shell__nav-item">
             <NuxtLink to="/me/conversations" class="shell__nav-action">
               <span class="shell__nav-icon">
@@ -80,6 +82,11 @@
           </template>
         </ul>
       </nav>
+      <aside class="shell__local-note" aria-label="درباره‌ی بازارچه">
+        <span class="shell__note-caption" lang="en" dir="ltr">SHABDAR MARKET</span>
+        <strong>ریشه در محله</strong>
+        <p>با خرید محلی، کسب‌وکارهای<br>کوچک را بزرگ‌تر کنیم.</p>
+      </aside>
     </header>
     <div v-if="authStatus === 'unavailable'" class="shell__auth-state" role="alert">
       <span>وضعیت ورود مشخص نیست؛ دوباره تلاش کنید.</span>
@@ -91,7 +98,7 @@
       <slot />
     </main>
     <footer class="shell__footer">
-      <p>شبدر — بازارچهٔ آگهی‌های محلی</p>
+      <p class="shell__footer-brand"><AppIcon name="storefront" :size="20" /> شبدر <span>بازارچهٔ آگهی‌های محلی</span></p>
       <nav class="shell__footer-links" aria-label="پیوندهای حقوقی و اطلاع‌رسانی">
         <NuxtLink to="/privacy">حریم خصوصی</NuxtLink>
         <span aria-hidden="true">·</span>

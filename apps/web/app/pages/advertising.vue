@@ -231,8 +231,12 @@ useHead({
   gap: var(--space-4);
 }
 
+.advertising-page__intro {
+  background: var(--color-leaf-soft);
+  box-shadow: none;
+}
 .advertising-page__kicker {
-  color: var(--color-primary);
+  color: var(--color-leaf);
   font-weight: 800;
 }
 
@@ -254,7 +258,7 @@ useHead({
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
-  color: var(--color-text-muted);
+  color: var(--color-text);
 }
 
 .advertising-page__steps .app-icon {

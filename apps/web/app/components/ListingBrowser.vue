@@ -1,187 +1,80 @@
 <template>
   <div class="browser">
+    <div v-if="emeraldHero" class="browser__masthead">
+      <p class="browser__path"><AppIcon name="storefront" :size="20" /><strong>بازارچه‌ی شبدر</strong><AppIcon name="caret-left-bold" :size="11" /><span>خانه</span></p>
+      <label class="browser__location">
+        <AppIcon name="map-pin-fill" :size="18" />
+        <span>{{ provinces?.data.find(item => item.slug === province)?.name_fa ?? 'سراسر ایران' }}</span>
+        <AppIcon name="caret-down-bold" :size="12" />
+        <select v-model="province" aria-label="محدوده‌ی بازارچه" @change="onProvinceChange">
+          <option value="">سراسر ایران</option>
+          <option v-for="item in provinces?.data ?? []" :key="item.slug" :value="item.slug">{{ item.name_fa }}</option>
+        </select>
+      </label>
+    </div>
     <div class="browser__hero" :class="{ 'browser__hero--emerald': emeraldHero }">
       <slot name="intro" />
-    <form id="search" class="browser__search" role="search" @submit.prevent="applyNow">
-      <AppField id="listing-search" label="جستجو" class="browser__search-field">
-        <template #default="{ id, describedBy, ariaInvalid }">
-          <input
-            :id="id"
-            v-model="q"
-            class="field__input"
-            type="search"
-            name="q"
-            placeholder="دنبال چه می‌گردید؟"
-            maxlength="100"
-            :aria-describedby="describedBy"
-            :aria-invalid="ariaInvalid"
-            @input="onSearchInput"
-          >
-        </template>
-      </AppField>
-      <AppButton type="submit" variant="accent" class="browser__search-submit">
-        <AppIcon name="magnifying-glass-bold" :size="20" />
-        <span class="browser__search-submit-text">جستجو</span>
-      </AppButton>
-      <button
-        ref="filterButton"
-        type="button"
-        class="btn btn--secondary browser__filter-open"
-        aria-haspopup="dialog"
-        @click="openMobileFilters"
-      >
-        <AppIcon name="sliders-horizontal-bold" :size="20" />
-        <span class="browser__filter-open-text">فیلترها</span>
-      </button>
-      <div class="browser__desktop-filters">
-        <AppField v-if="!lockedCategory" id="category-filter" label="دسته">
-          <template #default="{ id, describedBy, ariaInvalid }">
-            <select
-              :id="id"
-              v-model="category"
-              class="field__input"
-              :aria-describedby="describedBy"
-              :aria-invalid="ariaInvalid"
-              @change="applyNow"
-            >
-              <option value="">همه</option>
-              <option v-for="item in categories?.data ?? []" :key="item.slug" :value="item.slug">
-                {{ item.name_fa }}
-              </option>
-            </select>
-          </template>
-        </AppField>
-        <AppField id="province-filter" label="استان">
-          <template #default="{ id, describedBy, ariaInvalid }">
-            <select
-              :id="id"
-              v-model="province"
-              class="field__input"
-              :aria-describedby="describedBy"
-              :aria-invalid="ariaInvalid"
-              @change="onProvinceChange"
-            >
-              <option value="">همهٔ استان‌ها</option>
-              <option v-for="item in provinces?.data ?? []" :key="item.slug" :value="item.slug">
-                {{ item.name_fa }}
-              </option>
-            </select>
-          </template>
-        </AppField>
-        <AppField
-          id="city-filter"
-          label="شهر"
-          :help="citiesPending ? 'در حال بارگذاری شهرها…' : undefined"
-          :error="citiesError ? 'بارگذاری شهرها ممکن نشد.' : undefined"
-        >
-          <template #default="{ id, describedBy, ariaInvalid }">
-            <select
-              :id="id"
-              v-model="city"
-              class="field__input"
-              :disabled="!province || citiesPending || citiesError"
-              :aria-busy="citiesPending"
-              :aria-describedby="describedBy"
-              :aria-invalid="ariaInvalid"
-              @change="applyNow"
-            >
-              <option value="">{{ province ? 'همهٔ شهرها' : 'انتخاب شهر' }}</option>
-              <option v-for="item in cities" :key="item.slug" :value="item.slug">
-                {{ item.name_fa }}
-              </option>
-            </select>
-            <button
-              v-if="citiesError"
-              type="button"
-              class="btn btn--secondary"
-              @click="retryCities()"
-            >
-              تلاش دوباره برای دریافت شهرها
-            </button>
-          </template>
-        </AppField>
-        <AppField id="min-price-filter" label="کمترین قیمت (تومان)">
+      <form id="search" class="browser__search" role="search" @submit.prevent="applyNow">
+        <AppIcon name="magnifying-glass-bold" :size="20" class="browser__search-icon" />
+        <AppField id="listing-search" label="جستجو" class="browser__search-field">
           <template #default="{ id, describedBy, ariaInvalid }">
             <input
               :id="id"
-              v-model="minPrice"
-              class="field__input browser__price-input"
-              type="number"
-              min="0"
-              step="1"
-              inputmode="numeric"
-              dir="ltr"
-              placeholder="حداقل قیمت"
-              :aria-describedby="describedBy"
-              :aria-invalid="ariaInvalid"
-              @change="applyNow"
-              @keydown.enter.prevent="applyNow"
-            >
-          </template>
-        </AppField>
-        <AppField id="max-price-filter" label="بیشترین قیمت (تومان)">
-          <template #default="{ id, describedBy, ariaInvalid }">
-            <input
-              :id="id"
-              v-model="maxPrice"
-              class="field__input browser__price-input"
-              type="number"
-              min="0"
-              step="1"
-              inputmode="numeric"
-              dir="ltr"
-              placeholder="حداکثر قیمت"
-              :aria-describedby="describedBy"
-              :aria-invalid="ariaInvalid"
-              @change="applyNow"
-              @keydown.enter.prevent="applyNow"
-            >
-          </template>
-        </AppField>
-        <AppField id="sort-filter" label="مرتب‌سازی">
-          <template #default="{ id, describedBy, ariaInvalid }">
-            <select
-              :id="id"
-              v-model="sort"
+              v-model="q"
               class="field__input"
+              type="search"
+              name="q"
+              placeholder="دنبال چه می‌گردید؟"
+              maxlength="100"
               :aria-describedby="describedBy"
               :aria-invalid="ariaInvalid"
-              @change="applyNow"
+              @input="onSearchInput"
             >
-              <option v-for="option in sortOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
           </template>
         </AppField>
-      </div>
-    </form>
+        <AppButton type="submit" variant="accent" class="browser__search-submit">
+          جستجو <AppIcon name="arrow-left" :size="16" />
+        </AppButton>
+      </form>
+      <picture v-if="emeraldHero" class="browser__stall" aria-hidden="true">
+        <source media="(max-width: 699.98px)" srcset="/illustrations/neighborhood-stall-sm.webp">
+        <img src="/illustrations/neighborhood-stall.webp" width="760" height="613" alt="" decoding="async">
+      </picture>
     </div>
 
-    <div class="browser__categories" role="group" aria-label="دسته‌بندی‌ها">
-      <NuxtLink
-        to="/"
-        class="browser__category-button"
-        :aria-current="category === '' ? 'page' : undefined"
-      >
-        <span class="browser__category-tile browser__category-tile--a" aria-hidden="true">
-          <AppIcon :name="categoryIcon('')" :size="24" />
-        </span>
-        همه
-      </NuxtLink>
-      <NuxtLink
-        v-for="(item, index) in categories?.data ?? []"
-        :key="item.slug"
-        :to="categoryHref(item.slug)"
-        class="browser__category-button"
-        :aria-current="category === item.slug ? 'page' : undefined"
-      >
-        <span class="browser__category-tile" :class="`browser__category-tile--${'abc'[index % 3]}`" aria-hidden="true">
-          <AppIcon :name="categoryIcon(item.slug)" :size="24" />
-        </span>
-        {{ item.name_fa }}
-      </NuxtLink>
-    </div>
+    <section class="browser__aisles" aria-labelledby="browse-categories-title">
+      <div class="browser__section-heading">
+        <AppIcon name="squares-four-duotone" :size="23" />
+        <h2 id="browse-categories-title">دسته‌بندی‌های بازارچه</h2>
+        <span class="browser__rule" />
+        <span v-if="categories?.data.length" class="browser__aside-label">{{ formatNumber(categories.data.length) }} دسته‌بندی</span>
+      </div>
+      <div class="browser__categories" role="group" aria-label="دسته‌بندی‌ها">
+        <NuxtLink
+          to="/"
+          class="browser__category-button"
+          :aria-current="category === '' ? 'page' : undefined"
+        >
+          <span class="browser__category-tile" aria-hidden="true">
+            <AppIcon :name="categoryIcon('')" :size="28" />
+          </span>
+          همه
+        </NuxtLink>
+        <NuxtLink
+          v-for="item in categories?.data ?? []"
+          :key="item.slug"
+          :to="categoryHref(item.slug)"
+          class="browser__category-button"
+          :data-category="item.slug"
+          :aria-current="category === item.slug ? 'page' : undefined"
+        >
+          <span class="browser__category-tile" aria-hidden="true">
+            <AppIcon :name="categoryIcon(item.slug)" :size="28" />
+          </span>
+          {{ item.name_fa }}
+        </NuxtLink>
+      </div>
+    </section>
 
     <dialog
       v-if="filterDialogReady"
@@ -317,13 +210,137 @@
 
     <section class="browser__results" aria-labelledby="listing-results-title" :aria-busy="feedPending">
       <div class="browser__results-header">
-        <div>
-          <p class="browser__results-kicker">{{ kicker }}</p>
-          <h2 id="listing-results-title">{{ heading }}</h2>
+        <div class="browser__results-intro">
+          <p class="browser__results-kicker"><span aria-hidden="true" />{{ kicker }}</p>
+          <div class="browser__results-title">
+            <h2 id="listing-results-title">{{ heading }}</h2>
+            <p v-if="!feedPending && !feedError" class="browser__result-count">{{ formatNumber(items.length) }} آگهی</p>
+          </div>
         </div>
-        <p v-if="!feedPending && !feedError" class="browser__result-count">
-          {{ items.length.toLocaleString('fa-IR') }} آگهی
-        </p>
+        <div class="browser__tools">
+          <label class="browser__sort">
+            <AppIcon name="sort-ascending" :size="18" />
+            <span>{{ sortOptions.find(option => option.value === sort)?.label ?? 'تازه‌ترین' }}</span>
+            <AppIcon name="caret-down-bold" :size="12" />
+            <select id="sort-filter" v-model="sort" aria-label="مرتب‌سازی" @change="applyNow">
+              <option v-for="option in sortOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+          </label>
+          <button type="button" class="browser__desktop-open browser__tool" aria-controls="listing-filters" :aria-expanded="desktopFiltersOpen" @click="desktopFiltersOpen = !desktopFiltersOpen">
+            <AppIcon name="sliders-horizontal-bold" :size="18" /> فیلترها
+            <span v-if="filterCount" class="browser__filter-count">{{ formatNumber(filterCount) }}</span>
+          </button>
+          <button ref="filterButton" type="button" class="browser__filter-open browser__tool" aria-haspopup="dialog" aria-label="فیلترها" @click="openMobileFilters">
+            <AppIcon name="sliders-horizontal-bold" :size="18" /><span>فیلترها</span>
+            <span v-if="filterCount" class="browser__filter-count">{{ formatNumber(filterCount) }}</span>
+          </button>
+        </div>
+      </div>
+      <div v-show="desktopFiltersOpen" id="listing-filters" class="browser__desktop-filters">
+        <AppField v-if="!lockedCategory" id="category-filter" label="دسته">
+          <template #default="{ id, describedBy, ariaInvalid }">
+            <select
+              :id="id"
+              v-model="category"
+              class="field__input"
+              :aria-describedby="describedBy"
+              :aria-invalid="ariaInvalid"
+              @change="applyNow"
+            >
+              <option value="">همه</option>
+              <option v-for="item in categories?.data ?? []" :key="item.slug" :value="item.slug">
+                {{ item.name_fa }}
+              </option>
+            </select>
+          </template>
+        </AppField>
+        <AppField id="province-filter" label="استان">
+          <template #default="{ id, describedBy, ariaInvalid }">
+            <select
+              :id="id"
+              v-model="province"
+              class="field__input"
+              :aria-describedby="describedBy"
+              :aria-invalid="ariaInvalid"
+              @change="onProvinceChange"
+            >
+              <option value="">همهٔ استان‌ها</option>
+              <option v-for="item in provinces?.data ?? []" :key="item.slug" :value="item.slug">
+                {{ item.name_fa }}
+              </option>
+            </select>
+          </template>
+        </AppField>
+        <AppField
+          id="city-filter"
+          label="شهر"
+          :help="citiesPending ? 'در حال بارگذاری شهرها…' : undefined"
+          :error="citiesError ? 'بارگذاری شهرها ممکن نشد.' : undefined"
+        >
+          <template #default="{ id, describedBy, ariaInvalid }">
+            <select
+              :id="id"
+              v-model="city"
+              class="field__input"
+              :disabled="!province || citiesPending || citiesError"
+              :aria-busy="citiesPending"
+              :aria-describedby="describedBy"
+              :aria-invalid="ariaInvalid"
+              @change="applyNow"
+            >
+              <option value="">{{ province ? 'همهٔ شهرها' : 'انتخاب شهر' }}</option>
+              <option v-for="item in cities" :key="item.slug" :value="item.slug">
+                {{ item.name_fa }}
+              </option>
+            </select>
+            <button
+              v-if="citiesError"
+              type="button"
+              class="btn btn--secondary"
+              @click="retryCities()"
+            >
+              تلاش دوباره برای دریافت شهرها
+            </button>
+          </template>
+        </AppField>
+        <AppField id="min-price-filter" label="کمترین قیمت (تومان)">
+          <template #default="{ id, describedBy, ariaInvalid }">
+            <input
+              :id="id"
+              v-model="minPrice"
+              class="field__input browser__price-input"
+              type="number"
+              min="0"
+              step="1"
+              inputmode="numeric"
+              dir="ltr"
+              placeholder="حداقل قیمت"
+              :aria-describedby="describedBy"
+              :aria-invalid="ariaInvalid"
+              @change="applyNow"
+              @keydown.enter.prevent="applyNow"
+            >
+          </template>
+        </AppField>
+        <AppField id="max-price-filter" label="بیشترین قیمت (تومان)">
+          <template #default="{ id, describedBy, ariaInvalid }">
+            <input
+              :id="id"
+              v-model="maxPrice"
+              class="field__input browser__price-input"
+              type="number"
+              min="0"
+              step="1"
+              inputmode="numeric"
+              dir="ltr"
+              placeholder="حداکثر قیمت"
+              :aria-describedby="describedBy"
+              :aria-invalid="ariaInvalid"
+              @change="applyNow"
+              @keydown.enter.prevent="applyNow"
+            >
+          </template>
+        </AppField>
       </div>
       <AppSkeleton
         v-if="feedPending"
@@ -432,6 +449,16 @@ const city = ref(props.lockedCity || queryString(route.query.city))
 const minPrice = ref(queryString(route.query.min_price))
 const maxPrice = ref(queryString(route.query.max_price))
 const sort = ref(queryString(route.query.sort) || 'newest')
+
+// Count adjustable filters, not a category/city already locked by the URL.
+const filterCount = computed(() => [
+  !props.lockedCategory && category.value,
+  !props.lockedProvince && province.value,
+  !props.lockedCity && city.value,
+  String(minPrice.value).trim(),
+  String(maxPrice.value).trim(),
+].filter(Boolean).length)
+const desktopFiltersOpen = ref(filterCount.value > 0)
 
 const hasFilters = computed(
   () => Boolean(
@@ -736,382 +763,194 @@ defineExpose({ applyNow })
 </script>
 
 <style scoped>
-.browser {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-  min-inline-size: 0;
+.browser { display: grid; gap: var(--space-5); min-inline-size: 0; }
+.browser__masthead, .browser__path, .browser__location, .browser__tool, .browser__sort, .browser__section-heading,
+.browser__results-title, .browser__results-kicker, .browser__tools { display: flex; align-items: center; }
+.browser__masthead { justify-content: space-between; margin-block-end: calc(var(--space-3) * -1); }
+.browser__path { gap: var(--space-3); margin: 0; color: var(--color-text-muted); font-size: var(--font-size-12); }
+.browser__path > .app-icon:first-child { color: var(--color-primary); }
+.browser__path strong { color: var(--color-text); font-size: var(--font-size-14); }
+.browser__location, .browser__sort, .browser__tool {
+  position: relative;
+  justify-content: center;
+  gap: var(--space-2);
+  min-block-size: 44px;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  cursor: pointer;
 }
-
-.browser__hero {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-  min-inline-size: 0;
+/* The select covers the label's inner box, excluding its two 1px borders. */
+.browser__location, .browser__sort { min-block-size: 46px; }
+.browser__location .app-icon:first-child, .browser__sort .app-icon:first-child { color: var(--color-primary); }
+.browser__location select, .browser__sort select {
+  position: absolute; inset: 0; inline-size: 100%; block-size: 100%; opacity: 0; cursor: pointer; font-size: var(--font-size-16);
 }
-
+.browser__location:focus-within, .browser__sort:focus-within { outline: 3px solid var(--color-focus); outline-offset: 2px; }
+.browser__hero { display: grid; gap: var(--space-4); min-inline-size: 0; }
 .browser__hero--emerald {
+  position: relative;
+  isolation: isolate;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
+  align-content: center;
+  align-items: center;
+  column-gap: var(--space-2);
   padding: var(--space-5);
   color: var(--color-hero-text);
-  background:
-    radial-gradient(circle at 10% 0%, rgb(110 231 183 / 0.17), transparent 34%),
-    linear-gradient(135deg, var(--color-hero) 0%, var(--color-hero-deep) 82%);
-  border: 1px solid var(--color-hero-border);
-  border-radius: var(--radius-panel);
-  box-shadow: var(--shadow-lifted);
+  background: var(--color-market-forest) url('/illustrations/field-lines.svg') center / cover no-repeat;
+  border-radius: var(--radius-card);
 }
-
-/* The search sits on the emerald band as one white pill: the field, the submit
-   and the mobile filter trigger share it, instead of three separate boxes
-   stacked on a coloured background. */
+.browser__stall { position: relative; grid-area: 1 / 2; align-self: stretch; pointer-events: none; }
+.browser__stall img { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; object-fit: contain; }
 .browser__search {
-  position: relative;
-  z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0,1fr) auto;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2);
+  gap: var(--space-1);
+  min-inline-size: 0;
+  padding: var(--space-1);
+  padding-inline-start: var(--space-3);
   color: var(--color-text);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-panel);
-  box-shadow: var(--shadow-lifted);
+  border-radius: var(--radius-control);
 }
-
-/* Only the search field itself sits on the muted ground; the inline filter
-   fields below keep their own white surface and outlined edge. */
+.browser__hero--emerald .browser__search { grid-column: 1 / -1; }
+.browser__search:focus-within { outline: 3px solid var(--color-hero-accent); outline-offset: 2px; }
+.browser__search-icon { color: var(--color-text-muted); }
+.browser__search-field { min-inline-size: 0; }
 .browser__search-field :deep(.field__input) {
-  min-block-size: 48px;
-  background-color: var(--color-surface-muted);
-  border-color: transparent;
+  padding: var(--space-2); min-block-size: 44px; background: transparent; border: 0; box-shadow: none;
 }
-
-.browser__search-field :deep(.field__input:focus) {
-  background-color: var(--color-surface);
-  border-color: var(--color-control-border);
-}
-
 .browser__search-field :deep(.app-field__label) {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+  position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
-
-.browser__search-submit {
-  min-inline-size: 48px;
-  min-block-size: 48px;
-}
-
-.browser__search-submit-text,
-.browser__filter-open-text {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.browser__filter-open {
-  min-inline-size: 48px;
-  min-block-size: 48px;
-}
-
-.browser__desktop-filters {
-  display: none;
-  grid-column: 1 / -1;
-  gap: var(--space-3);
-}
-
-/* The row bleeds to the viewport edge on a phone so the last chip is not cut in
-   half by the main column's padding, and it keeps a visible scrollbar at every
-   width instead of hiding the overflow. */
+.browser__search-submit { min-block-size: 44px; padding-inline: var(--space-4); border-radius: var(--radius-small); box-shadow: none; }
+.browser__section-heading { gap: var(--space-2); margin-block-end: var(--space-3); }
+.browser__section-heading > .app-icon { color: var(--color-primary); }
+.browser h2 { margin: 0; font-size: var(--font-size-22); }
+.browser__rule { flex: 1; margin-inline: var(--space-2); border-block-start: 1px solid var(--color-border); }
+.browser__aside-label { color: var(--color-text-muted); font-size: var(--font-size-12); }
+.browser__aisles, .browser__results { min-inline-size: 0; }
 .browser__categories {
-  display: flex;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(5.5rem, 1fr);
   gap: var(--space-2);
   overflow-x: auto;
-  margin-inline: calc(var(--space-4) * -1);
-  padding: var(--space-1) var(--space-4) var(--space-3);
+  margin: -4px;
+  padding: 4px;
   scroll-snap-type: inline proximity;
   scrollbar-width: thin;
-  scrollbar-color: var(--color-border) transparent;
+  scrollbar-color: var(--color-control-border) transparent;
 }
-
 .browser__category-button {
-  display: inline-flex;
-  flex: none;
+  --tile-tint: var(--color-surface-muted);
+  --tile-ink: var(--color-text-muted);
+  position: relative;
+  display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: var(--space-2);
-  min-inline-size: 68px;
-  min-block-size: 45px;
-  padding: var(--space-1) var(--space-1) 0;
-  font: inherit;
+  gap: var(--space-1);
+  min-block-size: 76px;
+  padding: var(--space-2) var(--space-1);
+  background: var(--tile-tint);
+  color: var(--color-text);
+  border: 1px solid color-mix(in srgb, var(--tile-ink) 12%, transparent);
+  border-radius: var(--radius-control);
   font-size: var(--font-size-12);
   font-weight: 600;
-  line-height: 1.5;
-  color: var(--color-text);
   white-space: nowrap;
   text-decoration: none;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-card);
-  cursor: pointer;
   scroll-snap-align: start;
-  transition: color var(--duration-fast), transform var(--duration-normal) var(--ease-out);
+  transition: transform var(--duration-fast) var(--ease-out), border-color var(--duration-fast);
 }
-
-.browser__category-tile {
-  display: grid;
-  place-items: center;
-  inline-size: 52px;
-  block-size: 52px;
-  border: 1.5px solid transparent;
-  border-radius: var(--radius-control);
-  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
-}
-
-.browser__category-tile--a {
-  color: var(--color-ink-a);
-  background: var(--color-tint-a);
-}
-
-.browser__category-tile--b {
-  color: var(--color-ink-b);
-  background: var(--color-tint-b);
-}
-
-.browser__category-tile--c {
-  color: var(--color-ink-c);
-  background: var(--color-tint-c);
-}
-
-.browser__category-button:hover {
-  color: var(--color-primary);
-  transform: translateY(-1px);
-}
-
-/* The current chip is told apart three ways — weight, colour and a drawn
-   border — because a ring alone was too quiet beside the tinted tiles. */
+.browser__category-tile { display: grid; place-items: center; color: var(--tile-ink); }
+.browser__category-button[data-category='home-sweets'] { --tile-tint: var(--color-tint-c); --tile-ink: var(--color-ink-c); }
+.browser__category-button[data-category='handicrafts'] { --tile-tint: var(--color-primary-soft); --tile-ink: var(--color-primary); }
+.browser__category-button[data-category='home-food'] { --tile-tint: var(--color-tint-a); --tile-ink: var(--color-ink-a); }
+.browser__category-button[data-category='clothing-sewing'] { --tile-tint: var(--color-lavender-soft); --tile-ink: var(--color-lavender); }
+.browser__category-button[data-category='plants-flowers'] { --tile-tint: var(--color-leaf-soft); --tile-ink: var(--color-leaf); }
+.browser__category-button[data-category='beauty'] { --tile-tint: var(--color-rose-soft); --tile-ink: var(--color-rose); }
+.browser__category-button[data-category='education'] { --tile-tint: var(--color-sky-soft); --tile-ink: var(--color-sky); }
 .browser__category-button[aria-current='page'] {
-  font-weight: 800;
-  color: var(--color-primary);
+  color: var(--color-hero-text); background: var(--color-market-forest); border-color: var(--color-market-forest);
 }
-
-.browser__category-button[aria-current='page'] .browser__category-tile {
-  border-color: var(--color-primary);
-  box-shadow: var(--ring-focus);
+.browser__category-button[aria-current='page'] .browser__category-tile { color: var(--color-hero-accent); }
+@media (hover: hover) {
+  .browser__category-button:hover { transform: translateY(-2px); border-color: var(--tile-ink); }
+  .browser__tool:hover, .browser__location:hover, .browser__sort:hover { border-color: var(--color-control-border); }
 }
-
-.browser__category-button:focus-visible {
-  outline: 3px solid var(--color-focus);
-  outline-offset: 2px;
-}
-
+.browser__category-button:active { transform: scale(.98); }
 .browser__filter-dialog {
-  inline-size: min(32rem, calc(100% - 2rem));
-  max-block-size: calc(100dvh - 2rem);
-  padding: 0;
-  color: var(--color-text);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-dialog);
-  box-shadow: var(--shadow-lifted);
+  inline-size: min(32rem, calc(100% - 2rem)); max-block-size: calc(100dvh - 2rem); padding: 0;
+  color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-dialog); box-shadow: var(--shadow-lifted);
 }
+.browser__filter-dialog::backdrop { background: rgb(6 42 32 / .62); backdrop-filter: blur(4px); }
+.browser__dialog-header { padding: var(--space-5) var(--space-5) 0; }
+.browser__dialog-form { display: grid; gap: var(--space-4); padding: var(--space-5); }
+.browser__dialog-actions, .browser__error { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.browser__dialog-actions > * { flex: 1; }
+.browser__results-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin-block-end: var(--space-4); }
+.browser__results-kicker { margin: 0; gap: var(--space-2); font-size: var(--font-size-12); color: var(--color-text-muted); }
+.browser__results-kicker span { inline-size: 16px; block-size: 2px; background: var(--color-accent-fill); }
+.browser__results-title { gap: var(--space-2); }
+.browser__result-count { margin: 0; padding: 0 var(--space-2); font-size: var(--font-size-12); color: var(--color-text-muted); background: var(--color-surface-muted); border-radius: var(--radius-pill); white-space: nowrap; }
+.browser__tools { gap: var(--space-2); }
+.browser__desktop-open, .browser__desktop-filters, .browser__sort { display: none; }
+.browser__filter-count { padding-inline: var(--space-2); border-radius: var(--radius-pill); background: var(--color-primary-soft); color: var(--color-primary); }
+.browser__cards, .browser__results :deep(.app-skeleton--card) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.browser__cards { margin: 0; padding: 0; list-style: none; }
+.browser__cards > li { min-inline-size: 0; }
+.browser__advertising { grid-column: 1 / -1; }
+.browser__pagination { display: grid; justify-items: center; gap: var(--space-3); margin-block-start: var(--space-5); }
+.browser__pagination :deep(.btn) { min-inline-size: min(100%, 15rem); }
+.browser__error { align-items: center; justify-content: space-between; }
+.browser__error p { margin: 0; }
 
-.browser__filter-dialog::backdrop {
-  background: rgb(6 42 32 / 0.62);
-  backdrop-filter: blur(4px);
+/* Hide the track on compact screens without disabling touch, wheel or keyboard scrolling. */
+@media (max-width: 1023.98px) {
+  .browser__categories { scrollbar-width: none; }
+  .browser__categories::-webkit-scrollbar { display: none; }
 }
-
 @media (max-width: 699.98px) {
-  .browser__filter-dialog {
-    inset-block-end: 0;
-    inset-inline: 0;
-    inline-size: 100%;
-    margin: auto auto 0;
-  }
+  .browser__masthead { display: none; }
+  .browser__hero--emerald { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); padding: var(--space-4); }
+  .browser__filter-dialog { inset-block-end: 0; inset-inline: 0; inline-size: 100%; margin: auto auto 0; }
+  .browser__categories { margin-inline-end: calc(-1 * var(--space-4)); padding-inline-end: var(--space-4); }
+  .browser__section-heading h2 { font-size: var(--font-size-18); }
 }
-
-.browser__dialog-header {
-  padding: var(--space-5) var(--space-5) 0;
-}
-
-.browser__dialog-header h2 {
-  margin: 0;
-}
-
-.browser__dialog-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-5);
-}
-
-.browser__dialog-actions,
-.browser__error {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.browser__dialog-actions > * {
-  flex: 1;
-}
-
-.browser__results {
-  min-inline-size: 0;
-}
-
-/* The feed's skeleton mirrors the real card grid (2 / 3 / 4 columns), so the
-   page does not reflow when results replace the placeholders. */
-.browser__results :deep(.app-skeleton--card) {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
-}
-
 @media (min-width: 700px) {
-  .browser__results :deep(.app-skeleton--card) {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--space-4);
-  }
+  .browser { gap: var(--space-6); }
+  .browser__hero--emerald { grid-template-columns: minmax(0, 1.13fr) minmax(0, 1fr); padding: var(--space-5) var(--space-8); row-gap: var(--space-3); column-gap: var(--space-6); }
+  .browser__hero--emerald .browser__search { grid-column: 1; max-inline-size: 30rem; }
+  .browser__stall { grid-row: 1 / 3; }
+  .browser__stall img { inset-block-start: -4%; block-size: 108%; }
+  .browser__cards, .browser__results :deep(.app-skeleton--card) { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
 }
-
-@media (min-width: 1280px) {
-  .browser__results :deep(.app-skeleton--card) {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
+@media (max-width: 1023.98px) and (max-height: 440px) {
+  .browser__masthead { display: none; }
 }
-
-/* The feed's own heading sits on a hairline, so the screen after the hero reads
-   as a new region rather than a continuation of the search bar. */
-.browser__results-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  justify-content: space-between;
-  gap: var(--space-2) var(--space-3);
-  margin-block-end: var(--space-5);
-  padding-block-end: var(--space-3);
-  border-block-end: 1px solid var(--color-border);
-}
-
-.browser__results-kicker {
-  margin: 0 0 var(--space-1);
-  color: var(--color-accent);
-  font-size: var(--font-size-12);
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
-
-.browser__results-header h2 {
-  margin: 0;
-  line-height: 1.5;
-}
-
-.browser__result-count {
-  padding: var(--space-1) var(--space-3);
-  font-size: var(--font-size-12);
-  font-weight: 600;
-  color: var(--color-ink-a);
-  white-space: nowrap;
-  background: var(--color-tint-a);
-  border-radius: var(--radius-pill);
-}
-
-.browser__cards {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.browser__cards > li {
-  min-inline-size: 0;
-}
-
-.browser__cards > li.browser__advertising {
-  grid-column: 1 / -1;
-}
-
-.browser__pagination {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  margin-block-start: var(--space-5);
-}
-
-.browser__pagination :deep(.btn) {
-  align-self: center;
-  min-inline-size: min(100%, 15rem);
-}
-
-.browser__error {
-  align-items: center;
-  justify-content: space-between;
-}
-
-.browser__error p {
-  margin: 0;
-}
-
-@media (min-width: 700px) {
-  .browser__cards {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--space-4);
-  }
-
-  .browser__categories {
-    margin-inline: 0;
-    padding-inline: var(--space-1);
-  }
-}
-
-/* The design system's breakpoints are 700, 1024 and 1280 (§4). The filter
-   controls switch from the dialog to the inline row at 1024 — the same width at
-   which the shell grows its sidebar — so no width exists where both shown. */
 @media (min-width: 1024px) {
-  .browser__filter-open {
-    display: none;
-  }
-
-  .browser__search {
-    padding: var(--space-3);
-  }
-
+  .browser__filter-open { display: none; }
+  .browser__desktop-open, .browser__sort { display: flex; }
+  .browser__desktop-open[aria-expanded='true'] { border-color: var(--color-primary); color: var(--color-primary); }
   .browser__desktop-filters {
-    display: grid;
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--space-3);
-    margin-block-start: var(--space-1);
-    padding: var(--space-4) var(--space-1) var(--space-1);
-    border-block-start: 1px solid var(--color-border);
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr)); gap: var(--space-3);
+    align-items: start; margin-block-end: var(--space-4); padding: var(--space-4); background: var(--color-surface);
+    border: 1px solid var(--color-border); border-radius: var(--radius-control);
   }
-
-  .browser__search-submit-text {
-    position: static;
-    inline-size: auto;
-    block-size: auto;
-    overflow: visible;
-    clip-path: none;
-    white-space: normal;
-  }
+  .browser__desktop-filters :deep(.field) { min-inline-size: 0; }
 }
-
 @media (min-width: 1280px) {
-  .browser__desktop-filters {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
-
-  .browser__cards {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
+  .browser__hero--emerald { padding: var(--space-5) var(--space-10); }
+  .browser__category-button { font-size: var(--font-size-14); }
+  .browser__cards, .browser__results :deep(.app-skeleton--card) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 </style>

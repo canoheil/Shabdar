@@ -9,7 +9,7 @@ test.describe('@clean-urls category and city pages', () => {
     const response = await page.request.get('/category/home-food')
     expect(response.status()).toBe(200)
     const html = await response.text()
-    expect(html).toMatch(/<h1[^>]*>\s*آگهی‌های غذای خانگی/)
+    expect(html).toMatch(/<h1[^>]*>\s*آگهی‌های\s*<em[^>]*>غذای خانگی/)
     expect(html).toContain('rel="canonical"')
     expect(html).toContain('/category/home-food')
     expect(html).not.toContain('noindex')

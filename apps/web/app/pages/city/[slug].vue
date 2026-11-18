@@ -1,6 +1,5 @@
 <template>
   <section class="clean-list">
-
     <ListingBrowser
       :locked-city="city.slug"
       :locked-province="city.province_slug"
@@ -18,6 +17,7 @@
           </nav>
 
           <header class="clean-list__header">
+            <span class="clean-list__mark" aria-hidden="true"><AppIcon name="map-pin" :size="30" /></span>
             <p class="clean-list__kicker">آگهی‌های شهر</p>
             <h1>آگهی‌های {{ city.name_fa }}</h1>
             <p class="clean-list__copy">
@@ -60,75 +60,4 @@ useHead(() => ({
 }))
 </script>
 
-<style scoped>
-.clean-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-  min-inline-size: 0;
-}
-
-.clean-list__intro {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.clean-list__breadcrumb {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--font-size-14);
-  color: var(--color-text-muted);
-}
-
-.clean-list__breadcrumb a {
-  display: inline-flex;
-  align-items: center;
-  /* «خانه» is a short label; the site-wide gate needs 44px in both axes. */
-  min-inline-size: 44px;
-  min-block-size: 44px;
-}
-
-.clean-list__header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.clean-list h1,
-.clean-list p {
-  margin: 0;
-}
-
-/* The breadcrumb, the kicker and the heading are one block above the search;
-   the kicker is a quiet label, not a second coloured heading competing with the
-   h1 right below it. */
-.clean-list__kicker {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-12);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.clean-list__header h1 {
-  font-size: var(--font-size-28);
-  line-height: 1.4;
-  text-wrap: balance;
-}
-
-.clean-list__copy {
-  max-inline-size: 44rem;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-14);
-  line-height: 1.95;
-}
-
-@media (min-width: 700px) {
-  .clean-list__header h1 {
-    font-size: var(--font-size-36);
-  }
-}
-</style>
+<style src="~/assets/css/discovery.css"></style>
