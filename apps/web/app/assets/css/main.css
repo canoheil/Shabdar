@@ -178,23 +178,20 @@ h3 {
   text-decoration: none;
 }
 
-.shell__brand .brand-mascot {
-  inline-size: 38px;
-  block-size: 38px;
+.shell__brand-mark {
+  display: grid;
+  place-items: center;
+  inline-size: 44px;
+  block-size: 44px;
+  background: var(--color-primary-soft);
+  border-radius: var(--radius-control);
 }
 
-.shell__brand-copy {
-  display: flex;
-  flex-direction: column;
-}
-
-.shell__brand-tagline {
-  display: none;
-  font-size: var(--font-size-12);
-  font-weight: 400;
-  line-height: 1.4;
-  color: var(--color-text-muted);
-}
+.shell__brand .brand-mascot { inline-size: 40px; block-size: 40px; }
+.shell__brand-copy { display: flex; flex-direction: column; color: var(--color-primary); }
+.shell__brand-copy > span { font-size: var(--font-size-28); }
+.shell__brand-tagline { font-size: var(--font-size-12); font-weight: 400; line-height: 1.6; color: var(--color-text-muted); }
+.shell__group-label, .shell__desktop-label, .shell__local-note { display: none; }
 
 .shell__nav-list {
   margin: 0;
@@ -274,6 +271,9 @@ h3 {
   color: var(--color-text-muted);
   text-align: center;
 }
+
+.shell__footer-brand { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--space-2); color: var(--color-primary); font-size: var(--font-size-16); font-weight: 800; }
+.shell__footer-brand span { color: var(--color-text-muted); font-size: var(--font-size-12); font-weight: 400; }
 
 .shell__footer p {
   margin: 0;
@@ -371,7 +371,7 @@ h3 {
   .shell__nav-action--post[aria-current='page'] .shell__nav-icon {
     color: var(--color-on-accent-fill);
     background: var(--color-accent-fill);
-    box-shadow: var(--glow-accent);
+    box-shadow: none;
   }
 
   .shell__nav-action:active .shell__nav-icon {
@@ -396,44 +396,44 @@ h3 {
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-    gap: var(--space-2);
+    gap: 0;
     inline-size: 17rem;
-    padding: var(--space-6) var(--space-4) var(--space-5);
+    padding: var(--space-8) var(--space-5) var(--space-5);
     overflow-y: auto;
-    background: var(--color-surface);
+    background: color-mix(in srgb, var(--color-surface) 87%, var(--color-bg));
     border-inline-end: 1px solid var(--color-border);
   }
 
-  .shell__brand {
-    align-self: flex-start;
-    margin-inline: var(--space-2);
-    margin-block-end: var(--space-3);
-  }
-
-  .shell__brand .brand-mascot {
-    inline-size: 44px;
-    block-size: 44px;
-  }
-
-  .shell__brand-tagline {
-    display: block;
-  }
-
-  /* The DOM order is brand, theme, nav: the sidebar shows the theme control last. */
-  .shell__nav {
-    order: 2;
-  }
-
-  .shell__theme {
+  .shell__header > * { flex-shrink: 0; }
+  .shell__brand { gap: var(--space-3); padding: 0 var(--space-2) var(--space-6); border-block-end: 1px solid var(--color-border); }
+  .shell__brand-mark { inline-size: 54px; block-size: 54px; border-radius: var(--radius-card); }
+  .shell__brand .brand-mascot { inline-size: 46px; block-size: 46px; }
+  .shell__brand-copy > span { font-size: var(--font-size-36); }
+  .shell__brand-tagline { margin-block-start: var(--space-1); }
+  .shell__nav { order: 2; padding-block: var(--space-5); }
+  .shell__nav-list { display: grid; gap: var(--space-1); }
+  .shell__desktop-label { display: inline; }
+  .shell__group-label { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3) var(--space-2); color: var(--color-text-muted); font-size: var(--font-size-12); }
+  .shell__group-label--section { margin-block-start: var(--space-4); }
+  .shell__group-label--section::after { content: ''; flex: 1; border-block-start: 1px solid var(--color-border); }
+  .shell__local-note {
     order: 3;
-    margin-block-start: auto;
-    padding-block-start: var(--space-4);
-  }
-
-  .shell__nav-list {
+    position: relative;
+    isolation: isolate;
     display: grid;
     gap: var(--space-1);
+    margin-block-start: auto;
+    padding: var(--space-5) var(--space-4);
+    overflow: hidden;
+    color: var(--color-text);
+    background: var(--color-leaf-soft);
+    border-radius: var(--radius-control);
   }
+  .shell__local-note::before { content: ''; position: absolute; z-index: -1; inset: 0; opacity: .58; background: url('/illustrations/olive-sprig.svg') left -20px bottom -16px / 100px auto no-repeat; }
+  .shell__note-caption { justify-self: start; font-size: var(--font-size-12); letter-spacing: .13em; font-weight: 600; color: var(--color-leaf); }
+  .shell__local-note strong { font-size: var(--font-size-18); font-weight: 800; }
+  .shell__local-note p { margin: 0; color: var(--color-text-muted); font-size: var(--font-size-12); }
+  .shell__theme { order: 4; margin-block-start: var(--space-4); border-block-start: 1px solid var(--color-border); padding-block-start: var(--space-3); }
 
   .shell__nav-item--admin {
     display: block;
@@ -463,9 +463,10 @@ h3 {
 
   .shell__nav-action {
     gap: var(--space-3);
-    min-block-size: 48px;
+    min-block-size: 46px;
     padding-inline: 14px;
     text-align: start;
+    font-size: var(--font-size-14);
   }
 
   .shell__nav-action[aria-current='page'] {
@@ -481,16 +482,21 @@ h3 {
     font-weight: 800;
     color: var(--color-on-accent-fill);
     background: var(--color-accent-fill);
-    box-shadow: var(--glow-accent);
+    box-shadow: none;
+  }
+
+  .shell__nav-action[aria-current='page']::after {
+    content: ''; inline-size: 6px; block-size: 6px; margin-inline-start: auto;
+    background: currentColor; border-radius: 50%;
   }
 
   .shell__nav-action:active {
     transform: scale(0.98);
   }
 
-  .shell__main {
-    padding-block-start: var(--space-8);
-  }
+  .shell__main { padding-inline: clamp(20px, 2.5vw, 40px); padding-block-start: var(--space-4); }
+  .shell__footer { display: flex; justify-content: space-between; margin-inline: clamp(20px, 2.5vw, 40px); padding-inline: 0; border-block-start: 1px solid var(--color-border); }
+
 }
 
 @media (hover: hover) {
@@ -576,7 +582,8 @@ h3 {
     padding-inline: 14px;
     font-size: var(--font-size-14);
     font-weight: 600;
-    background: var(--color-surface-muted);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
   }
 
@@ -858,8 +865,12 @@ select.field__input {
 
 /* Shabdarak greets once. Only the transform moves, so it is never hidden. */
 .app-empty-state__mascot {
-  inline-size: 108px;
-  block-size: 108px;
+  inline-size: 84px;
+  block-size: 84px;
+  margin-block-end: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-primary-soft);
+  border-radius: 50%;
   transform-origin: 50% 90%;
   animation: mascot-hello calc(var(--duration-normal) * 4) var(--ease-out);
 }
@@ -992,6 +1003,7 @@ select.field__input {
   block-size: 100%;
   overflow: hidden;
   background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
   transition: transform var(--duration-normal) var(--ease-out), box-shadow var(--duration-normal);
@@ -1073,11 +1085,9 @@ select.field__input {
   clip-path: polygon(0 100%, 38% 25%, 58% 60%, 74% 40%, 100% 100%);
 }
 
-/* On a photo: the hero colours are dark in both themes, so the chip reads on any picture. */
-.listing-card__rating {
+/* Solid paper labels read independently of the seller's photo in either theme. */
+.listing-card__rating, .listing-card__category {
   position: absolute;
-  inset-block-start: var(--space-3);
-  inset-inline-end: var(--space-3);
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
@@ -1085,87 +1095,66 @@ select.field__input {
   font-size: var(--font-size-12);
   font-weight: 600;
   line-height: 1.5;
-  color: var(--color-hero-text);
-  background: color-mix(in srgb, var(--color-hero-deep) 86%, transparent);
   border-radius: var(--radius-pill);
 }
-
-.listing-card__rating .app-icon {
-  color: var(--color-hero-accent);
+.listing-card__rating {
+  inset-block-start: var(--space-2);
+  inset-inline-end: var(--space-2);
+  background: var(--color-surface);
+  color: var(--color-text);
 }
-
+.listing-card__rating .app-icon { color: var(--color-ink-a); }
 .listing-card__category {
-  margin: var(--space-3) var(--space-4) 0;
-  font-size: var(--font-size-12);
-  font-weight: 600;
-  line-height: 1.5;
-  color: var(--color-accent);
+  inset-block-end: var(--space-2);
+  inset-inline-start: var(--space-2);
+  background: var(--color-surface);
+  color: var(--color-text);
 }
-
+.listing-card__category::before { content: ''; inline-size: 5px; block-size: 5px; border-radius: 50%; background: var(--color-accent-fill); }
 .listing-card__title {
   display: -webkit-box;
-  margin: var(--space-1) var(--space-4) 0;
+  margin: var(--space-3) var(--space-3) 0;
   overflow: hidden;
   font-size: var(--font-size-16);
-  font-weight: 600;
-  line-height: 1.75;
-  min-block-size: calc(var(--font-size-16) * 1.75 * 2);
+  font-weight: 800;
+  line-height: 1.7;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   transition: color var(--duration-fast);
 }
-
-/* The price is the second thing a shopper reads after the photo, so it owns a
-   size of its own above the title's. */
 .listing-card__price {
-  margin: var(--space-2) var(--space-4) 0;
+  margin: var(--space-1) var(--space-3) 0;
   font-size: var(--font-size-18);
   font-weight: 800;
   line-height: 1.6;
   color: var(--color-primary);
   overflow-wrap: anywhere;
 }
-
-/* Location and age sit on a hairline, so the price block above them reads as one
-   unit and the row is not mistaken for part of the title. The block padding
-   keeps the last row off the card's rounded bottom edge. */
+.listing-card__price span { font-size: var(--font-size-12); font-weight: 400; }
 .listing-card__meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1) var(--space-2);
-  margin: var(--space-3) 0 0;
-  padding: var(--space-2) var(--space-4) var(--space-3);
-  font-size: var(--font-size-14);
-  line-height: 1.7;
+  gap: 0 var(--space-1);
+  margin: var(--space-2) var(--space-3) 0;
+  min-block-size: 44px;
+  padding-block: var(--space-1);
+  font-size: var(--font-size-12);
   color: var(--color-text-muted);
   border-block-start: 1px solid var(--color-border);
 }
-
-@media (min-width: 1280px) {
-  .listing-card__price {
-    font-size: var(--font-size-22);
-  }
-}
-
+.listing-card__meta time { display: inline-flex; align-items: center; gap: var(--space-1); margin-inline-start: auto; }
 .listing-card__city-link {
   display: inline-flex;
   align-items: center;
-  /* The shared 44×44 touch-target gate applies to every visible control, and a
-     short city name («رشت») is only ~28px wide on its own. Padding supplies the
-     missing pointer target without moving the text off the card's grid; the
-     negative block margin absorbs the extra height so the row keeps its rhythm. */
   min-inline-size: 44px;
   min-block-size: 44px;
-  margin-block: calc(var(--space-2) * -1);
+  margin-block: calc(-1 * var(--space-1));
   color: inherit;
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
-  text-underline-offset: 0.25em;
-  text-decoration-thickness: 1px;
+  text-decoration: none;
 }
-
+.listing-card__city-link:hover { text-decoration: underline; }
 
 .listing-card__actions {
   display: flex;

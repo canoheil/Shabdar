@@ -8,28 +8,9 @@
     >
       <template #intro>
         <header class="home__intro">
-          <div class="home__intro-copy">
-            <p class="home__eyebrow">
-              <AppIcon name="map-pin-fill" :size="14" />
-              بازارچهٔ آگهی‌های ایران
-            </p>
-            <h1>چیزهای خوب را همین نزدیکی <em>جستجو</em> کنید</h1>
-            <p class="home__intro-lead">
-              از طعم‌های خانگی و صنایع دستی تا مهارت‌های محلی؛ آگهی‌های تازه را از
-              آدم‌های اطراف خودتان پیدا کنید.
-            </p>
-            <ul class="home__intro-facts">
-              <li>
-                <AppIcon name="squares-four-duotone" :size="16" />
-                <span>{{ categoryFact }}</span>
-              </li>
-              <li>
-                <AppIcon name="map-pin" :size="16" />
-                <span>سراسر ایران، از شهر خودتان</span>
-              </li>
-            </ul>
-          </div>
-          <BrandMascot pose="full" class="home__mascot" />
+          <p class="home__eyebrow"><span aria-hidden="true" /> بازار کسب‌وکارهای محلی</p>
+          <h1>از دلِ محله، <em>به خانه‌ی شما.</em></h1>
+          <p class="home__intro-lead">دست‌سازه‌ها و طعم‌های خانگی را بی‌واسطه پیدا کنید.</p>
         </header>
       </template>
     </ListingBrowser>
@@ -92,30 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ApiCategory } from '~/types'
-
-// The hero advertises the real category count; the browser owns the feed itself.
-// The category list and the viewer read are independent, so they are issued
-// together: serializing them added a second server round trip to Home's TTFB,
-// which is charged directly against the LCP element (the hero heading).
-const categoriesRequest = useFetch<{ data: ApiCategory[] }>('/api/v1/categories')
-const authRequest = useAuth()
-
-const [
-  { data: categories },
-  {
-    user: me,
-    status: authStatus,
-    pending: mePending,
-    refresh: refreshAuth,
-  },
-] = await Promise.all([categoriesRequest, authRequest])
-const categoryCount = computed(() => categories.value?.data.length ?? 0)
-const categoryFact = computed(() =>
-  categoryCount.value > 0
-    ? `${formatNumber(categoryCount.value)} دستهٔ خرید و فروش`
-    : 'دسته‌بندی‌شده برای خرید و فروش',
-)
+const { user: me, status: authStatus, pending: mePending, refresh: refreshAuth } = await useAuth()
 
 const loggingOut = ref(false)
 async function logout(): Promise<void> {
@@ -137,97 +95,48 @@ async function logout(): Promise<void> {
   min-inline-size: 0;
 }
 
-/* The hero is a two-column composition: the sentence and the two facts on one
-   side, Shabdarak on the other. On a phone it collapses to one column and the
-   mascot leaves the reading order instead of pushing the search bar down. */
 .home__intro {
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
+  z-index: 1;
   min-inline-size: 0;
   color: var(--color-hero-text);
 }
 
-.home__intro-copy {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-inline-size: 0;
-}
-
-.home__intro h1,
-.home__intro p,
-.home__account p,
-.home__trust p {
-  margin: 0;
-}
+.home__intro h1, .home__intro p, .home__account p, .home__trust p { margin: 0; }
 
 .home__eyebrow {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  color: var(--color-hero-accent);
   font-size: var(--font-size-12);
+  line-height: 1.5;
   font-weight: 600;
-  line-height: 1.6;
+  color: var(--color-hero-muted);
+}
+
+.home__eyebrow span {
+  inline-size: 7px;
+  block-size: 7px;
+  border-radius: 50%;
+  background: var(--color-hero-accent);
 }
 
 .home__intro h1 {
-  max-inline-size: 18ch;
-  font-size: var(--font-size-28);
-  font-weight: 800;
-  line-height: 1.35;
-  text-wrap: balance;
+  margin-block: var(--space-2);
+  font-size: var(--font-size-22);
+  line-height: 1.3;
 }
 
 .home__intro h1 em {
+  display: block;
   color: var(--color-hero-accent);
   font-style: normal;
 }
 
 .home__intro-lead {
-  max-inline-size: 40rem;
   color: var(--color-hero-muted);
   font-size: var(--font-size-14);
-  line-height: 2;
-}
-
-.home__intro-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-4);
-  margin: var(--space-1) 0 0;
-  padding: 0;
-  color: var(--color-hero-muted);
-  font-size: var(--font-size-12);
-  list-style: none;
-}
-
-.home__intro-facts li {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.home__intro-facts .app-icon {
-  color: var(--color-hero-accent);
-}
-
-.home__mascot {
-  display: none;
-  flex: none;
-  inline-size: 84px;
-  block-size: 84px;
-  color: var(--color-hero-accent);
-  transform-origin: 50% 90%;
-  animation: mascot-greet calc(var(--duration-normal) * 4) var(--ease-out);
-}
-
-@keyframes mascot-greet {
-  0% { transform: translateY(10px) rotate(-10deg); }
-  55% { transform: translateY(-3px) rotate(6deg); }
+  line-height: 1.65;
 }
 
 /* Three promises, not three boxes: a tinted icon tile, a bold line and one
@@ -286,10 +195,10 @@ async function logout(): Promise<void> {
   gap: var(--space-4);
   padding: var(--space-5);
   color: var(--color-hero-text);
-  background: linear-gradient(135deg, var(--color-hero) 0%, var(--color-hero-deep) 82%);
+  background: var(--color-market-forest) url('/illustrations/field-lines.svg') center / cover;
   border: 1px solid var(--color-hero-border);
   border-radius: var(--radius-panel);
-  box-shadow: var(--shadow-lifted);
+  box-shadow: none;
 }
 
 .home__account-copy {
@@ -342,28 +251,12 @@ async function logout(): Promise<void> {
 }
 
 @media (max-width: 699.98px) {
-  .home__intro-lead {
-    display: none;
-  }
+  .home__intro h1 { line-height: 1.55; }
+  .home__intro-lead { display: none; }
 }
 
 @media (min-width: 700px) {
-  .home__intro {
-    align-items: flex-start;
-    gap: var(--space-6);
-  }
-
-  .home__intro h1 {
-    font-size: var(--font-size-36);
-  }
-
-  .home__intro-lead {
-    display: block;
-  }
-
-  .home__mascot {
-    display: block;
-  }
+  .home__intro h1 { font-size: var(--font-size-36); }
 
   .home__trust {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -383,14 +276,6 @@ async function logout(): Promise<void> {
 }
 
 @media (min-width: 1280px) {
-  .home__intro h1 {
-    font-size: var(--font-size-display);
-    line-height: 1.3;
-  }
-
-  .home__mascot {
-    inline-size: 104px;
-    block-size: 104px;
-  }
+  .home__intro h1 { font-size: var(--font-size-display); }
 }
 </style>

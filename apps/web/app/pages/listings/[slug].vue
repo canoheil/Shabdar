@@ -24,7 +24,13 @@
         />
         <section class="detail__summary" aria-label="خلاصه و اقدامات آگهی">
           <div>
-            <p class="detail__category">{{ listing.category }}</p>
+            <div class="detail__labels">
+              <p class="detail__category">{{ listing.category }}</p>
+              <p class="detail__location">
+                <AppIcon name="map-pin" :size="16" />
+                {{ listing.city === listing.province ? listing.city : `${listing.city}، ${listing.province}` }}
+              </p>
+            </div>
             <h1>{{ listing.title }}</h1>
             <p class="detail__facts">
               <AppIcon name="star-fill" :size="14" />
@@ -40,10 +46,6 @@
             <span class="detail__price-label">قیمت</span>
             <p class="detail__price">{{ formatPrice(listing.price_toman, listing.price_type) }}</p>
           </div>
-          <p class="detail__location">
-            <AppIcon name="map-pin" :size="14" />
-            <span>{{ listing.city }}، {{ listing.province }}</span>
-          </p>
           <div class="detail__seller">
             <span class="detail__seller-avatar avatar" aria-hidden="true">{{ (listing.seller.display_name ?? 'ش').slice(0, 1) }}</span>
             <div>
@@ -57,13 +59,12 @@
             v-if="hydrated && !mePending && authStatus !== 'unavailable' && me?.public_id !== listing.seller.public_id"
             class="detail__contact"
           >
-            <p class="detail__contact-title">گفت‌وگو با فروشنده</p>
             <NuxtLink
               v-if="authStatus !== 'authenticated' || contactAuthExpired"
               :to="contactLoginHref"
               class="btn"
             >
-              ورود برای گفت‌وگو
+              <AppIcon name="chat-circle" :size="20" /> ورود برای گفت‌وگو
             </NuxtLink>
             <template v-else-if="contactQuery">
               <AppButton :loading="contactPending" :disabled="contactPending" @click="contactSeller">
@@ -472,7 +473,7 @@ useHead(() => {
 .detail__article {
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--space-5);
   min-inline-size: 0;
 }
 
@@ -510,10 +511,14 @@ useHead(() => {
   margin: 0;
 }
 
+.detail__labels {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  gap: var(--space-2); margin-block-end: var(--space-3);
+}
+
 .detail__category {
   display: inline-flex;
   align-items: center;
-  margin: 0 0 var(--space-2);
   padding: var(--space-1) var(--space-3);
   color: var(--color-ink-a);
   font-size: var(--font-size-12);
@@ -527,7 +532,7 @@ useHead(() => {
   max-inline-size: 30ch;
   font-size: var(--font-size-28);
   font-weight: 800;
-  line-height: 1.45;
+  line-height: 1.55;
   text-wrap: balance;
   overflow-wrap: anywhere;
 }
@@ -586,7 +591,7 @@ useHead(() => {
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   background: var(--color-primary-soft);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-control);
 }
 
 .detail__price-label,
@@ -614,8 +619,7 @@ useHead(() => {
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3);
-  background: var(--color-surface-muted);
-  border-radius: var(--radius-card);
+  border-block: 1px solid var(--color-border);
 }
 
 .detail__seller .avatar {
@@ -659,9 +663,14 @@ useHead(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-inline-size: 48px;
-  min-block-size: 48px;
+  min-inline-size: 46px;
+  min-block-size: 46px;
   padding: 0;
+  --btn-fg: var(--color-primary);
+  --btn-bg: var(--color-surface);
+  --btn-bg-hover: var(--color-primary-soft);
+  border-color: var(--color-border);
+  box-shadow: none;
 }
 
 .detail__favorite-button:active .app-icon,
@@ -671,12 +680,6 @@ useHead(() => {
 
 @keyframes icon-pop {
   50% { transform: scale(1.25); }
-}
-
-.detail__contact-title {
-  margin: 0;
-  font-size: var(--font-size-14);
-  font-weight: 800;
 }
 
 .detail__contact-state {

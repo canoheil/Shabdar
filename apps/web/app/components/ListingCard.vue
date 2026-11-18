@@ -46,6 +46,7 @@
           <span class="listing-card__placeholder-mark" />
           <span>{{ imageFailed ? 'تصویر در دسترس نیست' : 'بدون تصویر' }}</span>
         </span>
+        <span class="listing-card__category" aria-hidden="true">{{ listing.category }}</span>
         <span
           v-if="listing.rating_count > 0"
           class="listing-card__rating"
@@ -55,10 +56,12 @@
           {{ formatNumber(Math.round(listing.rating_average * 10) / 10) }}
         </span>
       </span>
-      <span class="listing-card__category" aria-hidden="true">{{ listing.category }}</span>
       <h3 class="listing-card__title">{{ listing.title }}</h3>
     </NuxtLink>
-    <p class="listing-card__price">{{ formatPrice(listing.price_toman, listing.price_type) }}</p>
+    <p class="listing-card__price">
+      <template v-if="typeof listing.price_toman === 'number' && listing.price_type !== 'free'">{{ formatNumber(listing.price_toman) }} <span>تومان</span></template>
+      <template v-else>{{ formatPrice(listing.price_toman, listing.price_type) }}</template>
+    </p>
     <p class="listing-card__meta">
       <AppIcon name="map-pin" :size="14" />
       <NuxtLink
@@ -69,8 +72,7 @@
         {{ listing.city }}
       </NuxtLink>
       <span v-else>{{ listing.city }}</span>
-      <span aria-hidden="true">·</span>
-      <time :datetime="listing.published_at">{{ dayLabel }}</time>
+      <time :datetime="listing.published_at"><AppIcon name="clock-duotone" :size="13" /> {{ dayLabel }}</time>
       <span class="sr-only">{{ listing.category }}</span>
     </p>
     <div v-if="$slots.actions" class="listing-card__actions">

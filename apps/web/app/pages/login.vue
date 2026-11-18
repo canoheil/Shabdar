@@ -56,6 +56,7 @@
           </template>
         </AppField>
         <AppButton type="submit" :loading="loading">ارسال کد</AppButton>
+        <p class="login__privacy"><AppIcon name="shield-check" :size="18" /> شماره‌ی ورود شما در آگهی نمایش داده نمی‌شود.</p>
       </form>
 
       <form v-else class="login__form" @submit.prevent="verifyCode">
@@ -83,15 +84,17 @@
             >
           </template>
         </AppField>
-        <AppButton type="submit" :loading="loading">تأیید</AppButton>
-        <AppButton
-          variant="secondary"
-          :loading="loading"
-          :disabled="resendIn > 0"
-          @click="requestCode"
-        >
-          {{ resendIn > 0 ? `ارسال مجدد کد (${resendIn} ثانیه)` : 'ارسال مجدد کد' }}
-        </AppButton>
+        <div class="login__code-actions">
+          <AppButton type="submit" :loading="loading">تأیید</AppButton>
+          <AppButton
+            variant="secondary"
+            :loading="loading"
+            :disabled="resendIn > 0"
+            @click="requestCode"
+          >
+            {{ resendIn > 0 ? `ارسال مجدد کد (${resendIn} ثانیه)` : 'ارسال مجدد کد' }}
+          </AppButton>
+        </div>
       </form>
     </div>
   </section>
@@ -251,14 +254,21 @@ async function verifyCode() {
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  padding-block-end: var(--space-4);
-  border-block-end: 1px solid var(--color-border);
+  color: var(--color-hero-text);
+  background: var(--color-market-forest) url('/illustrations/field-lines.svg') center / cover;
+  padding: var(--space-5);
+  margin: calc(-1 * var(--space-6)) calc(-1 * var(--space-6)) 0;
+  border-start-start-radius: var(--radius-panel);
+  border-start-end-radius: var(--radius-panel);
 }
 
 .login__mascot {
-  flex: 0 0 80px;
-  inline-size: 80px;
-  block-size: 80px;
+  flex: 0 0 58px;
+  inline-size: 58px;
+  block-size: 58px;
+  padding: var(--space-2);
+  background: var(--color-tint-b);
+  border-radius: var(--radius-card);
 }
 
 .login__header h1,
@@ -273,7 +283,7 @@ async function verifyCode() {
 }
 
 .login__header p {
-  color: var(--color-text-muted);
+  color: var(--color-hero-muted);
   font-size: var(--font-size-14);
 }
 
@@ -298,12 +308,20 @@ async function verifyCode() {
   box-shadow: var(--shadow-card);
 }
 
+/* Give the phone and PIN steps the same working area, not a fixed panel height.
+   Longer translations and errors can still grow the card. */
 .login__form {
+  min-block-size: 16rem;
+  justify-content: center;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
 }
 
+.login__privacy, .login__code-actions { display: flex; align-items: center; gap: var(--space-2); }
+.login__privacy { min-block-size: 44px; margin: 0; color: var(--color-text-muted); font-size: var(--font-size-12); }
+.login__privacy .app-icon { color: var(--color-primary); }
+.login__code-actions > * { flex: 1; padding-inline: var(--space-2); }
 .login__form :deep(.btn) {
   min-block-size: 50px;
 }
@@ -336,7 +354,7 @@ async function verifyCode() {
 
 @media (min-width: 700px) {
   .login__panel {
-    margin-block: var(--space-8);
+    margin-block: var(--space-10);
   }
 }
 </style>
