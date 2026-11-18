@@ -24,6 +24,22 @@ function logOffset(): number {
   return existsSync(logPath) ? statSync(logPath).size : 0
 }
 
+test('@login phone and code steps keep panel geometry with a real-length phone', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 })
+  await page.route('**/api/v1/auth/otp/request', async route => {
+    await route.fulfill({ json: { challenge_id: 'fixture', expires_in_seconds: 120, resend_after_seconds: 60 } })
+  })
+  await page.goto('/login')
+  await page.evaluate(() => document.fonts.ready)
+  const panel = page.locator('.login__panel')
+  const before = await panel.boundingBox()
+  await page.getByLabel('شمارهٔ موبایل', { exact: true }).fill('+989000000101')
+  await page.getByRole('button', { name: 'ارسال کد', exact: true }).click()
+  await expect(page.getByLabel('کد تأیید', { exact: true })).toBeVisible()
+  const after = await panel.boundingBox()
+  expect(after?.height).toBeCloseTo(before?.height ?? -1, 0)
+})
+
 test('@login focused panel preserves geometry, purpose, editable phone and resend countdown', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 })
   await page.goto('/login')
@@ -87,6 +103,10 @@ test('@login invalid-phone and rate-limit errors receive focus and remain associ
 })
 
 test('@login invalid-code error is focused without clearing the entered code', async ({ page }) => {
+  // This test exercises verification errors, not request cooldown shared by other tests.
+  await page.route('**/api/v1/auth/otp/request', async route => {
+    await route.fulfill({ json: { challenge_id: 'fixture', expires_in_seconds: 120, resend_after_seconds: 2 } })
+  })
   await page.goto('/login')
   await page.getByLabel('شمارهٔ موبایل', { exact: true }).fill('+989000000101')
   await page.getByRole('button', { name: 'ارسال کد', exact: true }).click()
